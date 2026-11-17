@@ -70,16 +70,21 @@ request, never by a floating tag.
    same; `Cargo.lock` follows (`cargo update --workspace`).
 2. Merge to `main`. CI must be green.
 3. Tag and push: `git tag -s v0.1.0 -m "Cerberus 0.1.0" && git push origin v0.1.0`.
-4. The workflow runs `preflight` (tag equals both versions), `ci` (all gates again), then builds on Linux, macOS and Windows,
-   then `publish`: SHA256SUMS, a provenance attestation for every file, and a **draft** GitHub release. Nobody gets a
-   release without a person pressing "Publish".
-5. Review the draft: file list against the table above, the checksums, the notes. Publish.
+4. The workflow runs `preflight` (tag equals both versions), `ci` (all gates again), `draft` (an empty draft release for
+   the tag), then builds on Linux, macOS (Apple silicon, `macos-15`) and Windows. Each build job attaches its files to the
+   draft with `gh release upload` (no workflow artifacts: the account's artifact storage quota cannot block a release).
+   Then `publish`: checks that every platform's installer and tarball is there, writes and uploads SHA256SUMS, attests
+   provenance for every file (public repositories only; GitHub offers no attestations on private user repositories) and
+   **publishes** the release. A tag with a suffix (`v0.2.0-rc.1`) is published as a pre-release.
+5. A failed run leaves the draft in place, invisible to the public. Fix the cause and re-run the workflow: the draft is
+   reused and its files replaced (`--clobber`).
 
-A run started by hand (`workflow_dispatch`) builds everything and keeps the files as workflow artifacts, with no release.
+A run started by hand (`workflow_dispatch`) builds everything, makes no release, and keeps the files as workflow artifacts
+for 3 days when artifact storage has room.
 
 ### Secrets
 
-None is needed for an unsigned release: the provenance uses the GitHub OIDC token (keyless, Sigstore) and `GITHUB_TOKEN`.
+None is needed for an unsigned release: the release uses `GITHUB_TOKEN` and the provenance the GitHub OIDC token (keyless, Sigstore).
 Optional, for a signed and notarized macOS app (set in the repository settings, environment `release` recommended):
 
 | Secret | Content |
@@ -96,7 +101,7 @@ certificate is planned; DEC-T29-4). There is no auto-updater: users install a ne
 
 ```
 sha256sum --check --ignore-missing SHA256SUMS         # the files you downloaded match
-gh attestation verify <file> --repo <owner>/<repo>    # the file was built by this repository's release workflow
+gh attestation verify <file> --repo <owner>/<repo>    # public repository only: built by this repository's release workflow
 ```
 
 The attestation also proves which commit and workflow built it. On macOS and Windows without signing, the OS warns on first

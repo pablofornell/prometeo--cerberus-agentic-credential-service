@@ -1,7 +1,12 @@
-# Release: builds the installers and binaries on Linux, macOS and Windows, writes SBOMs and SHA256SUMS, attaches build
-# provenance and opens a DRAFT GitHub release for a person to review and publish. Start it with a tag `vX.Y.Z` that
-# matches the version in Cargo.toml and tauri.conf.json, or by hand (workflow_dispatch: builds and uploads artifacts,
-# no release). Every action is pinned to a commit SHA. Guide and secrets: docs/guides/packaging-and-release.md.
+# Release: builds the installers and binaries on Linux, macOS and Windows, writes SBOMs and SHA256SUMS and publishes a
+# GitHub release. Start it by pushing a tag `vX.Y.Z` (or `vX.Y.Z-rc.N`, published as a pre-release) that matches the
+# version in Cargo.toml and tauri.conf.json. A manual run (workflow_dispatch) builds everything and makes no release.
+#
+# Files go straight from each build job to a draft release (`gh release upload`), not through workflow artifacts, so
+# the account's artifact storage quota never blocks a release. The last job checks every file, writes SHA256SUMS,
+# attests provenance (public repositories only: GitHub does not offer attestations on private user repositories) and
+# turns the draft into a published release. Every action is pinned to a commit SHA.
+# Guide and secrets: docs/guides/packaging-and-release.md.
 name: Release
 
 on:
@@ -25,11 +30,15 @@ jobs:
   preflight:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      version: ${{ steps.versions.outputs.version }}
+      prerelease: ${{ steps.versions.outputs.prerelease }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Versions agree
+        id: versions
         env:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
@@ -37,8 +46,11 @@ jobs:
           cargo_version=$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\(.*\)"/\1/p}' Cargo.toml)
           tauri_version=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)
           echo "Cargo.toml $cargo_version, tauri.conf.json $tauri_version"
+          test -n "$cargo_version"
           test "$cargo_version" = "$tauri_version"
           if [ "$REF_TYPE" = tag ]; then test "v$cargo_version" = "$REF_NAME" || { echo "tag $REF_NAME does not match $cargo_version"; exit 1; }; fi
+          echo "version=$cargo_version" >> "$GITHUB_OUTPUT"
+          case "$cargo_version" in *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;; *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;; esac
 
   # The same gates as pull requests. A release never ships from a commit that fails them.
   ci:
@@ -47,10 +59,35 @@ jobs:
     permissions:
       contents: read
 
+  # An empty draft release the build jobs attach their files to. Kept as a draft (invisible to the public) until every
+  # file is there. A re-run of a tag reuses the existing release.
+  draft:
+    needs: [preflight, ci]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Draft release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG exists: the build jobs replace its files"
+          else
+            gh release create "$TAG" --draft --verify-tag --generate-notes --title "Cerberus $VERSION"
+          fi
+
   linux:
-    needs: ci
+    needs: draft
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    permissions:
+      contents: write # only the upload step gets the token
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -81,26 +118,44 @@ jobs:
         run: just package
       - run: just package-binaries
       - run: just sbom
+      - name: Release files
+        run: ls -la dist/
+      - name: Attach to the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release upload "$TAG" dist/* --clobber
+      # A manual run keeps the files for 3 days. Artifact storage may be full: that does not fail the run.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.ref_type != 'tag'
+        continue-on-error: true
         with:
           name: dist-linux
           path: dist/
+          retention-days: 3
           if-no-files-found: error
 
   # macOS (Apple silicon) and Windows (x64). Signing is optional: without the secrets the installers are unsigned and the
-  # guide says how a user checks them (SHA256SUMS and the provenance attestation).
+  # guide says how a user checks them (SHA256SUMS and, on a public repository, the provenance attestation).
   desktop:
-    needs: ci
+    needs: draft
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             name: macos
           - os: windows-2025
             name: windows
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
+    permissions:
+      contents: write # only the upload step gets the token
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -141,44 +196,65 @@ jobs:
         if: steps.signing.outputs.signed != 'true'
         run: just package
       - run: just package-binaries
+      - name: Release files
+        run: ls -la dist/
+      - name: Attach to the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release upload "$TAG" dist/* --clobber
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.ref_type != 'tag'
+        continue-on-error: true
         with:
           name: dist-${{ matrix.name }}
           path: dist/
+          retention-days: 3
           if-no-files-found: error
 
+  # Every platform attached its files: write SHA256SUMS over all of them, attest them, publish the release.
   publish:
-    needs: [linux, desktop]
-    # Only a tag makes a release. A manual run stops after the artifacts.
+    needs: [preflight, linux, desktop]
+    # Only a tag makes a release. A manual run stops after the builds.
     if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
-      contents: write # create the draft release
+      contents: write # upload SHA256SUMS, publish the release
       id-token: write # keyless signing of the provenance (Sigstore)
       attestations: write # store the provenance attestation
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
-        with:
-          tool: just
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: dist-*
-          merge-multiple: true
-          path: dist
+      - name: Download the release files
+        run: |
+          gh release download "$TAG" --dir dist --clobber
+          rm -f dist/SHA256SUMS
+          ls -la dist/
+      # One installer and one tarball per platform at least, so a silent build gap never ships.
+      - name: Every platform is there
+        run: |
+          cd dist
+          ls -- *.deb *.rpm *.AppImage *.dmg *-setup.exe *_bin.cdx.json >/dev/null
+          ls cerberus-*-x86_64-unknown-linux-gnu.tar.gz cerberus-*-aarch64-apple-darwin.tar.gz \
+            cerberus-*-x86_64-pc-windows-msvc.tar.gz >/dev/null
       - name: SHA256SUMS
-        run: just checksums
+        run: |
+          cd dist
+          find . -maxdepth 1 -type f | sed 's|^\./||' | LC_ALL=C sort | xargs sha256sum > SHA256SUMS
+          sha256sum --check --strict SHA256SUMS
+          cat SHA256SUMS
+          gh release upload "$TAG" SHA256SUMS --clobber
       - name: Provenance of every release file
+        if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/*
-      - name: Draft release
-        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
-        with:
-          draft: true
-          fail_on_unmatched_files: true
-          files: dist/*
-          generate_release_notes: true
+      - name: Publish the release
+        env:
+          PRERELEASE: ${{ needs.preflight.outputs.prerelease }}
+        run: gh release edit "$TAG" --draft=false --prerelease="$PRERELEASE"
