@@ -77,9 +77,10 @@ request, never by a floating tag.
    provenance for every file (public repositories only; GitHub offers no attestations on private user repositories) and
    **publishes** the release. A tag with a suffix (`v0.2.0-rc.1`) is published as a pre-release.
 5. A failed run leaves the draft in place, invisible to the public. Fix the cause and re-run the workflow: the draft is
-   reused and its files replaced (`--clobber`).
+   reused and its files replaced (`--clobber`). A release that is already published is never rebuilt: `draft` fails; cut a
+   new tag.
 
-A run started by hand (`workflow_dispatch`) builds everything, makes no release, and keeps the files as workflow artifacts
+A run started by hand (`workflow_dispatch`, even on a tag) builds everything, makes no release, and keeps the files as workflow artifacts
 for 3 days when artifact storage has room.
 
 ### Secrets

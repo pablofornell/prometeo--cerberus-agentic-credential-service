@@ -69,15 +69,18 @@ jobs:
       contents: write
     steps:
       - name: Draft release
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
           VERSION: ${{ needs.preflight.outputs.version }}
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "release $TAG exists: the build jobs replace its files"
+          if is_draft=$(gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null); then
+            if [ "$is_draft" != true ]; then
+              echo "release $TAG is already published; cut a new tag instead of rebuilding it in place"; exit 1
+            fi
+            echo "draft $TAG exists: the build jobs replace its files"
           else
             gh release create "$TAG" --draft --verify-tag --generate-notes --title "Cerberus $VERSION"
           fi
@@ -87,7 +90,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
-      contents: write # only the upload step gets the token
+      contents: write # gh release upload; every pinned action in this job can see the token
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -121,7 +124,7 @@ jobs:
       - name: Release files
         run: ls -la dist/
       - name: Attach to the release
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -129,7 +132,7 @@ jobs:
         run: gh release upload "$TAG" dist/* --clobber
       # A manual run keeps the files for 3 days. Artifact storage may be full: that does not fail the run.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: github.ref_type != 'tag'
+        if: github.event_name != 'push'
         continue-on-error: true
         with:
           name: dist-linux
@@ -152,7 +155,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     permissions:
-      contents: write # only the upload step gets the token
+      contents: write # gh release upload; every pinned action in this job can see the token
     defaults:
       run:
         shell: bash
@@ -199,14 +202,14 @@ jobs:
       - name: Release files
         run: ls -la dist/
       - name: Attach to the release
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: gh release upload "$TAG" dist/* --clobber
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: github.ref_type != 'tag'
+        if: github.event_name != 'push'
         continue-on-error: true
         with:
           name: dist-${{ matrix.name }}
@@ -217,8 +220,8 @@ jobs:
   # Every platform attached its files: write SHA256SUMS over all of them, attest them, publish the release.
   publish:
     needs: [preflight, linux, desktop]
-    # Only a tag makes a release. A manual run stops after the builds.
-    if: github.ref_type == 'tag'
+    # Only a tag push makes a release. A manual run (even on a tag) stops after the builds.
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
