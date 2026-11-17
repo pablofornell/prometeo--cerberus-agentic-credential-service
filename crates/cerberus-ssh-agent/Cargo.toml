@@ -1,0 +1,31 @@
+[package]
+name = "cerberus-ssh-agent"
+description = "Cerberus ssh-agent bridge."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+cerberus-core.workspace = true
+cerberus-types.workspace = true
+jiff.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "io-util", "macros"] }
+tracing.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+# `getuid` for the peer check and `kill(pid, 0)` for stale socket directories, without unsafe.
+rustix = { workspace = true, features = ["process"] }
+
+[dev-dependencies]
+cerberus-crypto.workspace = true
+cerberus-store.workspace = true
+signature.workspace = true
+ssh-key.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }

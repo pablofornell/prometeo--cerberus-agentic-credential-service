@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-recovery-rotate"
+description = "Enables the recovery_rotate command without any pre-configured scope."
+commands.allow = ["recovery_rotate"]
+
+[[permission]]
+identifier = "deny-recovery-rotate"
+description = "Denies the recovery_rotate command without any pre-configured scope."
+commands.deny = ["recovery_rotate"]

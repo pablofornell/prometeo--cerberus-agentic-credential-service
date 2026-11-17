@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-agent-issue-client-cert"
+description = "Enables the agent_issue_client_cert command without any pre-configured scope."
+commands.allow = ["agent_issue_client_cert"]
+
+[[permission]]
+identifier = "deny-agent-issue-client-cert"
+description = "Denies the agent_issue_client_cert command without any pre-configured scope."
+commands.deny = ["agent_issue_client_cert"]

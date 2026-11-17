@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'">
+<title>Create Cerberus Vault</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .wizard { display: grid; grid-template-columns: 280px minmax(0, 560px); gap: 48px; align-items: start; width: min(920px, 100%); }
+  .rail { position: sticky; top: 80px; display: grid; gap: 24px; }
+  .rail .word { font-size: var(--t-display-sm-size); font-weight: 680; letter-spacing: -0.02em; }
+  .rings { width: 200px; height: 200px; }
+  .rings circle { fill: none; stroke-width: 7; stroke: var(--c-ring-track); transition: stroke var(--d-slow) var(--ease-standard); }
+  .rings circle.done { stroke: var(--c-ring-gate); }
+  .rings circle.now { stroke: var(--c-ring-gate); stroke-dasharray: 4 7; }
+  .rings circle.core { stroke: none; fill: var(--c-ring-track); }
+  .rings circle.core.done, .rings circle.core.now { fill: var(--c-ring-gate); }
+  .steplist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .steplist button { all: unset; box-sizing: border-box; width: 100%; display: flex; gap: 10px; align-items: center; padding: 6px 8px; border-radius: var(--r-sm); color: var(--c-text-muted); cursor: pointer; }
+  .steplist button:focus-visible { outline: 2px solid var(--c-focus-ring); }
+  .steplist button[aria-current="step"] { color: var(--c-text-primary); font-weight: 600; background: var(--c-bg-surface); }
+  .steplist button.done { color: var(--c-text-secondary); }
+  .steplist .n { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid currentColor; display: grid; place-items: center; font-size: 12px; font-weight: 650; }
+  .steplist .done .n { background: var(--c-ring-gate); border-color: var(--c-ring-gate); color: var(--c-accent-on-solid); }
+  .pane { display: grid; gap: 20px; }
+  .pane h1 { font-size: var(--t-display-size); line-height: var(--t-display-line); letter-spacing: var(--t-display-track); font-weight: 680; }
+  .pane .lede { color: var(--c-text-secondary); font-size: var(--t-body-lg-size); line-height: var(--t-body-lg-line); max-width: 52ch; }
+  .meter { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .meter span { height: 6px; border-radius: 3px; background: var(--c-ring-track); }
+  .meter[data-score="3"] span:nth-child(-n+4), .meter[data-score="4"] span { background: var(--c-success-fg); }
+  .meter[data-score="2"] span:nth-child(-n+3) { background: var(--c-warning-fg); }
+  .meter[data-score="1"] span:nth-child(-n+2), .meter[data-score="0"] span:nth-child(1) { background: var(--c-danger-fg); }
+  .words { display: flex; flex-wrap: wrap; gap: 6px; }
+  .words span { font-family: var(--font-mono); padding: 4px 9px; border-radius: var(--r-xs); background: var(--c-bg-raised); border: 1px solid var(--c-border-subtle); }
+  .rk { display: grid; grid-template-columns: repeat(5, auto); gap: 8px 14px; justify-content: start; padding: 18px 20px; border-radius: var(--r-md); background: var(--c-bg-sunken); border: 1.5px solid var(--c-ring-gate); font-family: var(--font-mono); font-size: var(--t-mono-lg-size); letter-spacing: 0.06em; }
+  .rk span { display: inline-flex; gap: 6px; align-items: baseline; }
+  .rk small { font-size: 10px; color: var(--c-text-muted); letter-spacing: 0; font-family: var(--font-sans); width: 14px; text-align: right; }
+  .bench { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--c-border-subtle); border-radius: var(--r-md); background: var(--c-bg-surface); }
+  .bench div { padding: 14px 16px; display: grid; gap: 2px; border-right: 1px solid var(--c-border-subtle); }
+  .bench div:last-child { border-right: 0; }
+  .bench b { font-size: var(--t-title-lg-size); font-variant-numeric: tabular-nums; }
+  .nav-row { display: flex; gap: 8px; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--c-border-subtle); }
+  .reqs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--t-body-sm-size); }
+  .reqs li { display: flex; gap: 8px; align-items: center; color: var(--c-success-fg); }
+  .reqs li.no { color: var(--c-text-muted); }
+  .progress-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; text-align: left; }
+  .progress-list li { display: flex; gap: 10px; align-items: center; }
+  @media (max-width: 860px) { .wizard { grid-template-columns: 1fr; gap: 24px; } .rail { position: static; } .rings { display: none; } .bench { grid-template-columns: repeat(2, 1fr); } .rk { grid-template-columns: repeat(3, auto); } }
+  @media print { .rail, .nav-row, .pane > :not(.print-keep) { display: none !important; } .rk { border: 2px solid #000; color: #000; background: #fff; } }
+</style>
+</head>
+<body data-page="create" data-layout="solo" data-variants="weak:Phrase too weak">
+<div id="page" class="solo">
+
+  <!-- READY and EMPTY share the wizard; EMPTY starts blank -->
+  <div class="wizard" data-state="ready empty">
+    <aside class="rail" aria-label="Setup steps">
+      <div class="row-inline"><span data-gate="open" data-size="30"></span><span class="word">Cerberus</span></div>
+      <svg class="rings" viewBox="0 0 200 200" aria-hidden="true">
+        <circle data-ring="1" cx="100" cy="100" r="92"/>
+        <circle data-ring="2" cx="100" cy="100" r="68"/>
+        <circle data-ring="3" cx="100" cy="100" r="44"/>
+        <circle data-ring="4" class="core" cx="100" cy="100" r="18"/>
+      </svg>
+      <ol class="steplist">
+        <li><button type="button" data-go="1"><span class="n">1</span>Your name</button></li>
+        <li><button type="button" data-go="2"><span class="n">2</span>Master phrase</button></li>
+        <li><button type="button" data-go="3"><span class="n">3</span>Unlock cost test</button></li>
+        <li><button type="button" data-go="4"><span class="n">4</span>Recovery key</button></li>
+      </ol>
+      <p class="small muted">Each step closes one ring of the gate. You can go back until the vault is created in step 3.</p>
+    </aside>
+
+    <section class="pane" data-step="1" aria-labelledby="s1-h">
+      <h1 id="s1-h">Create your vault</h1>
+      <p class="lede">Cerberus keeps credentials for your agents in one encrypted file on this device. First, tell it who you are.</p>
+      <div class="field">
+        <label for="owner">Your name on this vault</label>
+        <input id="owner" class="input lg" autocomplete="name" value="Ana Ruiz" data-empty-value="" aria-describedby="owner-h">
+        <span class="hint" id="owner-h">Shown on the unlock screen, so it is not secret. You become the owner.</span>
+      </div>
+      <details>
+        <summary class="secondary" style="cursor:pointer">Network names for the local certificate</summary>
+        <div class="stack" style="margin-top:12px">
+          <p class="small muted">Agents reach Cerberus over HTTPS on these names. The defaults are right for one computer.</p>
+          <div class="row-inline"><span class="chip mono">localhost</span><span class="chip mono">127.0.0.1</span><span class="chip mono">::1</span><span class="chip mono">ana-laptop</span><button class="btn sm ghost" type="button"><i data-i="plus"></i>Add name</button></div>
+        </div>
+      </details>
+      <div class="nav-row"><span></span><button class="btn primary lg" type="button" data-next>Continue</button></div>
+    </section>
+
+    <section class="pane" data-step="2" aria-labelledby="s2-h" hidden>
+      <h1 id="s2-h">Choose a master phrase</h1>
+      <p class="lede">One phrase opens the vault. Cerberus cannot reset it. Long word phrases are easier to type and harder to guess.</p>
+      <div class="field">
+        <label for="phrase">Master phrase</label>
+        <div class="input-row">
+          <input id="phrase" class="input lg mono" type="password" autocomplete="new-password" value="lantern oyster gravel quiet dynamo ribbon thaw" aria-describedby="str-l reqs">
+          <button class="btn lg" type="button" id="gen"><i data-i="dice"></i><span>Generate</span></button>
+        </div>
+        <div class="meter" id="meter" data-score="4" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+        <div class="between small"><span id="str-l" class="secondary" data-variant-hide="weak">Strong. About 10^24 guesses to break.</span><span class="secondary" data-variant-show="weak" style="color:var(--c-danger-fg)">Too weak. A common pattern; about 10^6 guesses.</span><label class="check"><input type="checkbox" id="show-ph"> Show phrase</label></div>
+        <ul class="reqs" id="reqs">
+          <li><i data-i="check"></i>At least 12 characters</li>
+          <li data-variant-hide="weak"><i data-i="check"></i>Strength score 3 or more</li>
+          <li class="no" data-variant-show="weak"><i data-i="x"></i>Strength score 3 or more. Add words, not symbols.</li>
+        </ul>
+      </div>
+      <div class="field" id="dw">
+        <span class="label">Generated phrase (7 words from the EFF list)</span>
+        <div class="words" data-no-i18n><span>lantern</span><span>oyster</span><span>gravel</span><span>quiet</span><span>dynamo</span><span>ribbon</span><span>thaw</span></div>
+        <span class="hint">Example words for this prototype only. Write your phrase on paper, not in a file.</span>
+      </div>
+      <div class="field">
+        <label for="phrase2">Type the phrase again</label>
+        <input id="phrase2" class="input lg mono" type="password" autocomplete="new-password" value="lantern oyster gravel quiet dynamo ribbon thaw">
+      </div>
+      <div class="nav-row"><button class="btn lg ghost" type="button" data-back>Back</button><button class="btn primary lg" type="button" data-next data-variant-hide="weak">Continue</button><button class="btn primary lg" type="button" disabled aria-disabled="true" data-variant-show="weak">Continue</button></div>
+    </section>
+
+    <section class="pane" data-step="3" aria-labelledby="s3-h" hidden>
+      <h1 id="s3-h">Test the unlock cost</h1>
+      <p class="lede">Cerberus makes each unlock try slow on purpose, so a stolen vault file takes years to guess. It tunes the cost to this device.</p>
+      <div class="bench" role="group" aria-label="Test result">
+        <div><span class="small muted">Memory</span><b>256 MiB</b></div>
+        <div><span class="small muted">Passes</span><b>3</b></div>
+        <div><span class="small muted">Lanes</span><b>4</b></div>
+        <div><span class="small muted">Time per unlock</span><b>0.71 s</b></div>
+      </div>
+      <div class="notice ok"><i data-i="check"></i><div class="grow">Good. The target is about 0.7 s. Unlock feels quick to you and slow for an attacker.</div></div>
+      <button class="btn" type="button" style="justify-self:start"><i data-i="refresh"></i>Run the test again</button>
+      <div class="notice info"><i data-i="info"></i><div class="grow">Next, Cerberus creates the vault file, the local certificate and your recovery key. This takes a few seconds.</div></div>
+      <div class="nav-row"><button class="btn lg ghost" type="button" data-back>Back</button><button class="btn primary lg" type="button" data-next><i data-i="shield"></i>Create vault</button></div>
+    </section>
+
+    <section class="pane" data-step="4" aria-labelledby="s4-h" hidden>
+      <h1 id="s4-h" class="print-keep">Save your recovery key</h1>
+      <p class="lede">If you forget the master phrase, this key is the only way in. Cerberus shows it once and keeps no copy you can read.</p>
+      <div class="rk print-keep" aria-label="Recovery key, example value" data-no-i18n>
+        <span><small>1</small>CRK1</span><span><small>2</small>DEMO</span><span><small>3</small>AAAA</span><span><small>4</small>BBBB</span><span><small>5</small>CCCC</span>
+        <span><small>6</small>DDDD</span><span><small>7</small>EEEE</span><span><small>8</small>FFFF</span><span><small>9</small>GGGG</span><span><small>10</small>HHHH</span>
+        <span><small>11</small>JJJJ</span><span><small>12</small>KKKK</span><span><small>13</small>MMMM</span><span><small>14</small>NNNN</span><span><small>15</small>PPPP</span>
+      </div>
+      <div class="row-inline">
+        <button class="btn" type="button" onclick="window.print()"><i data-i="printer"></i>Print</button>
+        <button class="btn" type="button" data-toast="Copied. The clipboard clears in 30 s."><i data-i="copy"></i>Copy</button>
+      </div>
+      <div class="notice warn"><i data-i="alert"></i><div class="grow"><strong>Lost phrase and lost key means lost data.</strong> Nobody, including the Cerberus team, can open the vault without one of them.</div></div>
+      <div class="form-grid">
+        <div class="field"><label for="g3">Type group 3</label><input id="g3" class="input mono" maxlength="4" value="AAAA" autocomplete="off"></div>
+        <div class="field"><label for="g11">Type group 11</label><input id="g11" class="input mono" maxlength="4" value="JJJJ" autocomplete="off"></div>
+      </div>
+      <label class="check"><input type="checkbox" checked> I stored the recovery key away from this computer.</label>
+      <div class="nav-row"><span></span><a class="btn primary lg" href="03-dashboard.html?state=empty">Open the vault</a></div>
+    </section>
+  </div>
+
+  <!-- LOADING -->
+  <div data-state="loading" class="solo-wrap" aria-busy="true">
+    <div class="state-block">
+      <span data-gate="spin" data-size="88"></span>
+      <h1>Creating your vault</h1>
+      <ul class="progress-list" aria-live="polite">
+        <li><span class="status ok"></span>Measured this device: 0.71 s per unlock</li>
+        <li><span class="status ok"></span>Made the vault key and wrapped it with your phrase</li>
+        <li><span class="status warn"></span><strong>Making the local certificate authority</strong></li>
+        <li><span class="status off"></span>Writing the encrypted vault file</li>
+      </ul>
+      <p class="small muted">Do not close the app. If it stops, nothing is saved and you can start again.</p>
+    </div>
+  </div>
+
+  <!-- ERROR -->
+  <div data-state="error" class="solo-wrap">
+    <div class="state-block" role="alert">
+      <span class="kind-ico" style="width:48px;height:48px;color:var(--c-danger-fg)"><i data-i="alert" class="lg"></i></span>
+      <h1>Cannot write the vault file</h1>
+      <p>The folder is read-only. Nothing was created. Choose another folder or fix the folder permissions, then try again.</p>
+      <code class="code">~/.local/share/cerberus/vault.cerb</code>
+      <div class="actions"><button class="btn primary" type="button" data-set-view="ready"><i data-i="refresh"></i>Try again</button><button class="btn" type="button">Choose folder</button></div>
+      <span class="code">vault_create: internal (io: read-only file system)</span>
+    </div>
+  </div>
+
+  <!-- LOCKED: a vault already exists -->
+  <div data-state="locked" class="solo-wrap">
+    <div class="state-block">
+      <span data-gate="locked" data-size="72"></span>
+      <h1>A vault already exists on this device</h1>
+      <p>Cerberus opens one vault per device. Unlock it, or restore a backup over it from the unlock screen.</p>
+      <div class="actions"><a class="btn primary" href="02-unlock.html"><i data-i="unlock"></i>Unlock</a><a class="btn" href="02-unlock.html?state=empty">Restore a backup</a></div>
+      <span class="code">vault_status: sealed</span>
+    </div>
+  </div>
+</div>
+<script src="assets/icons.js"></script>
+<script src="assets/i18n-es.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(() => {
+  const { $, $$ } = Cerb;
+  let step = 1;
+  const show = (n) => {
+    step = Math.max(1, Math.min(4, n));
+    $$("[data-step]").forEach((p) => { p.hidden = +p.dataset.step !== step; });
+    $$("[data-go]").forEach((b) => {
+      const k = +b.dataset.go;
+      b.classList.toggle("done", k < step);
+      if (k === step) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
+    });
+    $$("[data-ring]").forEach((c) => { const k = +c.dataset.ring; c.classList.toggle("done", k < step); c.classList.toggle("now", k === step); });
+    const h = $(`[data-step="${step}"] h1`); if (h && document.activeElement && document.activeElement.closest("[data-step],[data-go]")) { h.tabIndex = -1; h.focus(); }
+  };
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-next]")) show(step + 1);
+    if (e.target.closest("[data-back]")) show(step - 1);
+    const g = e.target.closest("[data-go]"); if (g) show(+g.dataset.go);
+  });
+  $("#show-ph").addEventListener("change", (e) => { $("#phrase").type = e.target.checked ? "text" : "password"; });
+  $("#gen").addEventListener("click", () => Cerb.toast("New phrase made. Write it on paper before you continue.", { icon: "dice" }));
+  document.addEventListener("cerb:view", (e) => {
+    const empty = e.detail === "empty";
+    $("#owner").value = empty ? "" : "Ana Ruiz";
+    if (empty) show(1);
+  });
+  document.addEventListener("cerb:variant", (e) => { if (e.detail === "weak") { show(2); $("#meter").dataset.score = "1"; } else $("#meter").dataset.score = "4"; });
+  const st = new URLSearchParams(location.search).get("step");
+  show(st ? +st : (document.body.dataset.variant === "weak" ? 2 : 1));
+  if (document.body.dataset.view === "empty") $("#owner").value = "";
+  if (document.body.dataset.variant === "weak") $("#meter").dataset.score = "1";
+})();
+</script>
+</body>
+</html>

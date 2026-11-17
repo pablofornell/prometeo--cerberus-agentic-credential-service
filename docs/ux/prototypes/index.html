@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'">
+<title>Cerberus Prototypes</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .hub { width: min(1040px, 100%); margin: 0 auto; padding: 48px 16px 64px; display: grid; gap: 40px; }
+  .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 32px; align-items: center; }
+  .hero h1 { font-size: var(--t-display-lg-size); line-height: var(--t-display-lg-line); letter-spacing: var(--t-display-lg-track); font-weight: 700; }
+  .hero p { color: var(--c-text-secondary); font-size: var(--t-body-lg-size); line-height: var(--t-body-lg-line); max-width: 58ch; margin-top: 10px; }
+  .screens { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--c-border-subtle); }
+  .screens li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 4px 16px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--c-border-subtle); }
+  .screens .n { width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--c-ring-gate); color: var(--c-accent-fg); display: grid; place-items: center; font-weight: 650; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .screens a.t { font-weight: 600; font-size: var(--t-title-sm-size); color: var(--c-text-primary); text-decoration: none; }
+  .screens a.t:hover { text-decoration: underline; }
+  .screens p { color: var(--c-text-muted); font-size: var(--t-body-sm-size); grid-column: 2; }
+  .screens .st { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; grid-column: 3; grid-row: 1 / span 2; }
+  .screens .st a { font-size: 12px; padding: 3px 8px; border-radius: var(--r-xs); color: var(--c-text-secondary); border: 1px solid var(--c-border-subtle); text-decoration: none; }
+  .screens .st a:hover { color: var(--c-text-primary); border-color: var(--c-border-default); }
+  .docs { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--c-text-secondary); }
+  @media (max-width: 760px) { .hero { grid-template-columns: 1fr; } .hero h1 { font-size: var(--t-display-size); line-height: var(--t-display-line); } .screens li { grid-template-columns: 44px minmax(0, 1fr); } .screens .st { grid-column: 2; grid-row: auto; justify-content: flex-start; } }
+</style>
+</head>
+<body data-page="index" data-layout="solo">
+<div id="page" class="hub">
+  <header class="hero">
+    <span data-gate="open" data-size="132"></span>
+    <div>
+      <h1>Cerberus prototypes</h1>
+      <p>The guard dog keeps the gate. Agents ask, the dog decides, and the hard cases come to you. These static screens show every state the desktop app must handle. All data is fake.</p>
+    </div>
+  </header>
+  <ol class="screens" id="screens"></ol>
+  <p class="small muted">Keys: <kbd>Ctrl K</kbd> command palette, <kbd>G</kbd> then a letter to move, <kbd>?</kbd> all shortcuts. The bar at the top sets state, theme and language on every screen.</p>
+  <div class="docs small"><span>Design docs, next to this folder:</span><span class="mono">design-brief.md</span><span class="mono">user-flows.md</span><span class="mono">information-architecture.md</span><span class="mono">components.md</span><span class="mono">tokens.json</span><span class="mono">a11y-contrast-report.md</span></div>
+</div>
+<script src="assets/icons.js"></script>
+<script src="assets/i18n-es.js"></script>
+<script>
+  window.CERB_SCREENS = [
+    ["01-create-vault.html", "Create vault", "Name, master phrase with strength meter and word generator, unlock cost test, recovery key."],
+    ["02-unlock.html", "Unlock", "Pick an operator, type the phrase or the recovery key. Failed tries and the wait timer."],
+    ["03-dashboard.html", "Dashboard", "Lock state and auto-lock timer, waiting requests, live agent feed, items that expire soon, health."],
+    ["04-vault-browser.html", "Vault browser", "Workspaces, categories and tags. List and grid. Filters. Prod badges, TTL rings, detail drawer."],
+    ["05-item-editor.html", "Item editor", "One form per kind, role chips, environment, SSH import and generate, TOTP preview, password generator."],
+    ["06-agents.html", "Agents", "List, create, one-time token, snippets for Claude Code, curl and env. Rotate and revoke."],
+    ["07-policies.html", "Policies", "Grants as plain sentences, and a simulator that shows what an agent can see."],
+    ["08-approval.html", "Approval prompt", "The small always-on-top window. Untrusted reason, prod risk, four choices, nothing preselected."],
+    ["09-leases.html", "Leases and sessions", "Active leases with revoke, session items, and the red Lock and revoke all."],
+    ["10-audit.html", "Audit", "Timeline, filters, chain check badge and export."],
+    ["11-settings.html", "Settings", "Security, network, appearance, backup and restore, about."]
+  ];
+</script>
+<script>
+  document.getElementById("screens").innerHTML = window.CERB_SCREENS.map(([f, t, d], i) =>
+    `<li><span class="n">${i + 1}</span><a class="t" href="${f}">${t}</a><p>${d}</p><span class="st" role="group" aria-label="States of ${t}">${["ready", "empty", "loading", "error", "locked"].map((s) => `<a href="${f}?state=${s}">${s[0].toUpperCase() + s.slice(1)}</a>`).join("")}</span></li>`).join("");
+</script>
+<script src="assets/app.js"></script>
+</body>
+</html>

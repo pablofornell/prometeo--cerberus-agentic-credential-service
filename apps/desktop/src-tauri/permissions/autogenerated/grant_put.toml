@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-grant-put"
+description = "Enables the grant_put command without any pre-configured scope."
+commands.allow = ["grant_put"]
+
+[[permission]]
+identifier = "deny-grant-put"
+description = "Denies the grant_put command without any pre-configured scope."
+commands.deny = ["grant_put"]

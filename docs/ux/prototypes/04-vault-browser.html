@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'">
+<title>Cerberus Vault Browser</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  main.content { padding: 0; gap: 0; }
+  .browser { display: grid; grid-template-columns: 220px minmax(0, 1fr) 420px; min-height: calc(100vh - 96px); }
+  .facets { border-right: 1px solid var(--c-border-subtle); padding: 16px 10px; display: grid; gap: 18px; align-content: start; }
+  .facets h2 { font-size: var(--t-body-sm-size); color: var(--c-text-muted); font-weight: 600; padding: 0 8px; margin-bottom: 4px; }
+  .facets ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+  .facets ul button { all: unset; box-sizing: border-box; width: 100%; display: flex; gap: 8px; align-items: center; padding: 5px 8px; border-radius: var(--r-sm); color: var(--c-text-secondary); cursor: pointer; }
+  .facets ul button:hover { background: var(--c-bg-hover); color: var(--c-text-primary); }
+  .facets ul button:focus-visible { outline: 2px solid var(--c-focus-ring); }
+  .facets ul button[aria-pressed="true"] { background: var(--c-bg-selected); color: var(--c-text-primary); font-weight: 560; }
+  .facets .n { margin-left: auto; font-size: 12px; color: var(--c-text-muted); font-variant-numeric: tabular-nums; }
+  .listcol { min-width: 0; display: flex; flex-direction: column; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--c-border-subtle); }
+  .toolbar .search { flex: 1 1 220px; position: relative; }
+  .toolbar .search .icon { position: absolute; left: 10px; top: 9px; color: var(--c-text-muted); }
+  .toolbar .search input { padding-left: 32px; }
+  .toolbar select.input { width: auto; height: 32px; }
+  .count-line { padding: 8px 16px; font-size: var(--t-body-sm-size); color: var(--c-text-muted); border-bottom: 1px solid var(--c-border-subtle); }
+  .items li .meta { display: flex; gap: 6px; align-items: center; flex: none; }
+  .items li.prod .kind-ico { border-color: var(--c-danger-fg); color: var(--c-danger-fg); }
+  .tiles { list-style: none; margin: 0; padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+  .tiles li { display: grid; gap: 10px; padding: 14px; border-radius: var(--r-md); border: 1px solid var(--c-border-subtle); background: var(--c-bg-surface); cursor: pointer; }
+  .tiles li[aria-selected="true"] { border-color: var(--c-ring-gate); }
+  .tiles li .top { display: flex; justify-content: space-between; align-items: center; }
+  .tiles li .title { font-weight: 600; }
+  .tiles li .sub { color: var(--c-text-muted); font-size: var(--t-body-sm-size); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .drawer { padding: 0; display: flex; flex-direction: column; }
+  .drawer header { padding: 16px 20px; border-bottom: 1px solid var(--c-border-subtle); display: grid; gap: 8px; }
+  .drawer header h2 { font-size: var(--t-title-lg-size); line-height: var(--t-title-lg-line); }
+  .drawer .sec { padding: 16px 20px; border-bottom: 1px solid var(--c-border-subtle); display: grid; gap: 12px; }
+  .drawer .sec h3 { font-size: var(--t-body-sm-size); color: var(--c-text-muted); font-weight: 600; }
+  .totp { display: flex; align-items: center; gap: 12px; }
+  .totp .code { font-family: var(--font-mono); font-size: 24px; letter-spacing: 0.12em; font-weight: 600; }
+  .drawer .acts { padding: 14px 20px; display: flex; gap: 8px; margin-top: auto; }
+  @media (max-width: 1200px) { .browser { grid-template-columns: 200px minmax(0, 1fr); } .drawer { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--c-border-subtle); } }
+  @media (max-width: 760px) { .browser { grid-template-columns: 1fr; } .facets { border-right: 0; border-bottom: 1px solid var(--c-border-subtle); grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } .items li .meta .role-wrap { display: none; } }
+</style>
+</head>
+<body data-page="vault" data-layout="app" data-title="Vault" data-variants="grid:Grid view,viewer:Signed in as viewer">
+<template id="topbar-actions-tpl"><a class="btn primary" href="05-item-editor.html"><i data-i="plus"></i>New item<kbd class="kbd-hint">N</kbd></a></template>
+<div id="page">
+
+  <div class="browser" data-state="ready">
+    <nav class="facets" aria-label="Filters">
+      <div><h2 id="ws-h">Workspaces</h2><ul aria-labelledby="ws-h" data-single>
+        <li><button type="button" aria-pressed="true"><i data-i="layers"></i>All workspaces<span class="n">12</span></button></li>
+        <li><button type="button" aria-pressed="false"><i data-i="layers"></i>shop-frontend<span class="n">6</span></button></li>
+        <li><button type="button" aria-pressed="false"><i data-i="layers"></i>billing-api<span class="n">2</span></button></li>
+        <li><button type="button" aria-pressed="false"><i data-i="layers"></i>build-infra<span class="n">4</span></button></li>
+      </ul></div>
+      <div><h2 id="cat-h">Categories</h2><ul aria-labelledby="cat-h" data-single>
+        <li><button type="button" aria-pressed="false"><i data-i="globe"></i>Web login<span class="n">3</span></button></li>
+        <li><button type="button" aria-pressed="false"><i data-i="key"></i>API key<span class="n">1</span></button></li>
+        <li><button type="button" aria-pressed="false"><i data-i="terminal"></i>SSH<span class="n">1</span></button></li>
+        <li><button type="button" aria-pressed="false"><i data-i="ticket"></i>Session<span class="n">2</span></button></li>
+        <li><button type="button" aria-pressed="false"><i data-i="database"></i>Database<span class="n">1</span></button></li>
+        <li><button type="button" aria-pressed="false"><i data-i="cloud"></i>Cloud<span class="n">1</span></button></li>
+        <li><button type="button" aria-pressed="false"><i data-i="cert"></i>Certificate<span class="n">1</span></button></li>
+        <li><button type="button" aria-pressed="false"><i data-i="note"></i>Other<span class="n">2</span></button></li>
+      </ul></div>
+      <div><h2 id="tag-h">Tags</h2>
+      <div class="row-inline" style="padding:0 8px" role="group" aria-labelledby="tag-h"><button class="chip" type="button" aria-pressed="false">#e2e</button><button class="chip" type="button" aria-pressed="false">#checkout</button><button class="chip" type="button" aria-pressed="false">#deploy</button><button class="chip" type="button" aria-pressed="false">#ci</button></div></div>
+    </nav>
+
+    <section class="listcol" aria-labelledby="page-title">
+      <div class="toolbar" role="search">
+        <label class="search"><span class="sr-only">Search items</span><i data-i="search"></i><input class="input" data-search placeholder="Search title, description, target  ( / )" value=""></label>
+        <label class="sr-only" for="f-kind">Kind</label>
+        <select id="f-kind" class="input"><option>All kinds</option><option>Web login</option><option>API key</option><option>SSH key</option><option>Session token</option><option>Browser session</option></select>
+        <label class="sr-only" for="f-env">Environment</label>
+        <select id="f-env" class="input"><option>All environments</option><option>dev</option><option>staging</option><option>prod</option><option>other</option></select>
+        <label class="sr-only" for="f-role">Role</label>
+        <select id="f-role" class="input"><option>All roles</option><option>admin</option><option>normal user</option><option>read-only</option><option>SAI user</option></select>
+        <span class="seg" role="group" aria-label="View" data-single>
+          <button type="button" id="v-list" aria-pressed="true" aria-label="List view"><i data-i="rows"></i></button>
+          <button type="button" id="v-grid" aria-pressed="false" aria-label="Grid view"><i data-i="grid"></i></button>
+        </span>
+      </div>
+      <div class="count-line" id="count-line">12 items in all workspaces</div>
+      <ul class="rows items" id="items" role="listbox" aria-label="Items"></ul>
+      <ul class="tiles" id="tiles" role="listbox" aria-label="Items" hidden></ul>
+    </section>
+
+    <aside class="drawer" aria-labelledby="d-title" id="drawer">
+      <header>
+        <div class="between"><span class="row-inline"><span class="kind-ico"><i data-i="globe"></i></span><span class="small muted">Web login in shop-frontend</span></span>
+        <button class="btn ghost sm icon-only" type="button" aria-label="Close details"><i data-i="x"></i></button></div>
+        <h2 id="d-title">Shop staging admin</h2>
+        <div class="row-inline"><span class="env staging">staging</span><span class="chip role">admin</span><span class="tag">#e2e</span><span class="tag">#checkout</span></div>
+        <p class="secondary small">Admin account for the staging shop. Use for checkout and refund tests.</p>
+      </header>
+      <div class="sec">
+        <h3>Secret</h3>
+        <div class="field"><span class="field-k">Username</span><div data-secret="qa-admin@example.test" data-label="Username" data-variant-hide="viewer"></div><div data-secret="x" data-label="Username" data-denied="1" data-variant-show="viewer" hidden></div></div>
+        <div class="field"><span class="field-k">Password</span><div data-secret="demo-only-NOT-A-REAL-PASSWORD" data-label="Password" data-variant-hide="viewer"></div><div data-secret="x" data-label="Password" data-denied="1" data-variant-show="viewer" hidden></div></div>
+        <div class="field"><span class="field-k">Sign-in URL</span><a href="#" class="mono small">https://staging.shop.example/login</a></div>
+        <p class="small muted">Hold the eye button to reveal. Values hide after 15 s.</p>
+      </div>
+      <div class="sec" data-variant-hide="viewer">
+        <h3>One-time code</h3>
+        <div class="totp"><span class="ttl" data-total="30" data-left="18" data-size="32" data-live id="totp-ring"></span><span class="code" id="totp" aria-label="One-time code, example">492 113</span><button class="btn sm ghost icon-only" type="button" aria-label="Copy code" data-toast="Copied. The clipboard clears in 30 s."><i data-i="copy"></i></button></div>
+      </div>
+      <div class="sec">
+        <h3>Use</h3>
+        <dl class="kv small">
+          <dt>Exposed to</dt><dd>QA runner, 14:21 today</dd>
+          <dt>Uses</dt><dd>41, no limit</dd>
+          <dt>Expires</dt><dd>Never</dd>
+          <dt>Version</dt><dd>3 of 3 <button class="btn sm ghost" type="button">History</button></dd>
+          <dt>Created by</dt><dd>Ana Ruiz</dd>
+        </dl>
+      </div>
+      <div class="acts" data-variant-hide="viewer">
+        <a class="btn" href="05-item-editor.html?item=1"><i data-i="edit"></i>Edit</a>
+        <button class="btn danger-ghost" type="button" data-open="dlg-del"><i data-i="trash"></i>Delete</button>
+      </div>
+    </aside>
+  </div>
+
+  <div data-state="empty">
+    <div class="state-block">
+      <span data-gate="open" data-size="64"></span>
+      <h2>No items in this vault</h2>
+      <p>Add a login, key or token. Agents find items by workspace, environment and role, so fill those in.</p>
+      <div class="actions"><a class="btn primary" href="05-item-editor.html"><i data-i="plus"></i>New item</a><button class="btn" type="button"><i data-i="upload"></i>Import CSV</button></div>
+    </div>
+  </div>
+
+  <div data-state="loading" role="status" aria-busy="true" aria-label="Loading items">
+    <div class="browser">
+      <div class="facets"><div class="skel" style="width:70%"></div><div class="skel" style="width:85%"></div><div class="skel" style="width:60%"></div><div class="skel" style="width:75%"></div></div>
+      <div><div class="toolbar"><div class="skel" style="flex:1;height:32px"></div></div>
+        <div class="skel-row"><span class="skel box"></span><span class="skel" style="flex:1"></span></div><div class="skel-row"><span class="skel box"></span><span class="skel" style="flex:1"></span></div><div class="skel-row"><span class="skel box"></span><span class="skel" style="width:60%"></span></div><div class="skel-row"><span class="skel box"></span><span class="skel" style="flex:1"></span></div></div>
+      <div class="drawer" style="padding:20px;display:grid;gap:12px;align-content:start"><div class="skel" style="width:60%;height:20px"></div><div class="skel"></div><div class="skel" style="height:36px"></div><div class="skel" style="height:36px"></div></div>
+    </div>
+  </div>
+
+  <div data-state="error">
+    <div class="state-block" role="alert">
+      <span class="kind-ico" style="width:48px;height:48px;color:var(--c-danger-fg)"><i data-i="alert" class="lg"></i></span>
+      <h2>Cannot load items</h2>
+      <p>The search index did not answer. Your items are safe in the vault file. Try again, or lock and unlock to rebuild the index.</p>
+      <div class="actions"><button class="btn primary" type="button" data-set-view="ready"><i data-i="refresh"></i>Try again</button></div>
+      <span class="code">item_list: internal (request req_01JDEMO0001)</span>
+    </div>
+  </div>
+
+  <dialog class="dlg" id="dlg-del" aria-labelledby="del-h">
+    <div class="head"><h2 id="del-h">Delete Shop staging admin?</h2><p class="secondary">The item and its 3 versions are erased from the vault file. Agents that resolve shop-frontend, staging, admin get no match. This cannot be undone.</p></div>
+    <div class="foot"><button class="btn" type="button" data-close>Cancel</button><button class="btn danger" type="button" data-close data-toast="Deleted Shop staging admin."><i data-i="trash"></i>Delete item</button></div>
+  </dialog>
+</div>
+<script src="assets/icons.js"></script>
+<script src="assets/i18n-es.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(() => {
+  const { $, $$, icon } = Cerb;
+  const I = [
+    ["Shop staging admin", "web_login", "shop-frontend", "staging", "admin", "https://staging.shop.example", null, null],
+    ["Shop admin login", "web_login", "shop-frontend", "prod", "admin", "https://shop.example", null, null],
+    ["Shop normal user", "web_login", "shop-frontend", "staging", "normal user", "https://staging.shop.example", null, null],
+    ["Checkout session token", "session_token", "shop-frontend", "staging", "SAI user", "checkout-service", [250, 3600], "Docs writer"],
+    ["Playwright storage state", "browser_session", "shop-frontend", "dev", "normal user", "http://localhost:5173", [15400, 28800], "QA runner"],
+    ["Shop env bundle", "env_bundle", "shop-frontend", "dev", null, "shop-frontend", null, null],
+    ["Billing API key", "api_key", "billing-api", "prod", "read-only", "https://api.billing.example", null, null],
+    ["Billing database", "database", "billing-api", "staging", "admin", "db.staging.internal:5432", null, null],
+    ["build-01 deploy key", "ssh_key", "build-infra", "staging", "deploy", "build-01:22", null, null],
+    ["Sandbox cloud keys", "cloud", "build-infra", "dev", null, "sandbox account", null, null],
+    ["Internal CA certificate", "certificate", "build-infra", "other", null, "ca.internal", null, null],
+    ["Release runbook", "note", "build-infra", "other", null, null, null, null]
+  ];
+  const kindName = { web_login: "Web login", api_key: "API key", ssh_key: "SSH key", session_token: "Session token", browser_session: "Browser session", database: "Database", cloud: "Cloud", certificate: "Certificate", env_bundle: "Env bundle", note: "Note" };
+  const role = (r) => r ? `<span class="chip role${["admin", "normal user", "read-only", "SAI user"].includes(r) ? "" : " custom"}">${r}</span>` : "";
+  const ttl = (t, id) => t ? `<span class="ttl" data-total="${t[1]}" data-left="${t[0]}" data-size="22" data-live></span>` : "";
+  const by = (a) => a ? `<span class="agent-made" title="Created by an agent">${icon("bot")}${a}</span>` : "";
+  $("#items").innerHTML = I.map((x, i) => `<li class="interactive ${x[3] === "prod" ? "prod" : ""}" role="option" tabindex="${i ? -1 : 0}" aria-selected="${i === 0}">
+      <span class="kind-ico" title="${kindName[x[1]]}">${icon(window.CERB_KIND_ICON[x[1]])}</span>
+      <div class="grow"><div class="title">${x[0]}</div><div class="sub">${kindName[x[1]]} in ${x[2]}${x[5] ? `, <span class="mono">${x[5]}</span>` : ""}</div></div>
+      <span class="meta">${by(x[7])}${ttl(x[6])}<span class="role-wrap">${role(x[4])}</span><span class="env ${x[3]}">${x[3]}</span></span></li>`).join("");
+  $("#tiles").innerHTML = I.map((x, i) => `<li role="option" tabindex="${i ? -1 : 0}" aria-selected="${i === 0}">
+      <div class="top"><span class="kind-ico">${icon(window.CERB_KIND_ICON[x[1]])}</span>${ttl(x[6])}<span class="env ${x[3]}">${x[3]}</span></div>
+      <div><div class="title">${x[0]}</div><div class="sub">${kindName[x[1]]} in ${x[2]}</div></div>
+      <div class="row-inline">${role(x[4])}${by(x[7])}</div></li>`).join("");
+  Cerb.paintTtls();
+  const lists = [$("#items"), $("#tiles")];
+  for (const list of lists) {
+    list.addEventListener("click", (e) => { const li = e.target.closest("[role=option]"); if (!li) return; $$("[role=option]", list).forEach((o) => { o.setAttribute("aria-selected", String(o === li)); o.tabIndex = o === li ? 0 : -1; }); li.focus(); });
+    list.addEventListener("keydown", (e) => {
+      const opts = $$("[role=option]", list); const i = opts.indexOf(document.activeElement);
+      const d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
+      if (d && i >= 0) { e.preventDefault(); opts[Math.max(0, Math.min(opts.length - 1, i + d))].click(); }
+      if (e.key === "Enter") $("#drawer").scrollIntoView({ block: "nearest" });
+    });
+  }
+  const setGrid = (g) => { $("#items").hidden = g; $("#tiles").hidden = !g; $("#v-grid").setAttribute("aria-pressed", String(g)); $("#v-list").setAttribute("aria-pressed", String(!g)); };
+  $("#v-grid").addEventListener("click", () => setGrid(true));
+  $("#v-list").addEventListener("click", () => setGrid(false));
+  document.addEventListener("cerb:variant", (e) => setGrid(e.detail === "grid"));
+  setGrid(document.body.dataset.variant === "grid");
+  setInterval(() => { const r = $("#totp-ring"); if (r && +r.dataset.left <= 0) { r.dataset.left = 30; $("#totp").textContent = ["492 113", "730 058", "118 904"][Math.floor(Math.random() * 3)]; } }, 1000);
+  Cerb.translate();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# Copy to /etc/cerberus/cerberusd.toml. The file must be mode 0600 and owned by the cerberus user.
+# Every key is optional. Environment variables CERBERUSD_DATA_DIR, CERBERUSD_BIND, CERBERUSD_PORT,
+# CERBERUSD_HOST_NAMES, CERBERUSD_REQUIRE_MTLS and CERBERUSD_IDLE_LOCK_SECONDS override these values.
+
+# Absolute path. Holds vault.cerberus, tls/ and the unlock socket.
+data_dir = "/var/lib/cerberus"
+
+# Addresses to listen on. Keep loopback unless agents on other machines need the daemon.
+bind = ["127.0.0.1", "::1"]
+
+# TCP port, 1 to 65535. The CLI status command checks this port.
+port = 7373
+
+# Extra names for the TLS certificate and the allowed Host header, for example "agents.example.lan".
+# host_names = []
+
+# Client certificates (mTLS) on every connection. Must be true when bind has a non-loopback address.
+# require_mtls = false
+
+# Lock after this many idle seconds: 0 is off (the default), or 60 to 86400.
+# idle_lock_seconds = 0

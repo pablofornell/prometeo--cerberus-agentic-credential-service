@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-request-deny"
+description = "Enables the request_deny command without any pre-configured scope."
+commands.allow = ["request_deny"]
+
+[[permission]]
+identifier = "deny-request-deny"
+description = "Denies the request_deny command without any pre-configured scope."
+commands.deny = ["request_deny"]

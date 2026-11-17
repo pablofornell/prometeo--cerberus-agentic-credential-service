@@ -1,0 +1,52 @@
+[package]
+name = "cerberus-client"
+description = "Cerberus client SDK for agents (HTTPS, CA pinning) and the `cerberus` CLI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "cerberus_client"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cerberus"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+cerberus-types.workspace = true
+bytes.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+data-encoding.workspace = true
+http-body-util.workspace = true
+hyper = { workspace = true, features = ["client"] }
+hyper-util.workspace = true
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-std", "io-util", "macros", "net", "process", "rt", "signal", "time"] }
+tokio-rustls.workspace = true
+url.workspace = true
+zeroize.workspace = true
+uuid = { workspace = true, features = ["v4"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
+[dev-dependencies]
+cerberus-api.workspace = true
+cerberus-core.workspace = true
+cerberus-crypto.workspace = true
+cerberus-store.workspace = true
+jiff.workspace = true
+rustls = { workspace = true, features = ["tls12"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }

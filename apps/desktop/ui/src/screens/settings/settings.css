@@ -1,0 +1,39 @@
+/* Settings. Ported from docs/ux/prototypes/11-settings.html. Only tokens and app.css classes. */
+.settings { display: grid; grid-template-columns: 200px minmax(0, 760px); gap: 32px; align-items: start; }
+.settings .subnav { position: sticky; top: 16px; display: grid; gap: 2px; }
+.settings .subnav button { all: unset; box-sizing: border-box; cursor: pointer; padding: 7px 10px; border-radius: var(--r-sm); color: var(--c-text-secondary); }
+.settings .subnav button:hover { background: var(--c-bg-hover); color: var(--c-text-primary); }
+.settings .subnav button:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 1px; }
+.settings .subnav button[aria-current="true"] { background: var(--c-bg-selected); color: var(--c-text-primary); font-weight: 560; }
+.settings .sections { display: grid; gap: 36px; min-width: 0; }
+.settings .settings-section { display: grid; gap: 4px; scroll-margin-top: 24px; }
+.settings .settings-section > h2 { font-size: var(--t-title-lg-size); line-height: var(--t-title-lg-line); margin-bottom: 8px; }
+.settings h2:focus { outline: none; }
+.settings .setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 24px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--c-border-subtle); }
+.settings .setting.wide { grid-template-columns: minmax(0, 1fr) auto; }
+.settings .setting.wide .body { grid-column: 1 / -1; display: grid; gap: 10px; }
+.settings .setting .lbl { display: grid; gap: 2px; min-width: 0; }
+.settings .setting .lbl b { font-weight: 560; }
+.settings .setting .lbl > span { font-size: var(--t-body-sm-size); color: var(--c-text-muted); }
+.settings .setting .ctl { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.settings .setting .ctl .input { width: auto; }
+.settings .owner-only { font-size: 12px; color: var(--c-text-muted); display: inline-flex; gap: 4px; align-items: center; }
+.settings .fp { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; color: var(--c-text-secondary); display: block; }
+.settings .reason { font-size: 12px; color: var(--c-text-muted); max-width: 30ch; text-align: right; }
+.settings .result { display: block; margin-top: 4px; color: var(--c-text-secondary); }
+.settings .result.bad { color: var(--c-danger-fg); }
+.settings .switch-bare > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.settings .role-select { width: auto; height: 28px; }
+.settings .self-start { justify-self: start; }
+.settings .block { display: block; }
+.settings .code { font-family: var(--font-mono); font-size: 12px; opacity: 0.85; }
+.settings .plain-list { margin: 0; padding-left: 18px; }
+.settings .setting-error { grid-column: 1 / -1; }
+.settings .save-error { position: sticky; top: 8px; z-index: 1; }
+@media (max-width: 900px) {
+  .settings { grid-template-columns: 1fr; }
+  .settings .subnav { position: static; display: flex; flex-wrap: wrap; }
+  .settings .setting, .settings .setting.wide { grid-template-columns: 1fr; }
+  .settings .setting .ctl { justify-content: flex-start; }
+  .settings .reason { text-align: left; }
+}

@@ -1,0 +1,30 @@
+[package]
+name = "cerberus-store"
+description = "Cerberus SQLite storage (pool, migrations, encrypted repositories)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+cerberus-types.workspace = true
+cerberus-crypto.workspace = true
+ipnet.workspace = true
+jiff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+# `insecure-test-kdf` only here, never in [dependencies] (DEC-050).
+cerberus-crypto = { workspace = true, features = ["insecure-test-kdf"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

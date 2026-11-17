@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'">
+<title>Cerberus Policies</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .sentence { font-size: var(--t-title-sm-size); line-height: 44px; font-weight: 450; color: var(--c-text-secondary); }
+  .sentence select, .sentence .slot { font: inherit; font-weight: 600; color: var(--c-text-primary); background: var(--c-bg-sunken); border: 1px solid var(--c-border-default); border-bottom: 2px solid var(--c-ring-gate); border-radius: var(--r-sm); padding: 4px 8px; height: 34px; vertical-align: baseline; }
+  .sentence select:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 1px; }
+  .modes { display: inline-flex; gap: 4px; vertical-align: baseline; flex-wrap: wrap; }
+  .modes button { font: inherit; font-size: var(--t-body-size); font-weight: 600; height: 34px; padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--c-border-default); background: var(--c-bg-surface); color: var(--c-text-secondary); cursor: pointer; }
+  .modes button[aria-checked=true] { background: var(--c-accent-solid); border-color: var(--c-accent-solid); color: var(--c-accent-on-solid); }
+  .modes button.block[aria-checked=true] { background: var(--c-danger-solid); border-color: var(--c-danger-solid); color: var(--c-danger-on-solid); }
+  .modes button:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
+  .grants { list-style: none; margin: 0; padding: 0; }
+  .grants li { display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px; border-bottom: 1px solid var(--c-border-subtle); }
+  .grants li:last-child { border-bottom: 0; }
+  .grants li p { flex: 1; }
+  .grants b { font-weight: 600; color: var(--c-text-primary); }
+  .mode { flex: none; display: inline-block; font-size: 12px; font-weight: 650; padding: 3px 8px; border-radius: var(--r-xs); }
+  .m-auto { background: var(--c-success-tint); color: var(--c-success-on-tint); }
+  .m-once { background: var(--c-accent-tint); color: var(--c-accent-on-tint); }
+  .m-always { background: var(--c-warning-tint); color: var(--c-warning-on-tint); }
+  .m-deny { background: var(--c-danger-tint); color: var(--c-danger-on-tint); }
+  .m-none { background: var(--c-bg-raised); color: var(--c-text-muted); }
+  .cond { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 760px) { .cond { grid-template-columns: 1fr; } .sentence { line-height: 40px; } }
+</style>
+</head>
+<body data-page="policies" data-layout="app" data-title="Policies" data-variants="prod-never:Prod with never ask,viewer:Signed in as viewer">
+<div id="page">
+  <div class="stack" style="gap:20px" data-state="ready">
+    <div class="row-inline"><label for="agent-pick" class="secondary">Agent</label>
+      <select id="agent-pick" class="input" style="width:auto"><option>QA runner</option><option>Release bot</option><option>Docs writer</option></select>
+      <span class="small muted">Rules use the agent's identity only. The reason text an agent sends never changes them.</span></div>
+
+    <section class="panel" aria-labelledby="b-h">
+      <header><i data-i="policy"></i><h2 id="b-h">New grant</h2></header>
+      <div class="body stack" style="gap:16px">
+        <p class="sentence" id="sentence">
+          <span class="slot">QA runner</span> can
+          <label class="sr-only" for="perm">Permission</label><select id="perm"><option>read</option><option>find</option><option>create sessions</option><option>write</option><option>use SSH</option></select>
+          items in workspace
+          <label class="sr-only" for="sws">Workspace</label><select id="sws"><option>shop-frontend</option><option>billing-api</option><option>build-infra</option><option>any workspace</option></select>,
+          env <label class="sr-only" for="senv">Environment</label><select id="senv"><option>staging</option><option>dev</option><option>prod</option><option>any env</option></select>,
+          category <label class="sr-only" for="scat">Category</label><select id="scat"><option>Web login</option><option>any category</option><option>API key</option><option>Session</option></select>,
+          and I approve:
+          <span class="modes" role="radiogroup" aria-label="When do you approve?" id="modes">
+            <button type="button" role="radio" aria-checked="true" data-mode="auto">never</button>
+            <button type="button" role="radio" aria-checked="false" data-mode="ask_once">once</button>
+            <button type="button" role="radio" aria-checked="false" data-mode="ask_always">always</button>
+            <button type="button" role="radio" aria-checked="false" data-mode="deny" class="block">block it</button>
+          </span>
+        </p>
+        <p class="small muted" id="mode-help">Never: the agent reads without asking. Each read still makes a 15-minute lease you can revoke.</p>
+        <div class="notice warn" id="prod-rule" hidden><i data-i="shieldAlert"></i><div class="grow"><strong>Prod stays at "always".</strong> Reads of prod items ask you every time, unless the owner allows this grant to skip that.
+          <label class="switch" style="margin-top:8px"><input type="checkbox"> Allow prod without asking (owner only)</label></div></div>
+        <details>
+          <summary class="secondary" style="cursor:pointer">Narrow it more: tags, kinds, role labels, single items</summary>
+          <div class="row-inline" style="margin-top:10px"><span class="chip">#e2e</span><span class="chip role">admin</span><button class="btn sm ghost" type="button"><i data-i="plus"></i>Add</button></div>
+        </details>
+        <details>
+          <summary class="secondary" style="cursor:pointer">Conditions</summary>
+          <div class="cond" style="margin-top:12px">
+            <div class="field"><label for="tw">Time window</label><input id="tw" class="input" value="Mon to Fri, 08:00 to 20:00, Europe/Madrid"></div>
+            <div class="field"><label for="rph">Reads per hour</label><input id="rph" class="input" value="60" inputmode="numeric"></div>
+            <div class="field"><label for="gexp">Grant ends</label><input id="gexp" class="input" value="31 Dec 2026"></div>
+            <div class="field"><span class="label">Reason</span><label class="switch"><input type="checkbox" checked> Agent must give a reason</label><span class="hint">Checked for presence only. Never used to decide.</span></div>
+          </div>
+        </details>
+        <div class="row-inline" data-variant-hide="viewer"><button class="btn primary" type="button" data-toast="Grant saved. The simulator below is up to date."><i data-i="check"></i>Save grant</button><button class="btn ghost" type="button">Reset</button></div>
+      </div>
+    </section>
+
+    <div class="cols c-2">
+      <section class="panel" aria-labelledby="gl-h">
+        <header><h2 id="gl-h">Grants for QA runner</h2></header>
+        <ul class="grants">
+          <li><p>Can <b>read</b> items in workspace <b>shop-frontend</b>, env <b>staging</b>, any category.</p><span class="mode m-auto">never asks</span><button class="btn sm ghost icon-only" type="button" aria-label="Edit grant"><i data-i="edit"></i></button></li>
+          <li><p>Can <b>read</b> items in workspace <b>shop-frontend</b>, env <b>prod</b>, category <b>Web login</b>. Reason required.</p><span class="mode m-always">asks always</span><button class="btn sm ghost icon-only" type="button" aria-label="Edit grant"><i data-i="edit"></i></button></li>
+          <li><p>Can <b>create sessions</b> in workspace <b>shop-frontend</b>, any env.</p><span class="mode m-auto">never asks</span><button class="btn sm ghost icon-only" type="button" aria-label="Edit grant"><i data-i="edit"></i></button></li>
+          <li><p>Is <b>blocked</b> from workspace <b>billing-api</b>, env <b>prod</b>.</p><span class="mode m-deny">blocked</span><button class="btn sm ghost icon-only" type="button" aria-label="Edit grant"><i data-i="edit"></i></button></li>
+        </ul>
+      </section>
+
+      <section class="panel flush" aria-labelledby="sim-h">
+        <header><i data-i="search"></i><h2 id="sim-h">What can QA runner see?</h2><div class="actions"><button class="btn sm" type="button"><i data-i="refresh"></i>Run again</button></div></header>
+        <table class="grid">
+          <thead><tr><th scope="col">Item</th><th scope="col">Env</th><th scope="col">Result</th></tr></thead>
+          <tbody>
+            <tr><td>Shop staging admin</td><td><span class="env staging">staging</span></td><td><span class="mode m-auto">Reads, never asks</span></td></tr>
+            <tr><td>Shop normal user</td><td><span class="env staging">staging</span></td><td><span class="mode m-auto">Reads, never asks</span></td></tr>
+            <tr><td>Shop admin login</td><td><span class="env prod">prod</span></td><td><span class="mode m-always">Asks you every time</span></td></tr>
+            <tr><td>Checkout session token</td><td><span class="env staging">staging</span></td><td><span class="mode m-auto">Reads, never asks</span></td></tr>
+            <tr><td>Billing API key</td><td><span class="env prod">prod</span></td><td><span class="mode m-deny">Blocked</span></td></tr>
+            <tr><td>build-01 deploy key</td><td><span class="env staging">staging</span></td><td><span class="mode m-none">Invisible, no grant</span></td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+
+  <div data-state="empty">
+    <div class="state-block">
+      <span data-gate="locked" data-size="64"></span>
+      <h2>QA runner can see nothing</h2>
+      <p>That is the safe default. Add a grant to let it find or read items. Start narrow: one workspace, one environment.</p>
+      <div class="actions"><button class="btn primary" type="button" data-set-view="ready"><i data-i="plus"></i>New grant</button></div>
+    </div>
+  </div>
+
+  <div data-state="loading" role="status" aria-busy="true" aria-label="Loading grants">
+    <div class="panel"><div class="body stack"><div class="skel" style="width:25%;height:18px"></div><div class="skel" style="height:34px"></div><div class="skel" style="width:60%"></div></div></div>
+    <div class="cols c-2" style="margin-top:20px"><div class="panel"><div class="skel-row"><span class="skel" style="flex:1"></span></div><div class="skel-row"><span class="skel" style="flex:1"></span></div></div><div class="panel"><div class="skel-row"><span class="skel" style="flex:1"></span></div><div class="skel-row"><span class="skel" style="flex:1"></span></div></div></div>
+  </div>
+
+  <div data-state="error">
+    <div class="state-block" role="alert">
+      <span class="kind-ico" style="width:48px;height:48px;color:var(--c-danger-fg)"><i data-i="alert" class="lg"></i></span>
+      <h2>The grant was not saved</h2>
+      <p>Only the owner can let a grant read prod items without asking. Ask the owner, or choose "always".</p>
+      <div class="actions"><button class="btn primary" type="button" data-set-view="ready">Back to the grant</button></div>
+      <span class="code">grant_put: forbidden (allow_prod_auto needs owner)</span>
+    </div>
+  </div>
+</div>
+<script src="assets/icons.js"></script>
+<script src="assets/i18n-es.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(() => {
+  const { $, $$ } = Cerb;
+  const help = {
+    auto: "Never: the agent reads without asking. Each read still makes a 15-minute lease you can revoke.",
+    ask_once: "Once: the first read asks you. Your answer makes a lease; reads inside it do not ask again.",
+    ask_always: "Always: every read opens the approval window.",
+    deny: "Block it: the agent gets 403 for these items, even if another grant allows them. Block wins."
+  };
+  let mode = "auto";
+  const render = () => {
+    $$("#modes button").forEach((b) => { b.setAttribute("aria-checked", String(b.dataset.mode === mode)); b.tabIndex = b.dataset.mode === mode ? 0 : -1; });
+    $("#mode-help").textContent = Cerb.t(help[mode]);
+    $("#prod-rule").hidden = !($("#senv").value === "prod" && mode === "auto");
+  };
+  $("#modes").addEventListener("click", (e) => { const b = e.target.closest("[data-mode]"); if (b) { mode = b.dataset.mode; render(); } });
+  $("#modes").addEventListener("keydown", (e) => {
+    const order = ["auto", "ask_once", "ask_always", "deny"]; const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (d) { e.preventDefault(); mode = order[(order.indexOf(mode) + d + 4) % 4]; render(); $(`#modes [data-mode=${mode}]`).focus(); }
+  });
+  $("#senv").addEventListener("change", render);
+  const applyV = (v) => { if (v === "prod-never") { $("#senv").value = "prod"; mode = "auto"; } render(); };
+  document.addEventListener("cerb:variant", (e) => applyV(e.detail));
+  applyV(document.body.dataset.variant);
+})();
+</script>
+</body>
+</html>

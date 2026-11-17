@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-operator-remove"
+description = "Enables the operator_remove command without any pre-configured scope."
+commands.allow = ["operator_remove"]
+
+[[permission]]
+identifier = "deny-operator-remove"
+description = "Denies the operator_remove command without any pre-configured scope."
+commands.deny = ["operator_remove"]

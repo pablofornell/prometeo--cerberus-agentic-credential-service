@@ -1,0 +1,1 @@
+{"title": "Stripe key", "kind": "api_key", "workspace": "billing", "environment": "production", "payload": {"type": "api_key", "key": "fake-key-1"}}

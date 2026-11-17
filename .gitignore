@@ -1,0 +1,40 @@
+# Rust
+target/
+
+# Node / UI
+node_modules/
+apps/desktop/ui/dist/
+
+# Tauri generated files
+apps/desktop/src-tauri/gen/
+
+# Local secrets and vault data. Never commit these.
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# OS and editor
+.DS_Store
+*.log
+.idea/
+.vscode/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Fuzzing (T25)
+fuzz/target/
+fuzz/artifacts/
+fuzz/work/
+
+# Release output (T29)
+dist/
+*_bin.cdx.json
+
+# Browser automation scratch output
+.playwright-cli/

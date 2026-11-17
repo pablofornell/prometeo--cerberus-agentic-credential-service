@@ -1,0 +1,29 @@
+/* Unlock. Ported from docs/ux/prototypes/02-unlock.html. Only tokens and app.css classes. */
+.solo:has(.unlock-screen) { background: radial-gradient(60% 50% at 50% 30%, var(--c-bg-surface) 0%, var(--c-bg-canvas) 70%); }
+.solo-wrap:has(.unlock-screen) { width: min(440px, 100%); }
+.unlock-screen .unlock { display: grid; gap: 22px; justify-items: stretch; }
+.unlock-screen .mark { justify-self: center; display: grid; }
+.unlock-screen h1 { text-align: center; font-size: var(--t-display-size); line-height: var(--t-display-line); letter-spacing: var(--t-display-track); font-weight: 680; }
+.unlock-screen h1:focus { outline: none; }
+.unlock-screen .sub { text-align: center; color: var(--c-text-secondary); margin-top: -12px; }
+.unlock-screen .ops { display: grid; gap: 6px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.unlock-screen .ops legend { font-weight: 550; font-size: var(--t-body-sm-size); color: var(--c-text-secondary); margin-bottom: 6px; padding: 0; }
+.unlock-screen .op { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--c-border-subtle); background: var(--c-bg-surface); cursor: pointer; }
+.unlock-screen .op:has(input:checked) { border-color: var(--c-ring-gate); background: var(--c-bg-raised); }
+.unlock-screen .op:has(input:focus-visible) { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
+.unlock-screen .op input { accent-color: var(--c-accent-solid); width: 16px; height: 16px; margin: 0; }
+.unlock-screen .op .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.unlock-screen .avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--c-accent-tint); color: var(--c-accent-on-tint); font-weight: 650; font-size: 13px; flex: none; }
+.unlock-screen .tries { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: var(--t-body-sm-size); color: var(--c-text-muted); }
+.unlock-screen .tries .warn { color: var(--c-warning-fg); }
+.unlock-screen .center { justify-content: center; }
+.unlock-screen .wait { text-align: center; font-size: var(--t-display-lg-size); line-height: var(--t-display-lg-line); font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--c-warning-fg); }
+.unlock-screen .code { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-muted); text-align: center; }
+.unlock-screen .opening .gate .r1 { animation: unlock-open var(--d-gate) var(--ease-standard) forwards; }
+.unlock-screen .opening .gate .r2 { animation: unlock-open var(--d-gate) var(--ease-standard) 60ms forwards; }
+.unlock-screen .opening .gate .r3 { animation: unlock-open var(--d-gate) var(--ease-standard) 120ms forwards; }
+@keyframes unlock-open { to { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  .unlock-screen .opening .gate .r1, .unlock-screen .opening .gate .r2, .unlock-screen .opening .gate .r3 { animation: none; opacity: 0.25; }
+}
+.unlock-screen .center-text { text-align: center; }

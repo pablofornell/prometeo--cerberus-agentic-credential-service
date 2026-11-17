@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-operator-add"
+description = "Enables the operator_add command without any pre-configured scope."
+commands.allow = ["operator_add"]
+
+[[permission]]
+identifier = "deny-operator-add"
+description = "Denies the operator_add command without any pre-configured scope."
+commands.deny = ["operator_add"]

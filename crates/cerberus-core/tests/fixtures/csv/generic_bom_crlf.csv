@@ -1,0 +1,3 @@
+﻿workspace,title,kind,environment,role,category,tags,url,username,password,secret,totp,description,extra
+shop,Fake API,api_key,prod,admin,API key,"a,b",,,,zq-fake-api-key,,"fake description",
+shop,Fake Login,web_login,staging,,Web login,,https://app.example.test,fake.gen,zq-fake-gen,,,,

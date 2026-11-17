@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'">
+<title>Cerberus Leases</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .stop { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 18px 20px; border-radius: var(--r-lg); border: 1px solid var(--c-danger-fg); background: var(--c-danger-tint); color: var(--c-danger-on-tint); }
+  .stop h2 { font-size: var(--t-title-size); }
+  .stop .acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .stop .btn:not(.danger) { background: transparent; color: var(--c-danger-on-tint); border-color: currentColor; }
+  .ends { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .src { font-size: 12px; color: var(--c-text-muted); }
+  @media (max-width: 760px) { .stop { grid-template-columns: 1fr; } .stop .acts { justify-content: flex-start; } }
+</style>
+</head>
+<body data-page="leases" data-layout="app" data-title="Leases and sessions" data-variants="viewer:Signed in as viewer">
+<div id="page">
+  <div class="stack" style="gap:20px" data-state="ready">
+    <section class="stop" aria-labelledby="stop-h">
+      <div><h2 id="stop-h">Stop all access now</h2><p class="small">Lock and revoke all ends every lease, cancels waiting requests and locks the vault. Revoke leases ends access but keeps the vault open.</p></div>
+      <div class="acts">
+        <button class="btn" type="button" data-open="dlg-revoke-all"><i data-i="x"></i>Revoke all leases</button>
+        <button class="btn danger lg" type="button" data-open="dlg-panic"><i data-i="siren"></i>Lock and revoke all</button>
+      </div>
+    </section>
+
+    <section class="panel flush" aria-labelledby="l-h">
+      <header><i data-i="timer"></i><h2 id="l-h">12 active leases</h2><div class="actions"><label class="sr-only" for="lf">Filter by agent</label><select id="lf" class="input" style="height:28px;width:auto"><option>All agents</option><option>QA runner</option><option>Release bot</option><option>Docs writer</option></select></div></header>
+      <table class="grid">
+        <thead><tr><th scope="col">Agent</th><th scope="col">Item</th><th scope="col">Permission</th><th scope="col">From</th><th scope="col">Uses</th><th scope="col">Ends</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody id="lease-rows"></tbody>
+      </table>
+      <p class="small muted" style="padding:10px 16px;border-top:1px solid var(--c-border-subtle)">Showing the 5 that end first. <button class="btn sm ghost" type="button">Show all 12</button></p>
+    </section>
+
+    <section class="panel flush" aria-labelledby="s-h">
+      <header><i data-i="ticket"></i><h2 id="s-h">Session items</h2><span class="small muted">Deleted by Cerberus when the time runs out</span></header>
+      <ul class="rows">
+        <li><span class="ttl" data-total="3600" data-left="250" data-size="28" data-live data-out="s1"></span><div class="grow"><div class="title">Checkout session token</div><div class="sub">Stored by Docs writer, ends in <span id="s1" class="num">4:10</span></div></div><span class="env staging">staging</span><button class="btn sm danger-ghost" type="button" data-toast="Session item deleted.">Delete now</button></li>
+        <li><span class="ttl" data-total="28800" data-left="15400" data-size="28" data-out="s2"></span><div class="grow"><div class="title">Playwright storage state</div><div class="sub">Stored by QA runner, ends in <span id="s2" class="num">4 h 16 m</span></div></div><span class="env dev">dev</span><button class="btn sm danger-ghost" type="button" data-toast="Session item deleted.">Delete now</button></li>
+      </ul>
+    </section>
+  </div>
+
+  <div data-state="empty">
+    <div class="state-block">
+      <span data-gate="open" data-size="64"></span>
+      <h2>No agent holds access now</h2>
+      <p>A lease starts when an agent reads an item, or when you approve a request. It shows here with the time it has left.</p>
+      <div class="actions"><a class="btn" href="10-audit.html"><i data-i="audit"></i>See past reads in Audit</a></div>
+    </div>
+  </div>
+
+  <div data-state="loading" role="status" aria-busy="true" aria-label="Loading leases">
+    <div class="panel"><div class="skel-row"><span class="skel" style="width:20%"></span><span class="skel" style="flex:1"></span><span class="skel" style="width:60px"></span></div><div class="skel-row"><span class="skel" style="width:20%"></span><span class="skel" style="flex:1"></span><span class="skel" style="width:60px"></span></div><div class="skel-row"><span class="skel" style="width:20%"></span><span class="skel" style="flex:1"></span><span class="skel" style="width:60px"></span></div></div>
+  </div>
+
+  <div data-state="error">
+    <div class="state-block" role="alert">
+      <span class="kind-ico" style="width:48px;height:48px;color:var(--c-danger-fg)"><i data-i="alert" class="lg"></i></span>
+      <h2>Cannot load leases</h2>
+      <p>The lease list did not load. If you need to stop access now, Lock and revoke all still works.</p>
+      <div class="actions"><button class="btn primary" type="button" data-set-view="ready"><i data-i="refresh"></i>Try again</button><button class="btn danger" type="button" data-open="dlg-panic"><i data-i="siren"></i>Lock and revoke all</button></div>
+      <span class="code">lease_list: internal (request req_01JDEMO0003)</span>
+    </div>
+  </div>
+
+  <dialog class="dlg" id="dlg-revoke-all" aria-labelledby="ra-h">
+    <div class="head"><h2 id="ra-h">Revoke all 12 leases?</h2><p class="secondary">Agents lose access at once. The vault stays unlocked, so auto grants make new leases on the next read. To stop that too, use Lock and revoke all.</p></div>
+    <div class="foot"><button class="btn" type="button" data-close>Cancel</button><button class="btn danger" type="button" data-close data-toast="12 leases revoked.">Revoke all leases</button></div>
+  </dialog>
+</div>
+<script src="assets/icons.js"></script>
+<script src="assets/i18n-es.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(() => {
+  const { $ } = Cerb;
+  const L = [
+    ["QA runner", "Shop staging admin", "staging", "read", "auto", "41", 190, 900],
+    ["QA runner", "Shop admin login", "prod", "read", "approval", "0 of 1", 260, 300],
+    ["Release bot", "build-01 deploy key", "staging", "use_ssh", "approval", "3", 6400, 28800],
+    ["Docs writer", "Checkout session token", "staging", "read", "auto", "2", 610, 900],
+    ["QA runner", "Shop normal user", "staging", "read", "auto", "7", 820, 900]
+  ];
+  $("#lease-rows").innerHTML = L.map((x, i) => `<tr><td>${x[0]}</td><td>${x[1]} <span class="env ${x[2]}">${x[2]}</span></td><td class="mono small">${x[3]}</td><td class="src">${x[4] === "auto" ? "Auto grant" : "Your approval"}</td><td class="num small">${x[5]}</td>
+    <td><span class="ends"><span class="ttl" data-total="${x[7]}" data-left="${x[6]}" data-size="22" data-live data-out="le${i}"></span><span id="le${i}" class="ttl-text"></span></span></td>
+    <td><button class="btn sm" type="button" data-toast="Lease revoked. The agent's next read needs a new lease.">Revoke</button></td></tr>`).join("");
+  Cerb.paintTtls(); Cerb.translate();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'">
+<title>Cerberus Agents</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .agents { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+  .agents .rows li { gap: 10px; }
+  .bot { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--c-info-tint); color: var(--c-info-on-tint); flex: none; }
+  .bot.off { background: var(--c-bg-raised); color: var(--c-text-muted); }
+  .detail { display: grid; gap: 20px; }
+  .detail > header { display: flex; gap: 14px; align-items: flex-start; }
+  .detail > header .grow { flex: 1; display: grid; gap: 4px; }
+  .detail > header h2 { font-size: var(--t-title-lg-size); line-height: var(--t-title-lg-line); }
+  .snip { margin: 0; padding: 14px 16px; background: var(--c-bg-sunken); border-top: 1px solid var(--c-border-subtle); font-family: var(--font-mono); font-size: 12.5px; line-height: 19px; white-space: pre; overflow-x: auto; color: var(--c-text-primary); }
+  .tabs { display: flex; gap: 2px; padding: 0 12px; }
+  .tabs [role=tab] { all: unset; cursor: pointer; padding: 10px 12px; color: var(--c-text-secondary); border-bottom: 2px solid transparent; font-weight: 550; }
+  .tabs [role=tab][aria-selected=true] { color: var(--c-text-primary); border-bottom-color: var(--c-ring-gate); }
+  .tabs [role=tab]:focus-visible { outline: 2px solid var(--c-focus-ring); }
+  .token { font-family: var(--font-mono); font-size: 14px; line-height: 22px; padding: 14px; border-radius: var(--r-sm); background: var(--c-bg-sunken); border: 1.5px solid var(--c-ring-gate); overflow-wrap: anywhere; }
+  .scopes { display: flex; flex-wrap: wrap; gap: 4px; }
+  td .row-inline { flex-wrap: nowrap; }
+  @media (max-width: 1000px) { .agents { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="agents" data-layout="app" data-title="Agents" data-variants="token:One-time token reveal,create:Create agent form,viewer:Signed in as viewer">
+<template id="topbar-actions-tpl"><button class="btn primary" type="button" data-open="dlg-create"><i data-i="plus"></i>New agent</button></template>
+<div id="page">
+  <div class="agents" data-state="ready">
+    <section class="panel flush" aria-labelledby="al-h">
+      <header><h2 id="al-h">5 agents</h2></header>
+      <ul class="rows" role="listbox" aria-label="Agents">
+        <li class="interactive" role="option" aria-selected="true" tabindex="0"><span class="bot"><i data-i="bot"></i></span><div class="grow"><div class="title">QA runner</div><div class="sub">Seen 1 min ago</div></div><span class="status ok small">Active</span></li>
+        <li class="interactive" role="option" aria-selected="false" tabindex="-1"><span class="bot"><i data-i="bot"></i></span><div class="grow"><div class="title">Release bot</div><div class="sub">Seen 3 min ago</div></div><span class="status ok small">Active</span></li>
+        <li class="interactive" role="option" aria-selected="false" tabindex="-1"><span class="bot"><i data-i="bot"></i></span><div class="grow"><div class="title">Docs writer</div><div class="sub">Seen 5 min ago</div></div><span class="status ok small">Active</span></li>
+        <li class="interactive" role="option" aria-selected="false" tabindex="-1"><span class="bot off"><i data-i="bot"></i></span><div class="grow"><div class="title">Price crawler</div><div class="sub">Seen 12 days ago</div></div><span class="status warn small">Suspended</span></li>
+        <li class="interactive" role="option" aria-selected="false" tabindex="-1"><span class="bot off"><i data-i="bot"></i></span><div class="grow"><div class="title">Old CI agent</div><div class="sub">Never seen</div></div><span class="status off small">Revoked</span></li>
+      </ul>
+    </section>
+
+    <div class="detail">
+      <header>
+        <span class="bot" style="width:44px;height:44px"><i data-i="bot" class="lg"></i></span>
+        <div class="grow">
+          <h2>QA runner</h2>
+          <p class="secondary">Runs Playwright tests for the shop frontend in CI and on Ana's laptop.</p>
+          <p class="small muted">ID <span class="mono">agt_01JDEMOQA0000</span>. Last call 14:21 from 127.0.0.1.</p>
+        </div>
+        <div class="row-inline" data-variant-hide="viewer">
+          <button class="btn" type="button" data-toast="QA runner suspended. Its calls get 403 now." data-toast-icon="pause"><i data-i="pause"></i>Suspend</button>
+          <button class="btn danger-ghost" type="button" data-open="dlg-revoke"><i data-i="x"></i>Revoke</button>
+        </div>
+      </header>
+
+      <section class="panel flush" aria-labelledby="k-h">
+        <header><i data-i="key"></i><h2 id="k-h">Keys</h2><div class="actions" data-variant-hide="viewer"><button class="btn sm" type="button" data-open="dlg-token"><i data-i="plus"></i>Add key</button></div></header>
+        <table class="grid">
+          <thead><tr><th scope="col">Key</th><th scope="col">Scopes</th><th scope="col">Expires</th><th scope="col">Last used</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody>
+            <tr><td class="mono small">cvt_…a3f9</td><td><div class="scopes"><span class="chip mono">catalog:read</span><span class="chip mono">secrets:read</span><span class="chip mono">sessions:write</span><span class="chip mono">requests</span></div></td><td class="small">in 71 days</td><td class="small">1 min ago</td>
+              <td><div class="row-inline" data-variant-hide="viewer"><button class="btn sm" type="button" data-open="dlg-rotate"><i data-i="refresh"></i>Rotate</button><button class="btn sm danger-ghost" type="button" data-toast="Key revoked. The next call with it gets 401.">Revoke</button></div></td></tr>
+            <tr><td class="mono small">cvt_…0c21</td><td><div class="scopes"><span class="chip mono">catalog:read</span><span class="chip mono">secrets:read</span></div></td><td class="small"><span class="ttl-text low">in 9 h, rotation overlap</span></td><td class="small">2 days ago</td><td></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel flush" aria-labelledby="s-h">
+        <header><i data-i="terminal"></i><h2 id="s-h">Connect this agent</h2><div class="actions"><button class="btn sm" type="button" data-toast="Snippet copied. It holds no token."><i data-i="copy"></i>Copy</button></div></header>
+        <div class="tabs" role="tablist" aria-label="Snippet">
+          <button role="tab" id="t-mcp" aria-controls="p-mcp" aria-selected="true">Claude Code MCP</button>
+          <button role="tab" id="t-curl" aria-controls="p-curl" aria-selected="false">curl</button>
+          <button role="tab" id="t-env" aria-controls="p-env" aria-selected="false">Environment</button>
+        </div>
+        <pre class="snip" id="p-mcp" role="tabpanel" aria-labelledby="t-mcp" tabindex="0">{ "mcpServers": { "cerberus": {
+    "command": "cerberus-mcp",
+    "env": {
+      "CERBERUS_URL": "https://127.0.0.1:7373",
+      "CERBERUS_PIN": "sha256/DEMOPINDEMOPINDEMOPINDEMOPIN0000000000000="
+} } } }</pre>
+        <pre class="snip" id="p-curl" role="tabpanel" aria-labelledby="t-curl" tabindex="0" hidden>curl --cacert cerberus-ca.pem \
+  -H "Authorization: Bearer $CERBERUS_TOKEN" \
+  -d '{"app":"shop-frontend","environment":"staging","role":"admin","purpose":"e2e checkout test","mode":"best"}' \
+  https://127.0.0.1:7373/v1/credentials/resolve</pre>
+        <pre class="snip" id="p-env" role="tabpanel" aria-labelledby="t-env" tabindex="0" hidden>export CERBERUS_URL=https://127.0.0.1:7373
+export CERBERUS_CA_CERT=~/.config/cerberus/ca.pem
+export CERBERUS_TOKEN_FILE=~/.config/cerberus/qa-runner.token
+cerberus run --app shop-frontend --env staging --role admin -- npx playwright test</pre>
+        <p class="small muted" style="padding:10px 16px;border-top:1px solid var(--c-border-subtle)">Snippets never hold the token. Put the token in a file or the agent host's secret store.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="g-h">
+        <header><i data-i="policy"></i><h2 id="g-h">What QA runner can do</h2><div class="actions"><a class="btn sm ghost" href="07-policies.html">Edit grants</a></div></header>
+        <div class="body"><p>Read items in <b>shop-frontend</b>, env <b>staging</b>, and I approve: <b>never</b>. Read items in <b>shop-frontend</b>, env <b>prod</b>, and I approve: <b>always</b>.</p></div>
+      </section>
+    </div>
+  </div>
+
+  <div data-state="empty">
+    <div class="state-block">
+      <span class="bot" style="width:56px;height:56px"><i data-i="bot" class="lg"></i></span>
+      <h2>No agents yet</h2>
+      <p>An agent is a program that asks Cerberus for credentials, for example Claude Code or a CI job. Each gets its own token and grants.</p>
+      <div class="actions"><button class="btn primary" type="button" data-open="dlg-create"><i data-i="plus"></i>New agent</button></div>
+    </div>
+  </div>
+
+  <div data-state="loading" role="status" aria-busy="true" aria-label="Loading agents">
+    <div class="agents"><div class="panel"><div class="skel-row"><span class="skel box"></span><span class="skel" style="flex:1"></span></div><div class="skel-row"><span class="skel box"></span><span class="skel" style="flex:1"></span></div><div class="skel-row"><span class="skel box"></span><span class="skel" style="width:60%"></span></div></div>
+    <div class="panel"><div class="body stack"><div class="skel" style="width:30%;height:20px"></div><div class="skel"></div><div class="skel" style="height:120px"></div></div></div></div>
+  </div>
+
+  <div data-state="error">
+    <div class="state-block" role="alert">
+      <span class="kind-ico" style="width:48px;height:48px;color:var(--c-danger-fg)"><i data-i="alert" class="lg"></i></span>
+      <h2>Cannot load agents</h2>
+      <p>The agent list did not load. Agent calls still work with the grants you set. Try again.</p>
+      <div class="actions"><button class="btn primary" type="button" data-set-view="ready"><i data-i="refresh"></i>Try again</button></div>
+      <span class="code">agent_list: internal (request req_01JDEMO0002)</span>
+    </div>
+  </div>
+
+  <dialog class="dlg wide" id="dlg-create" aria-labelledby="c-h">
+    <div class="head"><h2 id="c-h">New agent</h2><p class="secondary">Name it after the job it does. You choose what it can read in Policies.</p></div>
+    <div class="body">
+      <div class="form-grid">
+        <div class="field"><label for="an">Name</label><input id="an" class="input" value="Checkout tester"></div>
+        <div class="field"><label for="al">Key life</label><select id="al" class="input"><option>30 days</option><option selected>90 days</option><option>1 year</option><option>No expiry</option></select></div>
+        <div class="field full"><label for="ad">Description</label><input id="ad" class="input" value="Runs checkout tests in CI."></div>
+        <fieldset class="field full" style="border:0;padding:0;margin:0"><legend class="label" style="font-weight:550;font-size:var(--t-body-sm-size);color:var(--c-text-secondary);margin-bottom:6px">Scopes</legend>
+          <div class="form-grid" style="gap:8px">
+            <label class="check"><input type="checkbox" checked> <span><span class="mono small">status:read</span><br><span class="small muted">See if the vault is locked</span></span></label>
+            <label class="check"><input type="checkbox" checked> <span><span class="mono small">catalog:read</span><br><span class="small muted">Find items, metadata only</span></span></label>
+            <label class="check"><input type="checkbox" checked> <span><span class="mono small">secrets:read</span><br><span class="small muted">Read values the grants allow</span></span></label>
+            <label class="check"><input type="checkbox"> <span><span class="mono small">secrets:write</span><br><span class="small muted">Store new items</span></span></label>
+            <label class="check"><input type="checkbox" checked> <span><span class="mono small">sessions:write</span><br><span class="small muted">Store session tokens with a TTL</span></span></label>
+            <label class="check"><input type="checkbox" checked> <span><span class="mono small">requests</span><br><span class="small muted">Ask you for approval</span></span></label>
+          </div></fieldset>
+        <div class="field"><label for="ip">IP allowlist</label><input id="ip" class="input mono" value="127.0.0.1/32, ::1/128"></div>
+        <div class="field"><span class="label">Client certificate</span><label class="switch"><input type="checkbox"> Require mTLS</label></div>
+      </div>
+    </div>
+    <div class="foot"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" data-close data-open="dlg-token">Create agent</button></div>
+  </dialog>
+
+  <dialog class="dlg" id="dlg-token" aria-labelledby="tk-h">
+    <div class="head"><h2 id="tk-h">Copy the token now</h2><p class="secondary">Cerberus keeps only a hash of it. Once you close this, nobody can show it again.</p></div>
+    <div class="body">
+      <div class="token" data-no-i18n aria-label="Agent token, example value">cvt_01JDEMOAGENT0000.EXAMPLE-ONLY-not-a-real-token-000000000000</div>
+      <div class="row-inline"><button class="btn" type="button" data-toast="Copied. The clipboard clears in 30 s."><i data-i="copy"></i>Copy token</button><button class="btn ghost" type="button" data-toast="Saved to the file you chose."><i data-i="download"></i>Save to file</button></div>
+      <label class="check"><input type="checkbox" id="stored"> I put the token in the agent's secret store.</label>
+    </div>
+    <div class="foot"><button class="btn primary" type="button" id="tk-done" disabled data-close>Done</button></div>
+  </dialog>
+
+  <dialog class="dlg" id="dlg-rotate" aria-labelledby="ro-h">
+    <div class="head"><h2 id="ro-h">Rotate key cvt_…a3f9?</h2><p class="secondary">Cerberus makes a new token. The old one keeps working for the overlap time, then stops.</p></div>
+    <div class="body"><div class="field"><label for="ov">Overlap</label><select id="ov" class="input"><option>None, stop now</option><option>1 hour</option><option selected>24 hours</option><option>7 days</option></select></div></div>
+    <div class="foot"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" data-close data-open="dlg-token"><i data-i="refresh"></i>Rotate key</button></div>
+  </dialog>
+
+  <dialog class="dlg" id="dlg-revoke" aria-labelledby="rv-h">
+    <div class="head"><h2 id="rv-h">Revoke QA runner?</h2><p class="secondary">All its keys stop at once. Its next call gets 401. Its leases end. You cannot undo this; make a new agent instead.</p></div>
+    <div class="foot"><button class="btn" type="button" data-close>Cancel</button><button class="btn danger" type="button" data-close data-toast="QA runner revoked.">Revoke agent</button></div>
+  </dialog>
+</div>
+<script src="assets/icons.js"></script>
+<script src="assets/i18n-es.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(() => {
+  const { $ } = Cerb;
+  $("#stored").addEventListener("change", (e) => { $("#tk-done").disabled = !e.target.checked; });
+  // The token lives only in this dialog. Closing it clears the text (ADR-0010 rule 5).
+  $("#dlg-token").addEventListener("close", () => { $("#stored").checked = false; $("#tk-done").disabled = true; });
+  const v = document.body.dataset.variant;
+  if (document.body.dataset.view === "ready" && v === "token") $("#dlg-token").showModal();
+  if (document.body.dataset.view === "ready" && v === "create") $("#dlg-create").showModal();
+  document.addEventListener("cerb:variant", (e) => { document.querySelectorAll("dialog[open]").forEach((d) => d.close()); if (e.detail === "token") $("#dlg-token").showModal(); if (e.detail === "create") $("#dlg-create").showModal(); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-grant-list"
+description = "Enables the grant_list command without any pre-configured scope."
+commands.allow = ["grant_list"]
+
+[[permission]]
+identifier = "deny-grant-list"
+description = "Denies the grant_list command without any pre-configured scope."
+commands.deny = ["grant_list"]

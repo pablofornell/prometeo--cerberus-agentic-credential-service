@@ -1,0 +1,16 @@
+/* CSV import wizard and export dialog. Prefix csv- keeps these rules away from other screens. Tokens only. */
+.csv-step { margin: 0; font-size: var(--t-body-sm-size); color: var(--c-text-muted); }
+.csv-row { display: flex; gap: 8px; align-items: center; }
+.csv-row .input { flex: 1 1 auto; min-width: 0; }
+.csv-problem-line { display: block; font-size: var(--t-body-sm-size); }
+.csv-map { border: 1px solid var(--c-border-subtle); border-radius: var(--r-md); padding: 10px 12px; display: grid; gap: 8px; }
+.csv-map legend { padding: 0 6px; font-weight: 600; }
+.csv-map-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; max-height: 280px; overflow: auto; padding: 2px; }
+.csv-preview { display: grid; gap: 12px; }
+.csv-preview h3 { font-size: var(--t-body-size); margin: 0 0 4px; }
+.csv-stats { list-style: none; margin: 0; padding: 0; display: flex; gap: 20px; color: var(--c-text-secondary); }
+.csv-stats b { font-size: var(--t-title-size); color: var(--c-text-primary); font-variant-numeric: tabular-nums; }
+.csv-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.csv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; max-height: 160px; overflow: auto; font-size: var(--t-body-sm-size); }
+.csv-title { font-weight: 560; overflow-wrap: anywhere; }
+@media (max-width: 560px) { .csv-map-grid { grid-template-columns: 1fr; } }

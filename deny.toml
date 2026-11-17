@@ -1,0 +1,61 @@
+# cargo-deny configuration. Run with `just deny`. Docs: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# Check every platform the desktop app ships to, so no platform-only dependency escapes review.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+all-features = false
+no-default-features = false
+
+[output]
+feature-depth = 1
+
+[advisories]
+# Vulnerabilities and unsound code fail the check. Unmaintained crates are reported as warnings.
+unmaintained = "workspace"
+yanked = "deny"
+# RUSTSEC-2026-0459 (SQLite < 3.54 reads stale memory when a database opens with a crafted `-wal` file of another page
+# size): sqlx-sqlite 0.9.0 allows libsqlite3-sys < 0.38 only, and the fix is in 0.39. Partial mitigation (AUD-10,
+# DEC-T27-A1-7): `Store::open` checks the header of a `-wal` next to the vault before any connection (magic, version,
+# the page size of the main file, header checksum) and refuses a mismatch; backups are read `immutable` (SQLite never
+# reads a `-wal` next to them) and a backup with a sibling `-wal` is refused. Not covered: a `-wal` swapped between the
+# check and the open, or changed while the vault is open. Remove this when sqlx allows 0.39. The same ignore is in
+# `.cargo/audit.toml`.
+ignore = [
+    { id = "RUSTSEC-2026-0459", reason = "sqlx 0.9.0 caps libsqlite3-sys below the fixed 0.39; mitigated, see comment" },
+]
+
+[licenses]
+# Only permissive or weak-copyleft licenses that ADR-0011 allows. Anything else fails.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause", # Inflector (tauri-specta macros), DEC-T15-3
+    "BSD-3-Clause",
+    "BSL-1.0", # clipboard-win and error-code (clipboard plugin on Windows), DEC-T15-3
+    "CC0-1.0",
+    "ISC", # ring, rustls-webpki and untrusted (TLS for cerberus-api, DEC-T10-10)
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Duplicate versions are reported, not blocked. Tauri pulls many platform crates that we do not control.
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+deny = []
+skip = []
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

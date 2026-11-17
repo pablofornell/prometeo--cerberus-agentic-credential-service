@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-item-update"
+description = "Enables the item_update command without any pre-configured scope."
+commands.allow = ["item_update"]
+
+[[permission]]
+identifier = "deny-item-update"
+description = "Denies the item_update command without any pre-configured scope."
+commands.deny = ["item_update"]

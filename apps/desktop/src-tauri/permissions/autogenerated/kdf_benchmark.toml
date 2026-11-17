@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-kdf-benchmark"
+description = "Enables the kdf_benchmark command without any pre-configured scope."
+commands.allow = ["kdf_benchmark"]
+
+[[permission]]
+identifier = "deny-kdf-benchmark"
+description = "Denies the kdf_benchmark command without any pre-configured scope."
+commands.deny = ["kdf_benchmark"]

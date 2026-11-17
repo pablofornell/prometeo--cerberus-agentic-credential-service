@@ -1,0 +1,64 @@
+/* Vault browser (screen 4). Prefix vb- keeps these rules away from other screens. Tokens only. */
+main.content:has(> .vb-browser) { padding: 0; gap: 0; }
+.vb-browser { display: grid; grid-template-columns: 220px minmax(0, 1fr) clamp(340px, 30vw, 420px); min-height: calc(100vh - 96px); }
+/* Nothing selected: the placeholder needs less room than an open item. */
+.vb-browser:has(> .vb-drawer.is-empty) { grid-template-columns: 220px minmax(0, 1fr) 280px; }
+
+.vb-facets { border-right: 1px solid var(--c-border-subtle); padding: 16px 10px; display: grid; gap: 18px; align-content: start; }
+.vb-facet-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px; margin-bottom: 4px; min-height: 28px; }
+.vb-facet-head h2 { font-size: var(--t-body-sm-size); color: var(--c-text-muted); font-weight: 600; }
+.vb-facets ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.vb-facets ul button { all: unset; box-sizing: border-box; width: 100%; display: flex; gap: 8px; align-items: center; padding: 5px 8px; border-radius: var(--r-sm); color: var(--c-text-secondary); cursor: pointer; }
+.vb-facets ul button:hover { background: var(--c-bg-hover); color: var(--c-text-primary); }
+.vb-facets ul button:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: -2px; }
+.vb-facets ul button[aria-pressed="true"] { background: var(--c-bg-selected); color: var(--c-text-primary); font-weight: 560; }
+.vb-facets .n { margin-left: auto; font-size: 12px; color: var(--c-text-muted); font-variant-numeric: tabular-nums; }
+.vb-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px; }
+.vb-facet-empty { padding: 0 8px; }
+
+.vb-listcol { min-width: 0; display: flex; flex-direction: column; container: vb-list / inline-size; }
+/* A narrow list keeps the whole title: the badges move under it. */
+@container vb-list (max-width: 500px) {
+  .vb-items > li { flex-wrap: wrap; row-gap: 6px; }
+  .vb-items .grow { flex: 1 1 calc(100% - 50px); }
+  .vb-items .vb-meta { flex: 1 1 100%; padding-left: 42px; flex-wrap: wrap; }
+}
+.vb-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--c-border-subtle); }
+.vb-search { flex: 1 1 100%; position: relative; display: block; }
+.vb-search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--c-text-muted); pointer-events: none; }
+.vb-search input { padding-left: 32px; }
+.vb-toolbar select.input { width: auto; height: var(--ctl-sm, 32px); }
+.vb-count { padding: 8px 16px; font-size: var(--t-body-sm-size); color: var(--c-text-muted); border-bottom: 1px solid var(--c-border-subtle); }
+
+.vb-items > li:focus-visible, .vb-tiles > li:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: -2px; }
+.vb-meta { display: flex; gap: 8px; align-items: center; flex: none; }
+.vb-tiles { list-style: none; margin: 0; padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.vb-tiles > li { display: grid; gap: 10px; padding: 14px; border-radius: var(--r-md); border: 1px solid var(--c-border-subtle); background: var(--c-bg-surface); cursor: pointer; align-content: start; }
+.vb-tiles > li:hover { background: var(--c-bg-hover); }
+.vb-tiles > li[aria-selected="true"] { border-color: var(--c-ring-gate); background: var(--c-bg-selected); }
+.vb-tiles > li:focus-visible { outline-offset: 2px; }
+.vb-tiles .top { display: flex; justify-content: space-between; align-items: center; }
+.vb-tiles .title { font-weight: 600; overflow-wrap: anywhere; }
+.vb-tiles .sub { color: var(--c-text-muted); font-size: var(--t-body-sm-size); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.vb-drawer { padding: 0; display: flex; flex-direction: column; }
+.vb-drawer > header { padding: 16px 20px; border-bottom: 1px solid var(--c-border-subtle); display: grid; gap: 8px; }
+.vb-drawer > header h2 { font-size: var(--t-title-lg-size); line-height: var(--t-title-lg-line); overflow-wrap: anywhere; }
+.vb-drawer > header h2:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
+.vb-drawer .sec { padding: 16px 20px; border-bottom: 1px solid var(--c-border-subtle); display: grid; gap: 12px; }
+.vb-drawer .sec h3 { font-size: var(--t-body-sm-size); color: var(--c-text-muted); font-weight: 600; }
+.vb-secret-row { display: grid; gap: 4px; }
+.vb-drawer .acts { padding: 14px 20px; display: flex; gap: 8px; margin-top: auto; }
+.vb-loading-drawer { padding: 20px; }
+
+@media (max-width: 1200px) {
+  .vb-browser { grid-template-columns: 200px minmax(0, 1fr); }
+  .vb-browser:has(> .vb-drawer.is-empty) { grid-template-columns: 200px minmax(0, 1fr); }
+  .vb-drawer, .vb-drawer.is-empty { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--c-border-subtle); }
+  .vb-drawer.is-empty { display: none; }
+}
+@media (max-width: 760px) {
+  .vb-browser, .vb-browser:has(> .vb-drawer.is-empty) { grid-template-columns: 1fr; }
+  .vb-facets { border-right: 0; border-bottom: 1px solid var(--c-border-subtle); }
+  .vb-role { display: none; }
+}

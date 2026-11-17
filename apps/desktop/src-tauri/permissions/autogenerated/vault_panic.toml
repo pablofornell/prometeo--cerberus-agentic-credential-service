@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-vault-panic"
+description = "Enables the vault_panic command without any pre-configured scope."
+commands.allow = ["vault_panic"]
+
+[[permission]]
+identifier = "deny-vault-panic"
+description = "Denies the vault_panic command without any pre-configured scope."
+commands.deny = ["vault_panic"]

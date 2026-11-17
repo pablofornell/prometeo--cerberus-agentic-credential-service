@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-phrase-change"
+description = "Enables the phrase_change command without any pre-configured scope."
+commands.allow = ["phrase_change"]
+
+[[permission]]
+identifier = "deny-phrase-change"
+description = "Denies the phrase_change command without any pre-configured scope."
+commands.deny = ["phrase_change"]

@@ -1,0 +1,14 @@
+/* The recovery key grid, shared by the create screen and the settings rotate dialog. */
+.rk { list-style: none; margin: 0; display: grid; grid-template-columns: repeat(5, auto); gap: 8px 14px; justify-content: start; padding: 18px 20px; border-radius: var(--r-md); background: var(--c-bg-sunken); border: 1.5px solid var(--c-ring-gate); font-family: var(--font-mono); font-size: var(--t-mono-lg-size); letter-spacing: 0.06em; }
+.rk li { display: inline-flex; gap: 6px; align-items: baseline; }
+.rk small { font-size: 10px; color: var(--c-text-muted); letter-spacing: 0; font-family: var(--font-sans); width: 14px; text-align: right; }
+.print-only { display: none; }
+@media (max-width: 860px) { .rk { grid-template-columns: repeat(3, auto); } }
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: fixed; inset: 0 auto auto 0; padding: 24px; background: #fff; }
+  .print-only { display: block; color: #000; }
+  .rk { border: 2px solid #000; color: #000; background: #fff; }
+  .rk small { color: #000; }
+}

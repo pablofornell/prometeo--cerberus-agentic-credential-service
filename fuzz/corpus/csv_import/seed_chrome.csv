@@ -1,0 +1,4 @@
+name,url,username,password,note
+fake-shop.example.test,https://fake-shop.example.test/login,fake.chrome,zq-fake-chrome,
+fake.android.app,android://fakehash@com.example.fake/,fake.android,zq-fake-android,
+fake-nouser.example.test,https://fake-nouser.example.test,,zq-fake-nouser,

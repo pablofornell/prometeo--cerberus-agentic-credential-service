@@ -1,0 +1,58 @@
+[package]
+name = "cerberus-crypto"
+description = "Cerberus cryptography (secret types, KDF, key slots, AEAD)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# ADR-0012: only the `memlock` module may use `unsafe`. The workspace forbids it. This crate
+# denies it instead, so one module can carry `#[allow(unsafe_code)]`. Cargo does not allow
+# `lints.workspace = true` together with overrides, so the workspace lints are copied here.
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+undocumented_unsafe_blocks = "deny"
+
+[dependencies]
+cerberus-types.workspace = true
+argon2.workspace = true
+chacha20poly1305.workspace = true
+data-encoding.workspace = true
+getrandom.workspace = true
+hkdf.workspace = true
+hmac.workspace = true
+region.workspace = true
+secrecy.workspace = true
+sha2.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+unicode-normalization.workspace = true
+zeroize.workspace = true
+zxcvbn.workspace = true
+
+# Process hardening in `memlock` (ADR-0012). Each OS gets only the crate it needs.
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[features]
+# Lets tests in other crates use fast KDF parameters (`KdfParams::insecure_fast_for_tests`).
+# Enable it only from `[dev-dependencies]`. A release build with it fails to compile (see `kdf.rs`).
+insecure-test-kdf = []
+
+[dev-dependencies]
+proptest.workspace = true
+tracing-subscriber.workspace = true

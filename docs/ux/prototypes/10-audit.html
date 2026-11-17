@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'">
+<title>Cerberus Audit Log</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .chain { display: flex; gap: 14px; align-items: center; padding: 14px 18px; border-radius: var(--r-md); border: 1px solid var(--c-border-subtle); background: var(--c-bg-surface); }
+  .chain .seal { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--c-success-tint); color: var(--c-success-on-tint); flex: none; }
+  .chain.broken { border-color: var(--c-danger-fg); background: var(--c-danger-tint); color: var(--c-danger-on-tint); }
+  .chain.broken .seal { background: var(--c-danger-solid); color: var(--c-danger-on-solid); }
+  .chain .grow { flex: 1; display: grid; gap: 2px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .filters .input { width: auto; height: 32px; }
+  .day { font-weight: 600; color: var(--c-text-secondary); font-size: var(--t-body-sm-size); padding: 14px 0 6px; }
+  .tl { list-style: none; margin: 0; padding: 0; position: relative; }
+  .tl::before { content: ""; position: absolute; left: 83px; top: 0; bottom: 0; width: 1px; background: var(--c-border-subtle); }
+  .tl li { display: grid; grid-template-columns: 70px 28px minmax(0, 1fr) auto; gap: 0 12px; align-items: start; padding: 8px 0; position: relative; }
+  .tl time { color: var(--c-text-muted); font-size: var(--t-body-sm-size); font-variant-numeric: tabular-nums; padding-top: 4px; text-align: right; }
+  .tl .node { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--c-bg-raised); border: 1px solid var(--c-border-subtle); color: var(--c-text-secondary); position: relative; z-index: 1; }
+  .tl .node.agent { color: var(--c-info-fg); }
+  .tl .node.op { color: var(--c-accent-fg); }
+  .tl .node.bad { color: var(--c-danger-fg); border-color: var(--c-danger-fg); }
+  .tl .what { display: grid; gap: 2px; padding-top: 3px; min-width: 0; }
+  .tl .what .ev { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-muted); }
+  .tl .seq { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-muted); padding-top: 5px; }
+  .tl li.suspect { background: linear-gradient(90deg, transparent 0 96px, var(--c-danger-tint) 96px); border-radius: var(--r-sm); }
+  @media (max-width: 760px) { .tl li { grid-template-columns: 56px 28px minmax(0, 1fr); } .tl .seq { display: none; } .tl::before { left: 69px; } }
+</style>
+</head>
+<body data-page="audit" data-layout="app" data-title="Audit" data-variants="broken:Chain broken">
+<template id="topbar-actions-tpl"><button class="btn" type="button" data-toast="Exported 4,112 events as JSON lines. No secret values inside." data-toast-icon="download"><i data-i="download"></i>Export</button></template>
+<div id="page">
+  <div class="stack" style="gap:16px" data-state="ready empty">
+    <section class="chain" id="chain" aria-live="polite">
+      <span class="seal"><i data-i="hash" class="lg"></i></span>
+      <div class="grow" data-variant-hide="broken"><strong>Chain OK</strong><span class="small secondary">4,112 events, from 1 to 4,112. Each event signs the one before it. Checked 14:20.</span></div>
+      <div class="grow" data-variant-show="broken" hidden><strong>Chain broken at event 3,977</strong><span class="small">The signature does not match (HMAC mismatch). A row changed outside Cerberus. Events from 3,977 on cannot be trusted. Keep a backup and export now.</span></div>
+      <button class="btn" type="button" id="verify"><i data-i="refresh"></i>Verify now</button>
+    </section>
+
+    <div class="filters" role="search" aria-label="Filter events">
+      <label class="sr-only" for="fr">Time</label><select id="fr" class="input"><option>Last 24 hours</option><option>Last 7 days</option><option>All time</option></select>
+      <label class="sr-only" for="ft">Event type</label><select id="ft" class="input"><option>All events</option><option>Secret reads</option><option>Approvals</option><option>Vault lock and unlock</option><option>Agents and keys</option><option>Grants</option><option>Settings</option></select>
+      <label class="sr-only" for="fa">Agent</label><select id="fa" class="input"><option>All actors</option><option>QA runner</option><option>Release bot</option><option>Docs writer</option><option>Ana Ruiz</option></select>
+      <label class="sr-only" for="fi">Item</label><input id="fi" class="input" data-search placeholder="Item title or request ID">
+    </div>
+
+    <section aria-label="Events" data-state="ready">
+      <div class="day">Today, 16 November</div>
+      <ol class="tl" id="tl"></ol>
+      <div class="row-inline" style="justify-content:center;padding:16px"><button class="btn" type="button">Load older events</button></div>
+    </section>
+
+    <div class="state-block" data-state="empty">
+      <span class="kind-ico" style="width:48px;height:48px"><i data-i="filter" class="lg"></i></span>
+      <h2>No events match these filters</h2>
+      <p>Widen the time range or clear the filters. The chain check above still covers every event.</p>
+      <div class="actions"><button class="btn" type="button" data-set-view="ready">Clear filters</button></div>
+    </div>
+  </div>
+
+  <div data-state="loading" role="status" aria-busy="true" aria-label="Checking the chain">
+    <div class="chain"><span data-gate="spin" data-size="40"></span><div class="grow"><strong>Checking the chain</strong><span class="small secondary">2,310 of 4,112 events checked</span></div></div>
+    <div style="margin-top:16px"><div class="skel-row"><span class="skel" style="width:60px"></span><span class="skel box"></span><span class="skel" style="flex:1"></span></div><div class="skel-row"><span class="skel" style="width:60px"></span><span class="skel box"></span><span class="skel" style="flex:1"></span></div><div class="skel-row"><span class="skel" style="width:60px"></span><span class="skel box"></span><span class="skel" style="width:50%"></span></div></div>
+  </div>
+
+  <div data-state="error">
+    <div class="state-block" role="alert">
+      <span class="kind-ico" style="width:48px;height:48px;color:var(--c-danger-fg)"><i data-i="alert" class="lg"></i></span>
+      <h2>Cannot read the audit log</h2>
+      <p>The query failed. The log itself is not changed by this. Try again with a smaller time range.</p>
+      <div class="actions"><button class="btn primary" type="button" data-set-view="ready"><i data-i="refresh"></i>Try again</button></div>
+      <span class="code">audit_query: internal (request req_01JDEMO0004)</span>
+    </div>
+  </div>
+</div>
+<script src="assets/icons.js"></script>
+<script src="assets/i18n-es.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(() => {
+  const { $, icon } = Cerb;
+  const E = [
+    [4112, "14:21:07", "agent", "QA runner read Shop staging admin", "item.reveal", "ok", "req_01JDEMOA0001"],
+    [4111, "14:21:07", "agent", "QA runner resolved shop-frontend, staging, admin", "api.resolve", "ok", "req_01JDEMOA0001"],
+    [4110, "14:20:55", "agent", "QA runner asked to read Shop admin login (prod)", "request.create", "pending", "req_01JDEMOA0002"],
+    [4109, "14:18:02", "agent", "Docs writer stored Checkout session token, TTL 60 min", "item.create", "ok", "req_01JDEMOA0003"],
+    [4108, "14:16:44", "bad", "Docs writer was denied billing-api, prod", "api.resolve", "forbidden", "req_01JDEMOA0004"],
+    [4107, "13:40:12", "op", "Ana Ruiz changed a grant for QA runner", "grant.update", "ok", null],
+    [4106, "09:12:30", "op", "Ana Ruiz unlocked the vault", "vault.unlock", "ok", null],
+    [4105, "09:12:28", "bad", "Wrong phrase for Ana Ruiz", "vault.unlock_failed", "failed", null],
+    [4104, "02:14:00", "sys", "Vault locked by the hard limit (12 h)", "vault.lock", "max_unlocked", null]
+  ];
+  const ico = { agent: "bot", op: "user", sys: "lock", bad: "x" };
+  const render = (broken) => {
+    $("#tl").innerHTML = E.map((e) => `<li class="${broken && e[0] >= 3977 ? "suspect" : ""}"><time>${e[1]}</time><span class="node ${e[2]}">${icon(ico[e[2]])}</span>
+      <div class="what"><span>${e[3]}</span><span class="ev">${e[4]}, ${e[5]}${e[6] ? `, ${e[6]}` : ""}</span></div><span class="seq">#${e[0]}</span></li>`).join("");
+    $("#chain").classList.toggle("broken", broken);
+    Cerb.translate();
+  };
+  document.addEventListener("cerb:variant", (e) => render(e.detail === "broken"));
+  render(document.body.dataset.variant === "broken");
+  $("#verify").addEventListener("click", () => { Cerb.setView("loading"); setTimeout(() => Cerb.setView("ready"), 1200); });
+})();
+</script>
+</body>
+</html>

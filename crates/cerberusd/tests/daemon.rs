@@ -1,0 +1,433 @@
+//! Integration tests of `cerberusd`: a real vault made with the core API, the real serve loop, the real unlock
+//! socket and the real TLS listener, all in a temp dir. Every secret here is a fake test value.
+#![allow(
+    missing_docs,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "test code"
+)]
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use cerberus_api::tls::{LocalCaIssuer, TlsPaths};
+use cerberus_core::admin::WorkspaceInput;
+use cerberus_core::agents::{AgentInput, AgentKeyInput};
+use cerberus_core::items::{ItemInput, Payload};
+use cerberus_core::policy::{Conditions, GrantInput, Selector};
+use cerberus_core::vault::KeyCustody;
+use cerberus_core::{CoreConfig, NewVault, OperatorContext, VaultService};
+use cerberus_crypto::{KdfParams, SecretString};
+use cerberus_store::{OpenOptions, Store};
+use cerberus_types::{
+    Clock, Environment, GrantMode, ItemId, OperatorRole, Permission, RequestId, Scope, SystemClock,
+    VaultStateKind, WorkspaceId,
+};
+use cerberusd::config::{self, Config, ConfigError};
+use cerberusd::daemon::{self, DaemonError, Ready};
+use cerberusd::https;
+use cerberusd::status;
+use cerberusd::unlock::{self, UnlockError};
+use rustls::pki_types::CertificateDer;
+use rustls::pki_types::pem::PemObject;
+use tokio::sync::oneshot;
+use tokio::task::JoinHandle;
+
+const PHRASE: &str = "orbit velvet canyon mosaic 7";
+const PASSWORD: &str = "canary-pw-7f3a91c2";
+
+fn no_env(_: &str) -> Option<String> {
+    None
+}
+
+fn web_login(workspace: WorkspaceId) -> ItemInput {
+    ItemInput {
+        workspace_id: workspace,
+        title: "Shop admin".to_owned(),
+        description: "Shop admin login".to_owned(),
+        role_label: Some("admin".to_owned()),
+        category: "Web login".to_owned(),
+        tags: vec!["shop".to_owned()],
+        environment: Environment::Dev,
+        target: Some("https://shop.example.test/login".to_owned()),
+        custom: BTreeMap::new(),
+        expires_at: None,
+        max_uses: None,
+        payload: Payload::WebLogin {
+            username: SecretString::new("canary-user-5d20be41".to_owned()),
+            password: SecretString::new(PASSWORD.to_owned()),
+            url: None,
+            totp: None,
+        },
+    }
+}
+
+/// What the vault seed gives the tests: an agent token and an item the agent may read.
+struct Seed {
+    token: String,
+    item: ItemId,
+}
+
+/// Makes a vault in `data_dir` with the core API, then closes it. The daemon opens it next.
+async fn make_vault(data_dir: &Path) -> Seed {
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+    let tls = TlsPaths::in_data_dir(data_dir);
+    let store = Store::open(
+        OpenOptions {
+            path: data_dir.join(daemon::VAULT_FILE),
+            create: true,
+        },
+        Arc::clone(&clock),
+    )
+    .await
+    .expect("store");
+    let core = VaultService::open(
+        store,
+        clock,
+        CoreConfig {
+            approvals_available: false,
+            idle_lock_default: None,
+            data_dir: data_dir.to_path_buf(),
+            ca_issuer: Arc::new(LocalCaIssuer::new(tls, Vec::new())),
+        },
+    )
+    .await
+    .expect("open");
+    let created = core
+        .create_vault(NewVault {
+            owner_label: "owner".to_owned(),
+            phrase: SecretString::new(PHRASE.to_owned()),
+            kdf: KdfParams::new(19_456, 1, 1).expect("kdf"),
+            host_names: vec![],
+        })
+        .await
+        .expect("create vault");
+    let owner = OperatorContext {
+        operator_id: created.owner_id,
+        role: OperatorRole::Owner,
+        request_id: RequestId::generate(),
+    };
+    let ws = core
+        .put_workspace(
+            &owner,
+            None,
+            WorkspaceInput {
+                slug: "shop-frontend".to_owned(),
+                name: "Shop frontend".to_owned(),
+                description: String::new(),
+                aliases: vec![],
+            },
+        )
+        .await
+        .expect("workspace");
+    let (agent, key) = core
+        .create_agent(
+            &owner,
+            AgentInput {
+                name: "qa-agent".to_owned(),
+                description: String::new(),
+            },
+            AgentKeyInput {
+                scopes: vec![Scope::StatusRead, Scope::CatalogRead, Scope::SecretsRead],
+                lifetime_days: Some(30),
+                ip_allowlist: vec![],
+                require_mtls: false,
+            },
+        )
+        .await
+        .expect("agent");
+    let mut permissions = BTreeSet::new();
+    permissions.extend([Permission::Find, Permission::Read]);
+    // `ask_always`: every read needs an approval, and cerberusd has no one to approve.
+    core.put_grant(
+        &owner,
+        GrantInput {
+            id: None,
+            agent_id: agent.id,
+            selector: Selector {
+                workspace_ids: vec![ws.id],
+                environments: vec![Environment::Dev],
+                categories: vec![],
+                tags: vec![],
+                kinds: vec![],
+                role_labels: vec![],
+                item_ids: vec![],
+            },
+            permissions,
+            mode: GrantMode::AskAlways,
+            conditions: Conditions::default(),
+            allow_prod_auto: false,
+        },
+    )
+    .await
+    .expect("grant");
+    let item = core
+        .create_item_as_operator(&owner, web_login(ws.id))
+        .await
+        .expect("item");
+    let seed = Seed {
+        token: key.token.expose_secret().to_owned(),
+        item: item.summary.id,
+    };
+    drop(core);
+    seed
+}
+
+/// Writes a config file with the given mode and extra lines.
+fn write_config(path: &Path, data_dir: &Path, extra: &str, mode: u32) {
+    let text = format!("data_dir = {:?}\n{extra}", data_dir.display().to_string());
+    std::fs::write(path, text).expect("write config");
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).expect("chmod");
+}
+
+/// Starts the daemon in a task. The stop signal is a oneshot, the same kind of future the signal handler gives.
+fn start_daemon(
+    config: Config,
+) -> (
+    oneshot::Sender<()>,
+    JoinHandle<Result<VaultService, DaemonError>>,
+    oneshot::Receiver<Ready>,
+) {
+    let (stop_tx, stop_rx) = oneshot::channel::<()>();
+    let (ready_tx, ready_rx) = oneshot::channel::<Ready>();
+    let run = tokio::spawn(async move {
+        daemon::serve(&config, async { drop(stop_rx.await) }, |ready| {
+            drop(ready_tx.send(ready.clone()));
+        })
+        .await
+    });
+    (stop_tx, run, ready_rx)
+}
+
+fn ca_der(data_dir: &Path) -> Vec<u8> {
+    let pem = std::fs::read(daemon::ca_pem_path(data_dir)).expect("CA pem");
+    CertificateDer::from_pem_slice(&pem)
+        .expect("CA is PEM")
+        .as_ref()
+        .to_vec()
+}
+
+fn free_port() -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    listener.local_addr().expect("addr").port()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn daemon_unlocks_serves_ask_grants_as_403_and_stops_locked() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let data = dir.path().join("data");
+    let seed = make_vault(&data).await;
+    let path = dir.path().join("cerberusd.toml");
+    let port = free_port();
+    write_config(
+        &path,
+        &data,
+        &format!("bind = [\"127.0.0.1\"]\nport = {port}\n"),
+        0o600,
+    );
+    let config = config::load(Some(&path), &no_env).expect("config");
+    let (stop, run, ready_rx) = start_daemon(config.clone());
+    let ready = ready_rx.await.expect("ready");
+    let addr = ready.addrs[0];
+    let ca = ca_der(&data);
+
+    let health = status::check(&config).await.expect("status while sealed");
+    assert_eq!(health.vault, "locked");
+    assert_eq!(health.address, addr);
+
+    // A wrong phrase is refused, and the vault stays sealed.
+    let wrong = unlock::unlock_with(&ready.socket, None, |_| {
+        Ok("wrong words for this test".to_owned())
+    })
+    .await;
+    assert!(
+        matches!(wrong, Err(UnlockError::Refused { .. })),
+        "{wrong:?}"
+    );
+
+    // The phrase goes through the same prompt the terminal uses. The prompt text is the only thing asked.
+    let label = unlock::unlock_with(&ready.socket, None, |prompt| {
+        assert_eq!(prompt, "Passphrase: ");
+        Ok(PHRASE.to_owned())
+    })
+    .await
+    .expect("unlock");
+    assert_eq!(label, "owner");
+    assert_eq!(
+        status::check(&config).await.expect("status").vault,
+        "unlocked"
+    );
+
+    // An `ask_always` read gets 403 approval_unavailable (ADR-0002 point 4).
+    let reveal = https::request(
+        addr,
+        &ca,
+        "POST",
+        &format!("/v1/credentials/{}/reveal", seed.item),
+        Some(&seed.token),
+        Some(r#"{"purpose":"integration test read"}"#),
+    )
+    .await
+    .expect("reveal");
+    assert_eq!(reveal.status, 403);
+    let body: serde_json::Value = serde_json::from_slice(&reveal.body).expect("json");
+    assert_eq!(body["error"]["code"], "approval_unavailable");
+    assert!(!String::from_utf8_lossy(&reveal.body).contains(PASSWORD));
+
+    // `/mcp` is mounted: without a token it is refused with 401, not 404.
+    let mcp = https::request(addr, &ca, "POST", "/mcp", None, Some("{}"))
+        .await
+        .expect("mcp");
+    assert_eq!(mcp.status, 401);
+
+    // Stop through the same channel a signal uses. The vault must be locked and the listener closed.
+    stop.send(()).expect("stop");
+    let core = run.await.expect("join").expect("serve");
+    assert_eq!(core.state(), VaultStateKind::Sealed);
+    assert!(!ready.socket.exists(), "unlock socket removed");
+    assert!(
+        tokio::net::TcpStream::connect(addr).await.is_err(),
+        "listener is closed"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn no_tls_leaf_yet_means_https_starts_at_the_first_unlock() {
+    // A backup copied from the desktop has no leaf (ADR-0031 point 2). The CA key is sealed, so the
+    // daemon makes the leaf at the first unlock and only then listens for HTTPS.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let data = dir.path().join("data");
+    make_vault(&data).await;
+    let tls = TlsPaths::in_data_dir(&data);
+    std::fs::remove_file(&tls.leaf_cert_der).expect("remove leaf");
+    std::fs::remove_file(&tls.leaf_key_der).expect("remove leaf key");
+    let port = free_port();
+    let path = dir.path().join("cerberusd.toml");
+    write_config(
+        &path,
+        &data,
+        &format!("bind = [\"127.0.0.1\"]\nport = {port}\n"),
+        0o600,
+    );
+    let config = config::load(Some(&path), &no_env).expect("config");
+    let (stop, run, ready_rx) = start_daemon(config.clone());
+    let ready = ready_rx.await.expect("ready");
+    assert!(
+        ready.addrs.is_empty(),
+        "no listener before the first unlock"
+    );
+    assert!(status::check(&config).await.is_err());
+
+    unlock::unlock_with(&ready.socket, None, |_| Ok(PHRASE.to_owned()))
+        .await
+        .expect("unlock");
+    // The unlock reply comes before the listener is up, so poll for a few seconds.
+    let mut health = None;
+    for _ in 0..100 {
+        if let Ok(found) = status::check(&config).await {
+            health = Some(found);
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(health.expect("listener after unlock").vault, "unlocked");
+    assert!(tls.leaf_cert_der.is_file(), "leaf made at unlock");
+
+    stop.send(()).expect("stop");
+    let core = run.await.expect("join").expect("serve");
+    assert_eq!(core.state(), VaultStateKind::Sealed);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn serve_refuses_a_data_dir_without_a_vault() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let data = dir.path().join("empty");
+    std::fs::create_dir(&data).expect("mkdir");
+    let path = dir.path().join("cerberusd.toml");
+    write_config(&path, &data, "bind = [\"127.0.0.1\"]\nport = 7373\n", 0o600);
+    let config = config::load(Some(&path), &no_env).expect("config");
+    let result = daemon::serve(&config, std::future::ready(()), |_| {}).await;
+    match result {
+        Err(DaemonError::NoVault { path }) => assert_eq!(path, data.join("vault.cerberus")),
+        other => panic!("expected NoVault, got {other:?}"),
+    }
+}
+
+#[test]
+fn config_with_mode_0644_is_refused() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("cerberusd.toml");
+    write_config(&path, &PathBuf::from("/srv/cerberus"), "", 0o644);
+    let error = config::load(Some(&path), &no_env).expect_err("refused");
+    assert!(
+        matches!(error, ConfigError::Mode { mode: 0o644, .. }),
+        "{error}"
+    );
+}
+
+#[test]
+fn config_with_an_unknown_key_names_the_key() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path: PathBuf = dir.path().join("cerberusd.toml");
+    write_config(&path, &PathBuf::from("/srv/cerberus"), "prot = 1\n", 0o600);
+    let error = config::load(Some(&path), &no_env).expect_err("refused");
+    assert!(error.to_string().contains("prot"), "{error}");
+}
+
+#[test]
+fn explicit_config_path_must_exist() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let error = config::load(Some(&dir.path().join("missing.toml")), &no_env).expect_err("refused");
+    assert!(matches!(error, ConfigError::Read { .. }), "{error}");
+}
+
+#[test]
+fn log_filter_carries_the_mcp_directive() {
+    // rmcp logs message bodies, which can hold secrets, at debug level (ADR-0029 item 9).
+    let text = cerberusd::logging::directives();
+    assert!(text.split(',').any(|item| item == "rmcp=warn"), "{text}");
+    assert!(
+        tracing_subscriber::EnvFilter::try_new(&text).is_ok(),
+        "{text}"
+    );
+}
+
+/// AUD-30: a manual run checks the modes of the data directory and the vault file. systemd sets them,
+/// but a person who starts the binary by hand may not.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn aud30_a_vault_file_or_data_dir_open_to_others_stops_the_start() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let data = dir.path().join("data");
+    make_vault(&data).await;
+    let path = dir.path().join("cerberusd.toml");
+    write_config(
+        &path,
+        &data,
+        &format!("bind = [\"127.0.0.1\"]\nport = {}\n", free_port()),
+        0o600,
+    );
+    let config = config::load(Some(&path), &no_env).expect("config");
+    let vault = data.join(daemon::VAULT_FILE);
+
+    std::fs::set_permissions(&vault, std::fs::Permissions::from_mode(0o644)).expect("chmod");
+    let result = daemon::serve(&config, std::future::ready(()), |_| {}).await;
+    assert!(
+        matches!(result, Err(DaemonError::Mode { .. })),
+        "vault file mode 0644: {result:?}"
+    );
+
+    std::fs::set_permissions(&vault, std::fs::Permissions::from_mode(0o600)).expect("chmod");
+    std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let result = daemon::serve(&config, std::future::ready(()), |_| {}).await;
+    assert!(
+        matches!(result, Err(DaemonError::Mode { .. })),
+        "data dir mode 0755: {result:?}"
+    );
+
+    std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o700)).expect("chmod");
+    let result = daemon::serve(&config, std::future::ready(()), |_| {}).await;
+    assert!(result.is_ok(), "private modes start: {result:?}");
+}

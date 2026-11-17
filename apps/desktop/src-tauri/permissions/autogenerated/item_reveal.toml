@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-item-reveal"
+description = "Enables the item_reveal command without any pre-configured scope."
+commands.allow = ["item_reveal"]
+
+[[permission]]
+identifier = "deny-item-reveal"
+description = "Denies the item_reveal command without any pre-configured scope."
+commands.deny = ["item_reveal"]

@@ -1,0 +1,99 @@
+[package]
+name = "cerberus-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Fuzz targets for every parser of untrusted input (T25). This crate is NOT a member of the main
+# workspace: it needs nightly and cargo-fuzz. Run `just fuzz-smoke` or `just fuzz`.
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+cerberus-types = { path = "../crates/cerberus-types" }
+cerberus-crypto = { path = "../crates/cerberus-crypto" }
+cerberus-store = { path = "../crates/cerberus-store" }
+cerberus-core = { path = "../crates/cerberus-core" }
+cerberus-api = { path = "../crates/cerberus-api" }
+cerberus-mcp = { path = "../crates/cerberus-mcp", default-features = false }
+cerberus-ssh-agent = { path = "../crates/cerberus-ssh-agent" }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "io-util"] }
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "envelope_open"
+path = "fuzz_targets/envelope_open.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "key_slot"
+path = "fuzz_targets/key_slot.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "recovery_parse"
+path = "fuzz_targets/recovery_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "token_parse"
+path = "fuzz_targets/token_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rest_json"
+path = "fuzz_targets/rest_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "resolve_query"
+path = "fuzz_targets/resolve_query.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mcp_args"
+path = "fuzz_targets/mcp_args.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ssh_frames"
+path = "fuzz_targets/ssh_frames.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "phrase_policy"
+path = "fuzz_targets/phrase_policy.rs"
+test = false
+doc = false
+bench = false
+
+
+[[bin]]
+name = "csv_import"
+path = "fuzz_targets/csv_import.rs"
+test = false
+doc = false
+bench = false

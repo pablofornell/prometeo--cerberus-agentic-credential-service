@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-lease-revoke-all"
+description = "Enables the lease_revoke_all command without any pre-configured scope."
+commands.allow = ["lease_revoke_all"]
+
+[[permission]]
+identifier = "deny-lease-revoke-all"
+description = "Denies the lease_revoke_all command without any pre-configured scope."
+commands.deny = ["lease_revoke_all"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clipboard-copy-once"
+description = "Enables the clipboard_copy_once command without any pre-configured scope."
+commands.allow = ["clipboard_copy_once"]
+
+[[permission]]
+identifier = "deny-clipboard-copy-once"
+description = "Denies the clipboard_copy_once command without any pre-configured scope."
+commands.deny = ["clipboard_copy_once"]

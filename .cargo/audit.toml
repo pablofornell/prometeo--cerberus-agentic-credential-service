@@ -1,0 +1,31 @@
+# `cargo audit` reads this file, so `cargo audit` and `just audit` give the same result (AUD-28).
+# Every ignore below was checked again on 2026-11-17 with `cargo tree -e normal,build -i <crate> --workspace`.
+# Look at them again on every sqlx and Tauri upgrade.
+
+[advisories]
+ignore = [
+    # glib 0.18.5, `VariantStrIter` is unsound. glib is compiled on Linux (gtk, tray-icon, tauri). Tauri 2 needs the
+    # GTK3 binding stack, which needs glib 0.18, and no patched glib exists on that line. No Cerberus code uses glib
+    # or `VariantStrIter` (grep over crates and apps). The Tauri and GTK code paths were not audited (AR-16).
+    "RUSTSEC-2024-0429",
+    # libsqlite3-sys 0.37.0 (stale memory read when SQLite opens a database with a crafted `-wal` file). Compiled and
+    # reachable. sqlx-sqlite 0.9.0 allows libsqlite3-sys below 0.38 only, and the fix is in 0.39. PARTIAL mitigation
+    # (AUD-10, DEC-T27-A1-7): `Store::open` refuses a `-wal` next to the vault whose header does not fit the vault (page
+    # size, checksum) before any connection; backups are read `immutable` and one with a sibling `-wal` is refused. Not
+    # covered: a `-wal` swapped between the check and the open, or changed while the vault is open. Remove the ignore
+    # when sqlx allows 0.39.
+    "RUSTSEC-2026-0459",
+    # rsa (Marvin attack) and crypto-bigint 0.5 (timing): only in Cargo.lock. `ssh-key` lists them as optional
+    # dependencies, and Cerberus builds ssh-key with `ed25519` only. `cargo tree -i rsa` and `-i crypto-bigint`
+    # print nothing, also with `--target all` and with all edge kinds. Not compiled.
+    "RUSTSEC-2023-0071",
+    "RUSTSEC-2026-0387",
+]
+# Unmaintained crates stay warnings.
+informational_warnings = ["unmaintained"]
+
+[output]
+# Unsound and yanked crates fail the run.
+deny = ["unsound", "yanked"]
+quiet = false
+format = "terminal"

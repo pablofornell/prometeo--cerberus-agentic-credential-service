@@ -1,0 +1,32 @@
+/* Agents screen. Tokens and base classes come from styles/app.css. */
+.agents { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+.agents .rows li { padding: 0; }
+.row-btn { all: unset; box-sizing: border-box; display: flex; gap: 10px; align-items: center; width: 100%; padding: var(--row-y, 10px) 14px; cursor: pointer; }
+.row-btn:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: -2px; }
+.row-btn .grow { display: grid; min-width: 0; }
+.bot { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--c-info-tint); color: var(--c-info-on-tint); flex: none; }
+.bot.off { background: var(--c-bg-raised); color: var(--c-text-muted); }
+.bot.lg-bot { width: 44px; height: 44px; }
+.detail { display: grid; gap: 20px; min-width: 0; }
+.detail > header { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.detail > header .grow { flex: 1; display: grid; gap: 4px; min-width: 220px; }
+.detail > header h2 { font-size: var(--t-title-lg-size); line-height: var(--t-title-lg-line); }
+.snip { margin: 0; padding: 14px 16px; background: var(--c-bg-sunken); border-top: 1px solid var(--c-border-subtle); font-family: var(--font-mono); font-size: 12.5px; line-height: 19px; white-space: pre; overflow-x: auto; color: var(--c-text-primary); }
+.snippets .tablist { margin: 0; padding: 0 12px; }
+.snip-note { padding: 10px 16px; border-top: 1px solid var(--c-border-subtle); }
+.pad { padding: 12px 16px; }
+.token-box { display: grid; gap: 6px; }
+.token-label { font-size: var(--t-body-sm-size); color: var(--c-text-secondary); font-weight: 550; }
+.token { display: block; font-family: var(--font-mono); font-size: 14px; line-height: 22px; padding: 14px; border-radius: var(--r-sm); background: var(--c-bg-sunken); border: 1.5px solid var(--c-ring-gate); overflow-wrap: anywhere; user-select: all; }
+.scopes { display: flex; flex-wrap: wrap; gap: 4px; }
+.scopes-field { border: 0; padding: 0; margin: 0; grid-column: 1 / -1; }
+.scopes-field legend { font-weight: 550; font-size: var(--t-body-sm-size); color: var(--c-text-secondary); margin-bottom: 6px; padding: 0; }
+.detail .grants { list-style: none; margin: 0; padding: 0; }
+.detail .grants li { display: flex; gap: 12px; padding: 8px 0; align-items: flex-start; }
+.detail .grants li > p { flex: 1; }
+@media (max-width: 1000px) { .agents { grid-template-columns: 1fr; } }
+.row-btn[aria-current="true"] { background: var(--c-bg-selected); }
+.row-btn:hover { background: var(--c-bg-hover); }
+/* Key rows: short columns stay on one line; the scopes column takes what is left. */
+.detail .keys-table td.small, .detail .keys-table td:first-child { white-space: nowrap; }
+.detail .keys-table .row-inline { flex-wrap: nowrap; justify-content: flex-end; gap: 6px; }

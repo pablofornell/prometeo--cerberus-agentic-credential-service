@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "approval-window",
+  "description": "The approval window: only the commands it needs to show and decide requests, and listening to events.",
+  "windows": [
+    "approval"
+  ],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-vault-status",
+    "allow-vault-lock",
+    "allow-vault-panic",
+    "allow-request-list-pending",
+    "allow-request-approve",
+    "allow-request-deny",
+    "allow-ui-activity"
+  ]
+}

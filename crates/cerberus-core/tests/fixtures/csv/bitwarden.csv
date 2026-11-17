@@ -1,0 +1,7 @@
+folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp
+Work,1,login,Fake Mail,"line one
+line two",,0,https://mail.example.test/login,fake.user,zq-fake-pass-1,otpauth://totp/Fake?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&period=30
+,0,note,Fake Wifi Note,"fake wifi phrase zq-fake-note",,0,,,,
+Personal,0,card,Fake Card,,,0,,,,
+Work,0,login,,,,0,https://noname.example.test/path,fake.two,zq-fake-pass-2,
+Work,0,login,Fake Mail,,,0,https://mail.example.test/other,fake.three,zq-fake-pass-3,

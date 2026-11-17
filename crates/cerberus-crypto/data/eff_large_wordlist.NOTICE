@@ -1,0 +1,15 @@
+eff_large_wordlist.txt
+
+Source:  https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
+Page:    https://www.eff.org/dice (Joseph Bonneau, "EFF's New Wordlists for Random Passphrases", 2016)
+Author:  Electronic Frontier Foundation (EFF)
+License: Creative Commons Attribution 3.0 United States (CC BY 3.0 US)
+         https://creativecommons.org/licenses/by/3.0/us/
+         EFF publishes the content of eff.org under this license unless a page says otherwise.
+
+Downloaded on 2026-11-16. The file is not changed.
+SHA-256: addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903e
+Lines:   7776 ("<five dice digits 1-6><TAB><word>"), dice index 11111..66666, 7776 unique words.
+
+Cerberus uses the list to generate Diceware passphrases (crates/cerberus-crypto/src/phrase.rs).
+The code checks the SHA-256 and the word count at run time and in tests.

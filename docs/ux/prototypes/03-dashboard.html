@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'">
+<title>Cerberus Dashboard</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .band { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 24px; align-items: center; padding: 22px 24px; border-radius: var(--r-lg); border: 1px solid var(--c-border-subtle);
+    background: radial-gradient(120% 140% at 0% 50%, var(--c-accent-tint) 0%, transparent 46%), var(--c-bg-surface); }
+  .band h2 { font-size: var(--t-display-sm-size); line-height: var(--t-display-sm-line); letter-spacing: var(--t-display-sm-track); font-weight: 650; }
+  .band .facts { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 8px; color: var(--c-text-secondary); }
+  .band .facts b { color: var(--c-text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .band .acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .band .flow { margin-top: 14px; }
+  .feed li { align-items: flex-start; }
+  .feed time { width: 64px; flex: none; color: var(--c-text-muted); font-variant-numeric: tabular-nums; font-size: var(--t-body-sm-size); padding-top: 1px; }
+  .feed .what { flex: 1; min-width: 0; }
+  .feed .what .ag { font-weight: 600; }
+  .feed .what code { font-size: 12px; color: var(--c-text-secondary); }
+  .out { font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .out.ok { color: var(--c-success-fg); } .out.wait { color: var(--c-accent-fg); } .out.bad { color: var(--c-danger-fg); } .out.lock { color: var(--c-text-muted); }
+  .queue li { border-left: 3px solid var(--c-ring-gate); }
+  .queue li.prod { border-left-color: var(--c-danger-fg); }
+  .health li .grow { display: grid; }
+  .steps { list-style: none; counter-reset: s; padding: 0; margin: 0; display: grid; gap: 10px; text-align: left; width: 100%; }
+  .steps li { counter-increment: s; display: flex; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--c-border-subtle); border-radius: var(--r-md); background: var(--c-bg-surface); }
+  .steps li::before { content: counter(s); width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--c-ring-gate); color: var(--c-accent-fg); font-weight: 650; font-size: 13px; flex: none; }
+  .steps li .grow { flex: 1; }
+  @media (max-width: 960px) { .band { grid-template-columns: auto minmax(0, 1fr); } .band .acts { grid-column: 1 / -1; justify-content: flex-start; } }
+  @media (max-width: 760px) { .band { grid-template-columns: minmax(0, 1fr); padding: 18px 16px; } .band .flow { flex-direction: column; align-items: flex-start; gap: 6px; } .band .flow .step + .step::before { display: none; } }
+</style>
+</head>
+<body data-page="dashboard" data-layout="app" data-title="Dashboard" data-variants="mass-read:Mass-read alert,integrity:Integrity alert,viewer:Signed in as viewer">
+<div id="page">
+
+  <!-- READY -->
+  <div data-state="ready" class="stack" style="gap:20px">
+    <div class="notice bad" data-variant-show="mass-read" role="alert">
+      <i data-i="shieldAlert"></i>
+      <div class="grow"><strong>QA runner read 31 different items in the last hour.</strong> The alert limit is 30. This can mean a prompt-injected agent.</div>
+      <a class="btn sm" href="06-agents.html">Suspend agent</a><a class="btn sm ghost" href="10-audit.html">Open audit</a>
+    </div>
+    <div class="notice bad" data-variant-show="integrity" role="alert">
+      <i data-i="alert"></i>
+      <div class="grow"><strong>The audit chain is broken at event 3,977.</strong> A row in the vault file changed outside Cerberus. Do not trust events after this point.</div>
+      <a class="btn sm" href="10-audit.html?variant=broken">See details</a>
+    </div>
+
+    <section class="band" aria-labelledby="band-h">
+      <span data-gate="open" data-size="76"></span>
+      <div>
+        <h2 id="band-h">Vault unlocked</h2>
+        <div class="facts">
+          <span>Ana Ruiz, owner, since <b>09:12</b></span>
+          <span>Auto-lock in <b data-count-down="1661">27:41</b> if idle</span>
+          <span>Hard lock at <b>21:12</b></span>
+        </div>
+        <div class="trace flow" aria-label="Request path">
+          <span class="step pass"><span class="dot"></span><span>3 agents active</span></span>
+          <span class="step wait"><span class="dot"></span><span>2 requests wait for you</span></span>
+          <span class="step pass"><span class="dot"></span><span>12 active leases</span></span>
+        </div>
+      </div>
+      <div class="acts">
+        <a class="btn" href="02-unlock.html"><i data-i="lock"></i><span>Lock</span><kbd class="kbd-hint">Ctrl L</kbd></a>
+        <button class="btn danger" type="button" data-open="dlg-panic"><i data-i="siren"></i><span>Lock and revoke all</span></button>
+      </div>
+    </section>
+
+    <div class="cols c-main-side">
+      <section class="panel" aria-labelledby="q-h">
+        <header><i data-i="bell"></i><h2 id="q-h">Waiting for you</h2><div class="actions"><a class="btn sm ghost" href="08-approval.html">Open approvals</a></div></header>
+        <ul class="rows queue">
+          <li class="prod">
+            <span class="kind-ico"><i data-i="globe"></i></span>
+            <div class="grow"><div class="title">Shop admin login</div><div class="sub">QA runner wants read for 15 minutes</div></div>
+            <span class="env prod">prod</span>
+            <span class="ttl" data-total="120" data-left="94" data-size="24" data-live></span>
+            <a class="btn sm" href="08-approval.html">Review</a>
+          </li>
+          <li>
+            <span class="kind-ico"><i data-i="terminal"></i></span>
+            <div class="grow"><div class="title">build-01 deploy key</div><div class="sub">Release bot wants use_ssh once</div></div>
+            <span class="env staging">staging</span>
+            <span class="ttl" data-total="120" data-left="41" data-size="24" data-live></span>
+            <a class="btn sm" href="08-approval.html">Review</a>
+          </li>
+        </ul>
+      </section>
+
+      <section class="panel" aria-labelledby="h-h">
+        <header><i data-i="shield"></i><h2 id="h-h">Health</h2></header>
+        <ul class="rows health">
+          <li><span class="status ok"><span class="sr-only">OK</span></span><div class="grow"><span>Audit chain OK</span><span class="small muted">4,112 events, checked 2 min ago</span></div><a class="btn sm ghost" href="10-audit.html">Verify</a></li>
+          <li><span class="status ok"><span class="sr-only">OK</span></span><div class="grow"><span>TLS certificate valid for 81 days</span><span class="small muted">Leaf renews at 30 days left</span></div></li>
+          <li><span class="status ok"><span class="sr-only">OK</span></span><div class="grow"><span>Key cost 256 MiB, 3 passes</span><span class="small muted">0.71 s per unlock on this device</span></div></li>
+          <li><span class="status ok"><span class="sr-only">OK</span></span><div class="grow"><span>Memory lock on</span><span class="small muted">Key pages cannot go to swap</span></div></li>
+          <li><span class="status warn"><span class="sr-only">Warning</span></span><div class="grow"><span>Screen lock hook off</span><span class="small muted">No logind session. Sleep does not lock the vault.</span></div><a class="btn sm ghost" href="11-settings.html">Open settings</a></li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="cols c-main-side">
+      <section class="panel" aria-labelledby="f-h">
+        <header><i data-i="activity"></i><h2 id="f-h">Live agent feed</h2><div class="actions"><span class="status ok small">Live</span></div></header>
+        <ol class="rows feed" aria-live="polite" aria-relevant="additions">
+          <li><time>14:21:07</time><div class="what"><span class="ag">QA runner</span> resolved <code>shop-frontend / staging / admin</code></div><span class="out ok">secret, lease 15 min</span></li>
+          <li><time>14:20:55</time><div class="what"><span class="ag">QA runner</span> asked for <code>Shop admin login</code> in prod</div><span class="out wait">waits for you</span></li>
+          <li><time>14:19:30</time><div class="what"><span class="ag">Release bot</span> asked for <code>build-01 deploy key</code></div><span class="out wait">waits for you</span></li>
+          <li><time>14:18:02</time><div class="what"><span class="ag">Docs writer</span> stored a session token, TTL 60 min</div><span class="out ok">created</span></li>
+          <li><time>14:16:44</time><div class="what"><span class="ag">Docs writer</span> resolved <code>billing-api / prod / read-only</code></div><span class="out bad">denied 403</span></li>
+          <li><time>14:02:10</time><div class="what"><span class="ag">QA runner</span> got the TOTP code for <code>Shop staging admin</code></div><span class="out ok">code</span></li>
+        </ol>
+      </section>
+
+      <section class="panel" aria-labelledby="e-h">
+        <header><i data-i="clock"></i><h2 id="e-h">Expires soon</h2><div class="actions"><a class="btn sm ghost" href="09-leases.html">All leases</a></div></header>
+        <ul class="rows">
+          <li><span class="ttl" data-total="3600" data-left="250" data-size="28" data-live data-out="e1"></span><div class="grow"><div class="title">Checkout session token</div><div class="sub">Session item, <span id="e1" class="num">4:10</span> left</div></div><span class="env staging">staging</span></li>
+          <li><span class="ttl" data-total="900" data-left="190" data-size="28" data-live data-out="e2"></span><div class="grow"><div class="title">QA runner on Shop staging admin</div><div class="sub">Lease, <span id="e2" class="num">3:10</span> left</div></div><span class="env staging">staging</span></li>
+          <li><span class="ttl" data-total="28800" data-left="15400" data-size="28" data-out="e3"></span><div class="grow"><div class="title">Playwright storage state</div><div class="sub">Browser session, <span id="e3" class="num">4 h 16 m</span> left</div></div><span class="env dev">dev</span></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <!-- EMPTY -->
+  <div data-state="empty">
+    <div class="state-block" style="max-width:560px">
+      <span data-gate="open" data-size="72"></span>
+      <h2>The gate is ready. Nothing passes yet.</h2>
+      <p>Your vault is unlocked and empty. Agents can see nothing until you add items and give them a grant.</p>
+      <ol class="steps">
+        <li><span class="grow">Add a first item, for example a staging login</span><a class="btn sm primary" href="05-item-editor.html">New item</a></li>
+        <li><span class="grow">Create an agent and copy its token</span><a class="btn sm" href="06-agents.html?variant=token">New agent</a></li>
+        <li><span class="grow">Give the agent a grant in plain words</span><a class="btn sm" href="07-policies.html">New grant</a></li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div data-state="loading" role="status" aria-busy="true" aria-label="Loading dashboard">
+    <div class="band" style="display:flex;gap:24px;align-items:center;padding:22px 24px;border-radius:var(--r-lg);border:1px solid var(--c-border-subtle);background:var(--c-bg-surface)">
+      <span data-gate="spin" data-size="76"></span>
+      <div style="flex:1;display:grid;gap:10px"><div class="skel" style="width:220px;height:22px"></div><div class="skel" style="width:60%"></div><div class="skel" style="width:40%"></div></div>
+    </div>
+    <div class="cols c-main-side" style="margin-top:20px">
+      <div class="panel"><div class="skel-row"><span class="skel box"></span><span class="skel" style="flex:1"></span></div><div class="skel-row"><span class="skel box"></span><span class="skel" style="flex:1"></span></div><div class="skel-row"><span class="skel box"></span><span class="skel" style="width:50%"></span></div></div>
+      <div class="panel"><div class="skel-row"><span class="skel" style="flex:1"></span></div><div class="skel-row"><span class="skel" style="flex:1"></span></div><div class="skel-row"><span class="skel" style="width:70%"></span></div></div>
+    </div>
+  </div>
+
+  <!-- ERROR -->
+  <div data-state="error">
+    <div class="state-block" role="alert">
+      <span class="kind-ico" style="width:48px;height:48px;color:var(--c-danger-fg)"><i data-i="alert" class="lg"></i></span>
+      <h2>Cannot read the vault status</h2>
+      <p>The app did not answer the status call. The vault stays in its last state. Try again. If this repeats, restart Cerberus.</p>
+      <div class="actions"><button class="btn primary" type="button" data-set-view="ready"><i data-i="refresh"></i><span>Try again</span></button></div>
+      <span class="code">vault_status: internal (request req_01JDEMO0000)</span>
+    </div>
+  </div>
+</div>
+<script src="assets/icons.js"></script>
+<script src="assets/i18n-es.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-item-totp-preview"
+description = "Enables the item_totp_preview command without any pre-configured scope."
+commands.allow = ["item_totp_preview"]
+
+[[permission]]
+identifier = "deny-item-totp-preview"
+description = "Denies the item_totp_preview command without any pre-configured scope."
+commands.deny = ["item_totp_preview"]

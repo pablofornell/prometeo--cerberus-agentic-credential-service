@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-network-set-bind"
+description = "Enables the network_set_bind command without any pre-configured scope."
+commands.allow = ["network_set_bind"]
+
+[[permission]]
+identifier = "deny-network-set-bind"
+description = "Denies the network_set_bind command without any pre-configured scope."
+commands.deny = ["network_set_bind"]

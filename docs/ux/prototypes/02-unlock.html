@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'">
+<title>Unlock Cerberus</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .solo { background: radial-gradient(60% 50% at 50% 30%, var(--c-bg-surface) 0%, var(--c-bg-canvas) 70%); }
+  .unlock { width: min(440px, 100%); display: grid; gap: 22px; justify-items: stretch; }
+  .unlock .mark { justify-self: center; }
+  .unlock h1 { text-align: center; font-size: var(--t-display-size); line-height: var(--t-display-line); letter-spacing: var(--t-display-track); font-weight: 680; }
+  .unlock .sub { text-align: center; color: var(--c-text-secondary); margin-top: -12px; }
+  .ops { display: grid; gap: 6px; border: 0; padding: 0; margin: 0; }
+  .ops legend { font-weight: 550; font-size: var(--t-body-sm-size); color: var(--c-text-secondary); margin-bottom: 6px; }
+  .op { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--c-border-subtle); background: var(--c-bg-surface); cursor: pointer; }
+  .op:has(input:checked) { border-color: var(--c-ring-gate); background: var(--c-bg-raised); }
+  .op:has(input:focus-visible) { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
+  .op input { accent-color: var(--c-accent-solid); width: 16px; height: 16px; margin: 0; }
+  .op .grow { flex: 1; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--c-accent-tint); color: var(--c-accent-on-tint); font-weight: 650; font-size: 13px; }
+  .tries { display: flex; justify-content: space-between; align-items: center; font-size: var(--t-body-sm-size); color: var(--c-text-muted); }
+  .opening .gate .r1 { animation: open1 var(--d-gate) var(--ease-standard) forwards; }
+  .opening .gate .r2 { animation: open1 var(--d-gate) var(--ease-standard) 60ms forwards; }
+  .opening .gate .r3 { animation: open1 var(--d-gate) var(--ease-standard) 120ms forwards; }
+  @keyframes open1 { to { opacity: 0.25; } }
+  .wait { text-align: center; font-size: var(--t-display-lg-size); line-height: var(--t-display-lg-line); font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--c-warning-fg); }
+</style>
+</head>
+<body data-page="unlock" data-layout="solo" data-variants="recovery:Use recovery key,attempts:Two failed attempts,panic:After lock and revoke all,idle:Locked by idle timer">
+<div id="page" class="solo">
+
+  <form class="unlock" data-state="ready error" id="unlock-form" novalidate>
+    <span class="mark" id="mark" data-gate="locked" data-size="120"></span>
+    <h1>Cerberus is locked</h1>
+    <p class="sub" data-variant-hide="panic idle">Agents get HTTP 423 until you unlock.</p>
+    <p class="sub" data-variant-show="idle" hidden>Locked at 14:02 after 30 minutes without activity.</p>
+    <div class="notice bad" data-variant-show="panic" hidden><i data-i="siren"></i><div class="grow">You used lock and revoke all at 14:25. 12 leases ended and 2 requests were cancelled.</div></div>
+
+    <fieldset class="ops" data-variant-hide="recovery">
+      <legend>Who is unlocking?</legend>
+      <label class="op"><input type="radio" name="op" checked><span class="avatar" aria-hidden="true">AR</span><span class="grow">Ana Ruiz</span><span class="small muted">Owner</span></label>
+      <label class="op"><input type="radio" name="op"><span class="avatar" aria-hidden="true">LM</span><span class="grow">Luis Mora</span><span class="small muted">Operator</span></label>
+      <label class="op"><input type="radio" name="op"><span class="avatar" aria-hidden="true">QA</span><span class="grow">QA lead (read only)</span><span class="small muted">Viewer</span></label>
+    </fieldset>
+
+    <div class="field" data-variant-hide="recovery">
+      <label for="ph">Master phrase</label>
+      <input id="ph" class="input lg mono" type="password" autocomplete="current-password" aria-describedby="ph-err tries" autofocus>
+      <span class="problem" id="ph-err" data-state="error" role="alert"><i data-i="alert"></i>That phrase does not open the slot for Ana Ruiz.</span>
+    </div>
+    <div class="field" data-variant-show="recovery" hidden>
+      <label for="rk">Recovery key</label>
+      <textarea id="rk" class="input mono" rows="3" placeholder="CRK1-XXXX-XXXX-…" autocomplete="off" spellcheck="false" aria-describedby="rk-h"></textarea>
+      <span class="hint" id="rk-h">Unlocks with the owner role. A typing error does not count as a failed try.</span>
+    </div>
+
+    <button class="btn primary lg" type="submit" style="justify-content:center"><i data-i="unlock"></i>Unlock</button>
+    <div class="tries" id="tries">
+      <span data-variant-hide="attempts" data-state="ready">No failed tries since the last unlock.</span>
+      <span data-variant-show="attempts" hidden style="color:var(--c-warning-fg)">2 failed tries. After 5, Cerberus makes you wait.</span>
+      <span data-state="error" style="color:var(--c-warning-fg)">3 failed tries. After 5, Cerberus makes you wait.</span>
+      <button class="btn sm ghost" type="button" id="toggle-rk" data-variant-hide="recovery">Use recovery key</button>
+      <a class="btn sm ghost" href="02-unlock.html" data-variant-show="recovery" hidden>Use master phrase</a>
+    </div>
+  </form>
+
+  <!-- EMPTY: no vault on this device -->
+  <div class="unlock" data-state="empty">
+    <span class="mark" data-gate="open" data-size="120"></span>
+    <h1>No vault on this device</h1>
+    <p class="sub">Create a new vault, or restore a backup file made by Cerberus on another device.</p>
+    <a class="btn primary lg" href="01-create-vault.html" style="justify-content:center"><i data-i="plus"></i>Create vault</a>
+    <button class="btn lg" type="button" style="justify-content:center"><i data-i="upload"></i>Restore a backup</button>
+    <p class="small muted" style="text-align:center">A restore asks for a phrase or recovery key of the backup.</p>
+  </div>
+
+  <!-- LOADING -->
+  <div class="unlock" data-state="loading" aria-busy="true">
+    <span class="mark" data-gate="spin" data-size="120"></span>
+    <h1>Unlocking</h1>
+    <p class="sub" role="status">Deriving the key from your phrase. This takes about 0.7 s on purpose.</p>
+  </div>
+
+  <!-- LOCKED: back-off after many failures -->
+  <div class="unlock" data-state="locked">
+    <span class="mark" data-gate="locked" data-size="120"></span>
+    <h1>Too many failed tries</h1>
+    <p class="sub">7 wrong phrases in a row. Wait before the next try. Restarting the app does not reset this timer.</p>
+    <div class="wait" role="timer" aria-live="off" aria-label="Time to wait"><span data-count-down="239">3:59</span></div>
+    <input class="input lg mono" type="password" disabled aria-label="Master phrase, disabled while you wait">
+    <button class="btn primary lg" type="button" disabled style="justify-content:center"><i data-i="unlock"></i>Unlock</button>
+    <a class="btn ghost" href="02-unlock.html?variant=recovery" style="justify-self:center">Use recovery key</a>
+  </div>
+</div>
+<script src="assets/icons.js"></script>
+<script src="assets/i18n-es.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(() => {
+  const { $ } = Cerb;
+  $("#toggle-rk").addEventListener("click", () => { location.search = "?variant=recovery"; });
+  $("#unlock-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const mark = $("#mark");
+    mark.innerHTML = window.cerbGate(120, "open");
+    mark.classList.add("opening");
+    setTimeout(() => { location.href = "03-dashboard.html"; }, Cerb.reduced() ? 0 : 700);
+  });
+})();
+</script>
+</body>
+</html>

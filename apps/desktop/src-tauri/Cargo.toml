@@ -1,0 +1,63 @@
+[package]
+name = "cerberus-desktop"
+description = "Cerberus desktop shell (Tauri v2): one process with the vault, the HTTPS API and typed IPC."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "cerberus-desktop"
+path = "src/main.rs"
+
+[lib]
+name = "cerberus_desktop"
+path = "src/lib.rs"
+
+[dependencies]
+cerberus-api = { path = "../../../crates/cerberus-api", version = "0.1.0" }
+cerberus-core.workspace = true
+cerberus-mcp.workspace = true
+cerberus-crypto.workspace = true
+cerberus-store.workspace = true
+cerberus-types.workspace = true
+jiff = { workspace = true, features = ["serde"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs"] }
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["registry"] }
+zeroize.workspace = true
+futures-util.workspace = true
+ipnet.workspace = true
+x509-parser.workspace = true
+axum.workspace = true
+getrandom.workspace = true
+
+# Tauri and its plugins. tauri-specta has only release candidates for Tauri 2 (DEC-T15-1).
+tauri = { workspace = true, features = ["tray-icon", "image-png"] }
+tauri-specta = { version = "=2.0.0-rc.29", features = ["derive", "typescript"] }
+specta = { version = "=2.0.0-rc.28", features = ["derive", "serde_json"] }
+specta-typescript = "0.0.15"
+tauri-plugin-single-instance = "2.5.5"
+tauri-plugin-clipboard-manager = "2.5.0"
+tauri-plugin-autostart = "2.7.0"
+tauri-plugin-dialog = "2.8.4"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"
+
+[features]
+# Set by `cargo tauri build`: the app loads the built UI from the binary, not from the dev server.
+custom-protocol = ["tauri/custom-protocol"]
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

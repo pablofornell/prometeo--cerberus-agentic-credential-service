@@ -1,0 +1,4 @@
+# Cap parallel rustc jobs: 16 jobs per cargo run exhausted 15 GiB RAM and
+# triggered systemd-oomd, which killed the whole terminal session.
+[build]
+jobs = 6

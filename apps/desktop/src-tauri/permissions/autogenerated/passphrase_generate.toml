@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-passphrase-generate"
+description = "Enables the passphrase_generate command without any pre-configured scope."
+commands.allow = ["passphrase_generate"]
+
+[[permission]]
+identifier = "deny-passphrase-generate"
+description = "Denies the passphrase_generate command without any pre-configured scope."
+commands.deny = ["passphrase_generate"]

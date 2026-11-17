@@ -1,0 +1,141 @@
+[workspace]
+exclude = ["fuzz"]
+resolver = "3"
+members = [
+    "crates/cerberus-types",
+    "crates/cerberus-crypto",
+    "crates/cerberus-store",
+    "crates/cerberus-core",
+    "crates/cerberus-api",
+    "crates/cerberus-mcp",
+    "crates/cerberus-client",
+    "crates/cerberusd",
+    "crates/cerberus-ssh-agent",
+    "apps/desktop/src-tauri",
+    "tests/acceptance",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100.0"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+tauri = "2.12.5"
+tauri-build = "2.7.4"
+
+# Internal crates. They carry a version too: cargo-deny treats a bare path as a wildcard (DEC-059).
+cerberus-types = { path = "crates/cerberus-types", version = "0.1.0" }
+cerberus-crypto = { path = "crates/cerberus-crypto", version = "0.1.0" }
+cerberus-store = { path = "crates/cerberus-store", version = "0.1.0" }
+cerberus-core = { path = "crates/cerberus-core", version = "0.1.0" }
+cerberus-ssh-agent = { path = "crates/cerberus-ssh-agent", version = "0.1.0" }
+cerberus-api = { path = "crates/cerberus-api", version = "0.1.0" }
+cerberus-client = { path = "crates/cerberus-client", version = "0.1.0" }
+# Hosts take the server only; the stdio shim (feature `shim`, on by default for the bin) pulls in the client SDK.
+cerberus-mcp = { path = "crates/cerberus-mcp", version = "0.1.0", default-features = false }
+
+# Shared types (cerberus-types). Versions checked on crates.io on 2026-11-16 (ADR-0011).
+jiff = "1.0.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+uuid = { version = "1.29.2", features = ["v4", "v7", "std"] }
+
+# Cryptography (cerberus-crypto). One RustCrypto release line, so digest and rand_core agree (ADR-0011).
+# `parallel` runs the p lanes on threads, so the same 0.7 s buys about p times more work (DEC-049).
+argon2 = { version = "0.6.0", default-features = false, features = ["alloc", "parallel", "zeroize"] }
+chacha20poly1305 = { version = "0.11.0", default-features = false, features = ["alloc", "zeroize"] }
+data-encoding = "2.11.1"
+getrandom = "0.4.3"
+hkdf = "0.13.0"
+hmac = { version = "0.13.0", features = ["zeroize"] }
+region = "4.0.1"
+rustix = { version = "1.1.6", features = ["process", "system"] }
+libc = "0.2.191"
+windows-sys = { version = "0.61.2", features = ["Win32_System_Diagnostics_Debug"] }
+secrecy = "0.10.3"
+sha2 = { version = "0.11.1", default-features = false, features = ["zeroize"] }
+subtle = "2.6.1"
+unicode-normalization = "0.1.26"
+zeroize = { version = "1.9.1", features = ["zeroize_derive"] }
+zxcvbn = "3.1.1"
+tracing = "0.1.44"
+
+# Storage (cerberus-store). Versions checked on crates.io on 2026-11-17 (ADR-0011).
+# `sqlite` bundles SQLite, so `secure_delete` and `VACUUM INTO` behave the same on every OS. `macros` embeds the migrations.
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+ipnet = "2.12.2"
+tokio = { version = "1.54.1", features = ["rt", "time", "sync"] }
+
+# Items (cerberus-core). Versions checked on crates.io on 2026-11-17 (ADR-0011).
+# `ssh-key` 0.7 is still a release candidate, so the latest stable 0.6 line is used.
+ssh-key = { version = "0.6.7", default-features = false, features = ["std", "ed25519", "getrandom"] }
+totp-rs = { version = "6.0.0", features = ["zeroize"] }
+# CSV import and export (T23). Version checked on crates.io on 2026-11-17 (ADR-0011).
+csv = "1.4.0"
+
+# HTTPS REST server (cerberus-api). Versions checked on crates.io on 2026-11-17 (ADR-0011).
+# `rustls` has no `tls12` feature here: the server code for TLS 1.2 is not even compiled in (ADR-0023).
+# `ring` is the crypto provider: it builds on every target without cmake or nasm.
+axum = { version = "0.8.9", default-features = false, features = ["tokio", "http1", "http2", "json", "query", "matched-path"] }
+bytes = "1.12.1"
+futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
+gethostname = "1.1.0"
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", features = ["server", "http1", "http2"] }
+hyper-util = { version = "0.1.21", features = ["server-auto", "server-graceful", "tokio", "service"] }
+rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring", "x509-parser", "zeroize"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "logging"] }
+time = { version = "0.3.55", default-features = false }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "logging"] }
+tower = { version = "0.5.3", default-features = false, features = ["util"] }
+utoipa = { version = "6.0.0", features = ["macros", "uuid"] }
+x509-parser = "0.18.1"
+serde_yaml_ng = "0.10.0"
+
+# Client SDK and CLI (cerberus-client). Versions checked on crates.io on 2026-11-17 (ADR-0011).
+clap = { version = "4.6.8", features = ["derive", "env"] }
+clap_complete = "4.6.12"
+url = "2.5.8"
+
+# MCP server (cerberus-mcp). Versions checked on crates.io on 2026-11-17 (ADR-0011, ADR-0029).
+# No default features: the `#[tool]` macros are not used (tool schemas come from docs/api/mcp-tools.md).
+rmcp = { version = "3.10.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
+
+# Headless daemon (cerberusd). Versions checked on crates.io on 2026-11-17 (ADR-0011).
+# `rpassword` reads the phrase with echo off from the terminal. `sd-notify` tells systemd the daemon is ready.
+rpassword = "7.5.5"
+sd-notify = "0.5.0"
+toml = "1.2.1"
+
+# Test-only dependencies.
+tempfile = "3.27.0"
+proptest = "1.12.0"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "std"] }
+# The `Verifier` trait for ssh-agent signature tests. 2.2.0 is the line `ssh-key` 0.6 uses (T22).
+signature = "2.2.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+undocumented_unsafe_blocks = "deny"
+
+[profile.dev]
+# Smaller debug info: lowers link memory (see .cargo/config.toml).
+debug = "line-tables-only"
+
+[profile.test]
+debug = "line-tables-only"
+
+# A panic in any task ends the process after the panic hook wiped the keys and the clipboard
+# (threat model I-8, AUD-14). Tests use the test profile, so they still unwind.
+[profile.release]
+panic = "abort"

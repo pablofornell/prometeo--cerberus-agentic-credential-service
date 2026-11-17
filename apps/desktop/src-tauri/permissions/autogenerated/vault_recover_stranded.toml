@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-vault-recover-stranded"
+description = "Enables the vault_recover_stranded command without any pre-configured scope."
+commands.allow = ["vault_recover_stranded"]
+
+[[permission]]
+identifier = "deny-vault-recover-stranded"
+description = "Denies the vault_recover_stranded command without any pre-configured scope."
+commands.deny = ["vault_recover_stranded"]

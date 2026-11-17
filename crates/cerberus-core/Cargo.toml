@@ -1,0 +1,38 @@
+[package]
+name = "cerberus-core"
+description = "Cerberus transport-free vault service (items, policy, leases, audit)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+cerberus-types.workspace = true
+cerberus-crypto.workspace = true
+cerberus-store.workspace = true
+csv.workspace = true
+ipnet.workspace = true
+jiff = { workspace = true, features = ["serde"] }
+serde.workspace = true
+serde_json.workspace = true
+# `encryption`: the SSH signing path opens keys imported with a passphrase (DEC-T22-2).
+ssh-key = { workspace = true, features = ["encryption"] }
+thiserror.workspace = true
+totp-rs.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+unicode-normalization.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+# `insecure-test-kdf` only here, never in [dependencies] (DEC-050).
+cerberus-crypto = { workspace = true, features = ["insecure-test-kdf"] }
+proptest.workspace = true
+tempfile.workspace = true
+uuid.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+sqlx.workspace = true

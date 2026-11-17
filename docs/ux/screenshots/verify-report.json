@@ -1,0 +1,156 @@
+{
+  "summary": {
+    "screens": 12,
+    "screenshots": 204,
+    "axePerScreen": {
+      "index": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "01-create-vault": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "02-unlock": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "03-dashboard": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "04-vault-browser": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "05-item-editor": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "06-agents": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "07-policies": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "08-approval": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "09-leases": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "10-audit": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "11-settings": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      }
+    },
+    "axe": {
+      "total": 0,
+      "serious": 0
+    },
+    "keyboard": {
+      "checks": 11,
+      "failed": 0
+    },
+    "missingSpanish": 0,
+    "externalRequests": 0,
+    "consoleErrors": 0
+  },
+  "keyboard": [
+    {
+      "name": "Ctrl+K opens the palette with focus in its field",
+      "pass": true,
+      "got": [
+        "palette"
+      ]
+    },
+    {
+      "name": "Esc closes the palette",
+      "pass": true,
+      "got": []
+    },
+    {
+      "name": "? opens the shortcut list",
+      "pass": true,
+      "got": [
+        "dlg-keys"
+      ]
+    },
+    {
+      "name": "G then V goes to the vault",
+      "pass": true,
+      "got": "04-vault-browser.html"
+    },
+    {
+      "name": "Tab focus shows a 2 px ring",
+      "pass": true,
+      "got": "solid 2px"
+    },
+    {
+      "name": "Ctrl+L locks (goes to unlock)",
+      "pass": true,
+      "got": "02-unlock.html"
+    },
+    {
+      "name": "A short Space press does not reveal",
+      "pass": true,
+      "got": "●●●●●●●●●●●●"
+    },
+    {
+      "name": "A 500 ms Space hold reveals",
+      "pass": true,
+      "got": "revealed"
+    },
+    {
+      "name": "A tap on A does not approve",
+      "pass": true,
+      "got": ""
+    },
+    {
+      "name": "A 600 ms hold on A approves once",
+      "pass": true,
+      "got": "Approved once. The lease allows 1 read in 5 minutes."
+    },
+    {
+      "name": "D denies at once",
+      "pass": true,
+      "got": "Denied. QA runner gets 403 and cannot ask for this item for 10 minutes."
+    }
+  ],
+  "axe": [],
+  "missing": [],
+  "external": [],
+  "consoleErrors": []
+}

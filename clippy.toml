@@ -1,0 +1,18 @@
+# Clippy configuration for the whole workspace.
+
+# ADR-0022: read wall time only through `cerberus_types::Clock` and measure durations only through
+# `cerberus_types::Stopwatch`. Only `SystemClock::now` and `Stopwatch::start` carry an `#[allow]`.
+# `allow-invalid` keeps crates quiet that do not depend on the listed crate.
+disallowed-methods = [
+    { path = "std::time::SystemTime::now", reason = "use cerberus_types::Clock (ADR-0022)" },
+    { path = "std::time::Instant::now", reason = "use cerberus_types::Stopwatch (ADR-0022)" },
+    { path = "jiff::Timestamp::now", reason = "use cerberus_types::Clock (ADR-0022)", allow-invalid = true },
+    { path = "jiff::Zoned::now", reason = "use cerberus_types::Clock (ADR-0022)", allow-invalid = true },
+    { path = "chrono::Utc::now", reason = "use cerberus_types::Clock (ADR-0022)", allow-invalid = true },
+    { path = "chrono::Local::now", reason = "use cerberus_types::Clock (ADR-0022)", allow-invalid = true },
+]
+
+# Plan section 9 bans unwrap, expect and panic in non-test code only. Tests may use them.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

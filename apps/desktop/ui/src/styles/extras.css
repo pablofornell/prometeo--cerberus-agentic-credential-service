@@ -1,0 +1,98 @@
+/* Additions for the React shell: density, overlays, drawer, tabs, spinner, layout details. Tokens only. */
+:root {
+  --ctl-md: 34px;
+  --ctl-sm: 28px;
+  --row-y: 10px;
+}
+:root[data-density="compact"] {
+  --ctl-md: 30px;
+  --ctl-sm: 26px;
+  --row-y: 6px;
+}
+
+html { scroll-padding-top: 72px; }
+html, body, #root { min-height: 100vh; }
+.right { text-align: right; }
+.block { display: block; }
+.spacer { flex: 1; }
+
+/* Sticky top bar must not hide focus (WCAG 2.4.11). Skip link shows on focus. */
+.skip-link { transition: none; }
+main.content:focus { outline: none; }
+main.content:focus-visible { outline: none; }
+
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin 0.9s linear infinite; flex: none; }
+.input.select { appearance: none; padding-right: 30px; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--c-text-muted) 50%), linear-gradient(135deg, var(--c-text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+.kind-ico.prod { border-color: var(--c-danger-fg); color: var(--c-danger-fg); }
+.right.num { font-variant-numeric: tabular-nums; }
+
+/* Top bar: page actions sit in a row with the same gap as the bar. */
+.topbar .slot { display: inline-flex; align-items: center; gap: 8px; }
+.topbar .slot:empty { display: none; }
+.palette-trigger > span[aria-hidden] { margin-left: auto; display: inline-flex; }
+
+/* Secret field value is an <output>. */
+.secret output.value { display: block; }
+.secret .hide-in { align-items: center; }
+.state-block .steps { width: 100%; }
+
+/* Skeletons. */
+.skeleton.rows { border: 1px solid var(--c-border-subtle); border-radius: var(--r-md); background: var(--c-bg-surface); }
+.skel.line { flex: 1; }
+.skel.block { display: block; height: 96px; width: 100%; }
+
+/* Definition list rows in the shortcut dialog. */
+.kv .kv-row { display: contents; }
+.kv dd { display: flex; gap: 4px; flex-wrap: wrap; }
+
+/* Dialog and drawer (Radix). */
+.dlg-overlay { position: fixed; inset: 0; z-index: 70; background: var(--c-scrim); animation: fade-in var(--d-base) var(--ease-enter); }
+.dlg { position: fixed; z-index: 71; left: 50%; top: 50%; transform: translate(-50%, -50%); max-height: calc(100vh - 32px); overflow: auto; animation: pop-in var(--d-base) var(--ease-enter); }
+.dlg h2 { font-size: var(--t-title-size); line-height: var(--t-title-line); }
+.dlg:focus { outline: none; }
+@keyframes pop-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)) scale(0.985); } }
+@keyframes pop-in-top { from { opacity: 0; transform: translate(-50%, 6px) scale(0.985); } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(6px) scale(0.985); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes drawer-in { from { opacity: 0; transform: translateX(24px); } }
+.drawer-panel { position: fixed; z-index: 71; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); display: flex; flex-direction: column;
+  background: var(--c-bg-surface); border-left: 1px solid var(--c-border-subtle); box-shadow: var(--sh-overlay); animation: drawer-in var(--d-slow) var(--ease-enter); }
+.drawer-panel:focus { outline: none; }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px 8px; }
+.drawer-head h2 { font-size: var(--t-title-size); line-height: var(--t-title-line); }
+.drawer-desc { padding: 0 20px; }
+.drawer-body { flex: 1; overflow: auto; padding: 12px 20px; display: grid; gap: 14px; align-content: start; }
+.drawer-panel .foot { padding: 12px 20px; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid var(--c-border-subtle); }
+
+/* Toasts. */
+.toast.error { border-color: var(--c-danger-fg); }
+.toast.success > .icon { color: var(--c-success-fg); }
+.toast.error > .icon { color: var(--c-danger-fg); }
+.toast.info > .icon { color: var(--c-info-fg); }
+
+/* Tabs. */
+.tablist { display: flex; gap: 2px; border-bottom: 1px solid var(--c-border-subtle); margin-bottom: 16px; }
+.tablist [role="tab"] { all: unset; cursor: pointer; padding: 8px 14px; margin-bottom: -1px; color: var(--c-text-secondary); border-bottom: 2px solid transparent; font-weight: 550; box-sizing: border-box; }
+.tablist [role="tab"]:hover { color: var(--c-text-primary); background: var(--c-bg-hover); }
+.tablist [role="tab"][aria-selected="true"] { color: var(--c-text-primary); border-bottom-color: var(--c-ring-gate); }
+.tablist [role="tab"]:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: -2px; }
+
+/* While the vault locks the rail is inert; show it. */
+.sidebar[inert] .nav { opacity: 0.5; }
+
+/* Rail nav links are <a>; keep the active mark. */
+.nav a { box-sizing: border-box; }
+
+/* Approval window: a calm single column. */
+.approval-window .solo-wrap { width: min(400px, 100%); }
+
+/* Reduced motion: movement off, fades short (components.md section 4). */
+@media (prefers-reduced-motion: reduce) {
+  .dlg, .dlg.palette, .toast, .drawer-panel { animation-name: fade-in; }
+  .spinner { animation: none; border-right-color: currentColor; }
+}
+@media (forced-colors: active) {
+  .kind-ico, .toast, .dlg, .drawer-panel { border: 1px solid CanvasText; }
+}

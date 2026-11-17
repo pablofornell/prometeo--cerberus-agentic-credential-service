@@ -1,0 +1,1 @@
+{"app": "billing", "environment": "stage", "role": "ro", "kind": "api_key", "hint": "stripe live", "purpose": "charge", "mode": "candidates"}

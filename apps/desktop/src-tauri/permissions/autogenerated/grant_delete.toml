@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-grant-delete"
+description = "Enables the grant_delete command without any pre-configured scope."
+commands.allow = ["grant_delete"]
+
+[[permission]]
+identifier = "deny-grant-delete"
+description = "Denies the grant_delete command without any pre-configured scope."
+commands.deny = ["grant_delete"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-csv-export"
+description = "Enables the csv_export command without any pre-configured scope."
+commands.allow = ["csv_export"]
+
+[[permission]]
+identifier = "deny-csv-export"
+description = "Denies the csv_export command without any pre-configured scope."
+commands.deny = ["csv_export"]

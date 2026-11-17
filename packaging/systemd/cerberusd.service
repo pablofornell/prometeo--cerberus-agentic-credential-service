@@ -1,0 +1,69 @@
+# Cerberus headless daemon. Install steps: docs/guides/cerberusd.md.
+# The binary is expected at /usr/local/bin/cerberusd. The service user "cerberus" must exist.
+
+[Unit]
+Description=Cerberus headless daemon (agent API over HTTPS)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=cerberus
+Group=cerberus
+ExecStart=/usr/local/bin/cerberusd --config /etc/cerberus/cerberusd.toml serve
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=30s
+# The daemon locks the vault, then drains open requests for up to 10 s.
+KillSignal=SIGTERM
+TimeoutStopSec=20s
+UMask=0077
+
+# State: /var/lib/cerberus, owned by the service user, mode 0700. It holds the vault file and the TLS files.
+StateDirectory=cerberus
+StateDirectoryMode=0700
+ReadWritePaths=/var/lib/cerberus
+
+# Hardening.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+# AUD-29. Only the system calls of a normal service. @system-service has mlock (@memlock), which the key pages need.
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+# Other users' processes are not visible, and only /proc/<pid> exists in this service's /proc.
+ProtectProc=invisible
+ProcSubset=pid
+RemoveIPC=yes
+PrivateUsers=yes
+
+# Loopback-only deployment: the daemon needs no other address. Remove these two lines when "bind" in
+# /etc/cerberus/cerberusd.toml lists a LAN address.
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+# No core dumps: they would hold keys. mlock needs room for the key pages.
+LimitCORE=0
+LimitMEMLOCK=64M
+
+[Install]
+WantedBy=multi-user.target

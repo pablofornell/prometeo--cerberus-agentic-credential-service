@@ -1,0 +1,1112 @@
+openapi: 3.1.0
+info:
+  title: Cerberus Agent API
+  version: 0.1.0-draft
+  summary: Credential vault API for AI agents (REST part of the Agent API).
+  description: |
+    Contract from task T01, kept equal to the document that `cerberus-api` generates from code with `utoipa`.
+    The test `crates/cerberus-api/tests/openapi.rs` compares paths, methods, operation IDs, status codes, schema names,
+    properties, required lists and enums. Differences from the first draft are listed in docs/decisions.md (DEC-T10-8).
+
+    Rules for every route (see the ADRs in docs/adr/):
+    - HTTPS with TLS 1.3 only. Plain HTTP and TLS 1.2 are refused (ADR-0023).
+    - Every route except `GET /health` needs `Authorization: Bearer cvt_<agent_id>.<secret>` (ADR-0016).
+    - Order of checks: IP rate limit (429) → token (401) → vault lock (423) → scope (403) → grants (404/403).
+    - While the vault is locked, every route except `GET /health` returns 423 and no data (ADR-0008).
+    - Every response has an `X-Request-Id` header (ADR-0015) and `Cache-Control: no-store`.
+    - Requests with an `Origin` header or a not-allowed `Host` get 403 `origin_refused`.
+    - All errors use one shape: `ErrorResponse` (ADR-0021).
+    - Responses that hold secret values have `handling: "secret — do not print or log"` (ADR-0028).
+    - Items the agent cannot `find` do not exist for it: 404 `not_found`.
+    - Extension `x-required-scope` names the token scope of each route. `x-permission` names the grant permission.
+  license:
+    name: See LICENSE in the repository
+servers:
+  - url: https://127.0.0.1:7373/v1
+    description: Default loopback bind (ADR-0023). The port is a setting.
+security:
+  - bearerAuth: []
+tags:
+  - name: service
+  - name: credentials
+  - name: sessions
+  - name: approvals
+  - name: leases
+
+paths:
+  /health:
+    get:
+      tags: [service]
+      operationId: getHealth
+      summary: Service up. Shows locked or unlocked. No auth.
+      security: []
+      responses:
+        '200':
+          description: The service runs.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+              example: { status: ok, vault: locked, version: 0.1.0 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /status:
+    get:
+      tags: [service]
+      operationId: getStatus
+      summary: Vault state and the identity of the calling agent (same data as MCP `vault_status`).
+      x-required-scope: status:read
+      responses:
+        '200':
+          description: Status of the vault and the caller.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatusResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /credentials/resolve:
+    post:
+      tags: [credentials]
+      operationId: resolveCredential
+      summary: Find the best item for an intent (ADR-0020).
+      description: |
+        `mode: best` returns the secret when there is one confident match and policy allows `read` (outcome `secret`),
+        starts an approval (`202`, outcome `pending`), or returns candidates without secrets (outcome `ambiguous`).
+        `mode: candidates` always returns candidates without secrets (needs only `catalog:read`).
+      x-required-scope: "catalog:read (mode candidates); secrets:read (mode best)"
+      x-permission: "find; read for the secret"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResolveRequest' }
+            example:
+              app: shop-frontend
+              environment: staging
+              role: admin
+              purpose: Run the Playwright login test for the checkout page
+              mode: best
+      responses:
+        '200':
+          description: A secret, or candidates (no secret).
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolveResponse' }
+        '202':
+          description: Approval needed. Poll or stream the access request, then call reveal.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolveResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NoMatch' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /credentials:
+    get:
+      tags: [credentials]
+      operationId: listCredentials
+      summary: Catalog of visible items. Metadata only. No secret values.
+      x-required-scope: catalog:read
+      x-permission: find
+      parameters:
+        - { name: workspace, in: query, schema: { type: string, maxLength: 128 }, description: "Workspace slug." }
+        - { name: environment, in: query, schema: { $ref: '#/components/schemas/Environment' } }
+        - { name: kind, in: query, schema: { $ref: '#/components/schemas/ItemKind' } }
+        - { name: tag, in: query, schema: { type: string, maxLength: 50 } }
+        - { name: q, in: query, schema: { type: string, maxLength: 256 }, description: "Words to match in title, description, tags, target." }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+        - { name: cursor, in: query, schema: { type: string, maxLength: 256 }, description: "Opaque cursor from `next_cursor`." }
+      responses:
+        '200':
+          description: One page of item metadata.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CatalogPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      tags: [credentials]
+      operationId: createCredential
+      summary: The agent creates an item. Needs grant permission `write` on the proposed metadata.
+      description: |
+        `created_by` is set to the agent. Kinds `session_token` and `browser_session` need scope `sessions:write`
+        and permission `create_session` instead (use `POST /sessions`). Body limit 1 MiB.
+      x-required-scope: secrets:write
+      x-permission: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateItemRequest' }
+      responses:
+        '201':
+          description: Item created. The response holds metadata only.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreatedItem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /credentials/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ItemIdPath'
+    delete:
+      tags: [credentials]
+      operationId: deleteCredential
+      summary: Delete an item that this agent created.
+      description: Hard delete of the item, its versions and its leases. An item made by an operator or another agent gives 403.
+      x-required-scope: "secrets:write, or sessions:write for kinds session_token and browser_session"
+      x-permission: "write, or create_session for kinds session_token and browser_session"
+      responses:
+        '204':
+          description: Deleted.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /credentials/{id}/reveal:
+    parameters:
+      - $ref: '#/components/parameters/ItemIdPath'
+    post:
+      tags: [credentials]
+      operationId: revealCredential
+      summary: Return the secret. Creates or uses a lease, and writes an audit event.
+      description: |
+        Policy (ADR-0017) decides: `auto` → 200; `ask_once` with an active lease → 200; else → 202 with an access
+        request. After approval, call this route again (optionally with `lease_id`). `prod` items need approval
+        unless the owner set `allow_prod_auto` on the grant.
+      x-required-scope: secrets:read
+      x-permission: read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevealRequest' }
+      responses:
+        '200':
+          description: The secret.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecretResponse' }
+        '202':
+          description: Approval needed.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendingResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /credentials/{id}/totp:
+    parameters:
+      - $ref: '#/components/parameters/ItemIdPath'
+    post:
+      tags: [credentials]
+      operationId: getTotpCode
+      summary: Return the current TOTP code. The seed stays in the vault.
+      x-required-scope: secrets:read
+      x-permission: read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TotpRequest' }
+      responses:
+        '200':
+          description: The current code.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TotpResponse' }
+        '202':
+          description: Approval needed.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendingResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /credentials/{id}/ssh-prepare:
+    parameters:
+      - $ref: '#/components/parameters/ItemIdPath'
+    post:
+      tags: [credentials]
+      operationId: prepareSshAgent
+      summary: Open an ssh-agent signing socket for an `ssh_key` item (T22). The private key stays in the vault.
+      description: |
+        The socket is a local Unix socket (mode 0600) of the Cerberus host that speaks the ssh-agent protocol. It closes
+        at `expires_at`, at lease end, release or revoke, or at lock. Each signature is checked and audited (`ssh.sign`).
+        Only ed25519 keys. `429` when too many sockets are open; `503 unavailable` on a host without Unix sockets
+        (DEC-T22-1..7).
+      x-required-scope: ssh:use
+      x-permission: use_ssh
+      x-task: T22
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SshPrepareRequest' }
+      responses:
+        '200':
+          description: Socket ready.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SshPrepareResponse' }
+        '202':
+          description: Approval needed.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendingResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /sessions:
+    post:
+      tags: [sessions]
+      operationId: createSession
+      summary: Save a session token or browser session with a TTL (default 3600 s, ADR-0007).
+      description: |
+        Shortcut for kinds `session_token` and `browser_session`. `ttl_seconds` above `session_ttl_max_seconds`
+        (default 86400) gives 422; the service does not clamp. Body limit 1 MiB.
+      x-required-scope: sessions:write
+      x-permission: create_session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSessionRequest' }
+      responses:
+        '201':
+          description: Session item created (metadata only).
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreatedItem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /requests:
+    post:
+      tags: [approvals]
+      operationId: createAccessRequest
+      summary: Ask a person for access before the secret is needed (same as MCP `request_access`).
+      description: |
+        Returns the existing request if one is pending for the same item and permission. If an active lease
+        already exists, returns the request object with status `approved` and the lease.
+      x-required-scope: requests
+      x-permission: "read or use_ssh (the grant mode must be ask_once or ask_always, or the item is prod)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAccessRequest' }
+      responses:
+        '200':
+          description: Already approved (an active lease exists), or mode `auto` gave a lease at once.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessRequestView' }
+        '202':
+          description: Request pending.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessRequestView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /requests/{id}:
+    parameters:
+      - $ref: '#/components/parameters/AccessRequestIdPath'
+    get:
+      tags: [approvals]
+      operationId: getAccessRequest
+      summary: Poll an approval. A request of another agent gives 404.
+      x-required-scope: requests
+      responses:
+        '200':
+          description: Current state of the request.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessRequestView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /requests/{id}/events:
+    parameters:
+      - $ref: '#/components/parameters/AccessRequestIdPath'
+    get:
+      tags: [approvals]
+      operationId: streamAccessRequest
+      summary: SSE stream of approval state changes.
+      description: |
+        Server-Sent Events (`text/event-stream`). Each change is sent as:
+
+            event: status
+            id: <monotonic counter>
+            data: <AccessRequestView as one line of JSON>
+
+        The first event is the current state. A comment line `: keep-alive` is sent every 15 s. The server closes
+        the stream after a terminal status (`approved`, `denied`, `expired`, `cancelled`) or at `expires_at`.
+        If the vault locks while the stream is open, the last event has status `cancelled`.
+        Errors before the stream starts use the normal JSON error responses. An error after the stream started
+        is sent as one `event: error` whose data is an `ErrorResponse`, and the stream ends.
+      x-required-scope: requests
+      x-sse-event:
+        name: status
+        data: { $ref: '#/components/schemas/AccessRequestView' }
+      responses:
+        '200':
+          description: Event stream.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE frames. Each `data` line is an `AccessRequestView` JSON object.
+              example: |
+                event: status
+                id: 1
+                data: {"id":"0190f000-0000-7000-8000-000000000001","item_id":"0190f000-0000-7000-8000-000000000002","permission":"read","status":"pending","requested_ttl_seconds":900,"created_at":"2026-01-01T00:00:00Z","expires_at":"2026-01-01T00:02:00Z","decided_at":null,"lease":null}
+
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /leases/{id}/release:
+    parameters:
+      - $ref: '#/components/parameters/LeaseIdPath'
+    post:
+      tags: [leases]
+      operationId: releaseLease
+      summary: The agent gives back a lease (ADR-0019). A lease of another agent gives 404.
+      x-required-scope: requests
+      responses:
+        '200':
+          description: Released.
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReleaseResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '423': { $ref: '#/components/responses/Locked' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: "cvt_<agent_id>.<43 chars base64url>"
+      description: Agent key token (ADR-0016). Shown one time in the desktop app. Never put it in a URL.
+
+  headers:
+    X-Request-Id:
+      description: Server-made UUIDv7 for this call. Incoming values are ignored (ADR-0015).
+      schema: { type: string, format: uuid }
+    Location:
+      description: Path of the created resource.
+      schema: { type: string }
+    Retry-After:
+      description: Seconds to wait. Same value as `details.retry_after_seconds`.
+      schema: { type: integer, minimum: 1 }
+
+  parameters:
+    ItemIdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AccessRequestIdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    LeaseIdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: "`invalid_request` (malformed JSON, unknown field, bad ID) or `reason_required`."
+      headers: { X-Request-Id: { $ref: '#/components/headers/X-Request-Id' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { error: { code: invalid_request, message: Unknown field "user"., request_id: 0190f000-0000-7000-8000-00000000000a, retryable: false } }
+    Unauthenticated:
+      description: "`unauthenticated`: token missing, malformed, unknown, expired or revoked; agent not active; IP or mTLS check failed. Same answer for all reasons. Also returned while locked when the token is bad."
+      headers: { X-Request-Id: { $ref: '#/components/headers/X-Request-Id' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { error: { code: unauthenticated, message: Authentication failed., request_id: 0190f000-0000-7000-8000-00000000000b, retryable: false } }
+    Forbidden:
+      description: |
+        One of: `forbidden` (no grant for this permission, a deny grant, or delete of an item the agent did not create),
+        `insufficient_scope`, `approval_denied` (details.request holds the access request ID), `approval_unavailable`
+        (headless daemon), `condition_failed` (outside the grant time window; retryable), `origin_refused`.
+      headers: { X-Request-Id: { $ref: '#/components/headers/X-Request-Id' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { error: { code: approval_denied, message: A person denied this request., request_id: 0190f000-0000-7000-8000-00000000000c, retryable: false, details: { request: 0190f000-0000-7000-8000-000000000001 } } }
+    NotFound:
+      description: "`not_found`: unknown, invisible or expired item; unknown request or lease, or one of another agent."
+      headers: { X-Request-Id: { $ref: '#/components/headers/X-Request-Id' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NoMatch:
+      description: "`no_match`: resolve found nothing. `details.hints` lists what exists among visible items."
+      headers: { X-Request-Id: { $ref: '#/components/headers/X-Request-Id' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { error: { code: no_match, message: No visible item matches., request_id: 0190f000-0000-7000-8000-00000000000d, retryable: false, details: { hints: { app_known: true, environments: [dev, staging], roles: [admin, read-only], kinds: [web_login] } } } }
+    Conflict:
+      description: "`conflict`: lease already released or revoked, or a duplicate title in the workspace."
+      headers: { X-Request-Id: { $ref: '#/components/headers/X-Request-Id' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    PayloadTooLarge:
+      description: "`payload_too_large`: body over the route limit (16 KiB, or 1 MiB for item and session creates)."
+      headers: { X-Request-Id: { $ref: '#/components/headers/X-Request-Id' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    UnsupportedMediaType:
+      description: "`unsupported_media_type`: the body is not `application/json`."
+      headers: { X-Request-Id: { $ref: '#/components/headers/X-Request-Id' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ValidationFailed:
+      description: "`validation_failed`: field rules failed. `details.fields` lists each problem."
+      headers: { X-Request-Id: { $ref: '#/components/headers/X-Request-Id' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { error: { code: validation_failed, message: Some fields are not valid., request_id: 0190f000-0000-7000-8000-00000000000e, retryable: false, details: { fields: [ { field: ttl_seconds, problem: above session_ttl_max_seconds (86400) } ] } } }
+    Locked:
+      description: "`vault_locked`: the vault is locked. No data. Retry later; poll `GET /health` (ADR-0008)."
+      headers: { X-Request-Id: { $ref: '#/components/headers/X-Request-Id' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { error: { code: vault_locked, message: The vault is locked., request_id: 0190f000-0000-7000-8000-00000000000f, retryable: true } }
+    TooManyRequests:
+      description: "`rate_limited`, `grant_rate_limited` or `too_many_failures` (ADR-0030)."
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+        Retry-After: { $ref: '#/components/headers/Retry-After' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { error: { code: rate_limited, message: Too many requests., request_id: 0190f000-0000-7000-8000-000000000010, retryable: true, details: { retry_after_seconds: 12 } } }
+    Internal:
+      description: "`internal` or `vault_corrupt`. The message is fixed; the cause is only in the server log."
+      headers: { X-Request-Id: { $ref: '#/components/headers/X-Request-Id' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { error: { code: internal, message: Internal error., request_id: 0190f000-0000-7000-8000-000000000011, retryable: false } }
+    Unavailable:
+      description: "`unavailable`: the server is starting or shutting down."
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+        Retry-After: { $ref: '#/components/headers/Retry-After' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    # ---------------------------------------------------------------- errors
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/ErrorBody' }
+    ErrorBody:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id, retryable]
+      properties:
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        message: { type: string, maxLength: 300, description: "Short English text. Never a secret, token, reason text or invisible title." }
+        request_id: { type: string, format: uuid }
+        retryable: { type: boolean }
+        details: { $ref: '#/components/schemas/ErrorDetails' }
+    ErrorCode:
+      type: string
+      enum: [invalid_request, reason_required, unauthenticated, forbidden, insufficient_scope, approval_denied,
+             approval_unavailable, condition_failed, origin_refused, not_found, no_match, route_not_found,
+             method_not_allowed, conflict, payload_too_large, unsupported_media_type, validation_failed,
+             vault_locked, rate_limited, grant_rate_limited, too_many_failures, internal, vault_corrupt, unavailable]
+    ErrorDetails:
+      type: object
+      additionalProperties: false
+      properties:
+        retry_after_seconds: { type: integer, minimum: 1 }
+        fields:
+          type: array
+          items: { $ref: '#/components/schemas/FieldProblem' }
+        hints: { $ref: '#/components/schemas/NoMatchHints' }
+        request: { type: string, format: uuid, description: "Access request ID (approval_denied)." }
+    FieldProblem:
+      type: object
+      additionalProperties: false
+      required: [field, problem]
+      properties:
+        field: { type: string }
+        problem: { type: string }
+    NoMatchHints:
+      type: object
+      additionalProperties: false
+      required: [app_known, environments, roles, kinds]
+      properties:
+        app_known: { type: boolean, description: "false when no visible item matched `app`." }
+        environments: { type: array, items: { $ref: '#/components/schemas/Environment' } }
+        roles: { type: array, items: { type: string } }
+        kinds: { type: array, items: { $ref: '#/components/schemas/ItemKind' } }
+
+    # ---------------------------------------------------------------- enums
+    ItemKind:
+      type: string
+      enum: [web_login, api_key, ssh_key, session_token, browser_session, database, cloud, certificate, env_bundle, note]
+    Environment:
+      type: string
+      enum: [dev, staging, prod, other]
+    Scope:
+      type: string
+      enum: ['status:read', 'catalog:read', 'secrets:read', 'secrets:write', 'sessions:write', requests, 'ssh:use']
+    VaultState:
+      type: string
+      enum: [no_vault, sealed, unlocked, locking]
+      description: "`sealed` is shown to agents as `locked` in `HealthResponse.vault`."
+    AccessRequestStatus:
+      type: string
+      enum: [pending, approved, denied, expired, cancelled]
+    SecretString:
+      type: string
+      format: password
+      description: A secret value. Never print, log or store it in plain text.
+
+    # ---------------------------------------------------------------- service
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status, vault, version]
+      properties:
+        status: { type: string, const: ok }
+        vault: { type: string, enum: [locked, unlocked] }
+        version: { type: string }
+    StatusResponse:
+      type: object
+      additionalProperties: false
+      required: [vault, agent, server_time]
+      properties:
+        vault: { $ref: '#/components/schemas/VaultState' }
+        server_time: { type: string, format: date-time }
+        agent: { $ref: '#/components/schemas/StatusAgent' }
+    StatusAgent:
+      type: object
+      additionalProperties: false
+      required: [id, name, key_id, scopes, key_expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        key_id: { type: string, format: uuid }
+        scopes: { type: array, items: { $ref: '#/components/schemas/Scope' } }
+        key_expires_at: { oneOf: [ { type: string, format: date-time }, { type: 'null' } ] }
+
+    # ---------------------------------------------------------------- items
+    ItemSummary:
+      type: object
+      additionalProperties: false
+      description: Metadata only. Never a secret value.
+      required: [id, kind, title, description, role_label, category, tags, environment, workspace, target,
+                 created_by, expires_at, updated_at, has_totp]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/ItemKind' }
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        role_label: { type: [string, 'null'], maxLength: 64 }
+        category: { type: string }
+        tags: { type: array, maxItems: 20, items: { type: string, maxLength: 50 } }
+        environment: { $ref: '#/components/schemas/Environment' }
+        workspace: { type: string, description: "Workspace slug." }
+        target: { type: [string, 'null'], maxLength: 512 }
+        created_by: { type: string, pattern: '^(operator|agent):[0-9a-f-]{36}$' }
+        expires_at: { oneOf: [ { type: string, format: date-time }, { type: 'null' } ] }
+        updated_at: { type: string, format: date-time }
+        has_totp: { type: boolean }
+    CatalogPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ItemSummary' } }
+        next_cursor: { type: [string, 'null'] }
+
+    # ---------------------------------------------------------------- resolve
+    ResolveRequest:
+      type: object
+      additionalProperties: false
+      required: [app, purpose]
+      properties:
+        app: { type: string, minLength: 1, maxLength: 128, description: "Workspace slug, alias or name, or an item target (host, machine, app)." }
+        environment: { type: string, maxLength: 32, description: "dev | staging | prod | other, or a synonym (production, stg, local)." }
+        role: { type: string, maxLength: 64, description: "Role label, for example admin, read-only, SAI user." }
+        kind: { $ref: '#/components/schemas/ItemKind' }
+        hint: { type: string, maxLength: 256, description: "Extra words to match in title, description, tags, target." }
+        purpose: { type: string, minLength: 1, maxLength: 500, description: "Why the agent needs it. Audited. Not used for policy." }
+        mode: { $ref: '#/components/schemas/ResolveMode' }
+    ResolveMode:
+      type: string
+      enum: [best, candidates]
+      default: best
+    Candidate:
+      type: object
+      additionalProperties: false
+      required: [item, score]
+      properties:
+        item: { $ref: '#/components/schemas/ItemSummary' }
+        score: { type: integer, minimum: 0 }
+    CandidatesBody:
+      type: object
+      additionalProperties: false
+      required: [candidates]
+      properties:
+        candidates: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/Candidate' } }
+    ResolveResponse:
+      description: |
+        One of three objects. The `outcome` property is added next to its fields:
+        `secret` (SecretResponse), `pending` (PendingResponse), `candidates` or `ambiguous` (CandidatesBody).
+        `ambiguous` means mode `best` had no confident match.
+      oneOf:
+        - $ref: '#/components/schemas/SecretResponse'
+        - $ref: '#/components/schemas/PendingResponse'
+        - $ref: '#/components/schemas/CandidatesBody'
+
+    # ---------------------------------------------------------------- reveal / totp
+    RevealRequest:
+      type: object
+      additionalProperties: false
+      required: [purpose]
+      properties:
+        purpose: { type: string, minLength: 1, maxLength: 500 }
+        lease_id: { type: string, format: uuid, description: "Use this lease (optional)." }
+        ttl_seconds: { type: integer, minimum: 60, maximum: 86400, description: "Requested TTL if an approval starts." }
+    SecretResponse:
+      type: object
+      required: [handling, request_id, item, secret, lease]
+      properties:
+        handling: { type: string, const: "secret — do not print or log", description: "Present on every response that holds secret values (ADR-0028). Do not print or log the response." }
+        request_id: { type: string, format: uuid }
+        item: { $ref: '#/components/schemas/ItemSummary' }
+        secret: { $ref: '#/components/schemas/SecretPayload' }
+        lease: { $ref: '#/components/schemas/LeaseView' }
+    PendingResponse:
+      type: object
+      required: [request_id, access_request]
+      properties:
+        request_id: { type: string, format: uuid }
+        access_request: { $ref: '#/components/schemas/AccessRequestView' }
+    TotpRequest:
+      type: object
+      additionalProperties: false
+      required: [purpose]
+      properties:
+        purpose: { type: string, minLength: 1, maxLength: 500 }
+        lease_id: { type: string, format: uuid }
+    TotpResponse:
+      type: object
+      additionalProperties: false
+      required: [handling, request_id, item_id, code, period, expires_in_seconds, lease]
+      properties:
+        handling: { type: string, const: "secret — do not print or log", description: "Present on every response that holds secret values (ADR-0028). Do not print or log the response." }
+        request_id: { type: string, format: uuid }
+        item_id: { type: string, format: uuid }
+        code: { allOf: [ { $ref: '#/components/schemas/SecretString' } ], pattern: '^[0-9]{6,8}$' }
+        period: { type: integer, minimum: 15, maximum: 120 }
+        expires_in_seconds: { type: integer, minimum: 0, maximum: 120 }
+        lease: { $ref: '#/components/schemas/LeaseView' }
+
+    # ---------------------------------------------------------------- secret payloads (ADR-0027)
+    SecretPayload:
+      description: |
+        Typed secret by kind. TOTP seeds are never returned. The `kind` property sits next to the fields of the
+        kind schema (internally tagged object), for example `{ "kind": "web_login", "username": ..., "password": ... }`.
+      oneOf:
+        - $ref: '#/components/schemas/WebLoginSecret'
+        - $ref: '#/components/schemas/ApiKeySecret'
+        - $ref: '#/components/schemas/SshKeySecret'
+        - $ref: '#/components/schemas/SessionTokenSecret'
+        - $ref: '#/components/schemas/BrowserSessionSecret'
+        - $ref: '#/components/schemas/DatabaseSecret'
+        - $ref: '#/components/schemas/CloudSecret'
+        - $ref: '#/components/schemas/CertificateSecret'
+        - $ref: '#/components/schemas/EnvBundleSecret'
+        - $ref: '#/components/schemas/NoteSecret'
+      discriminator:
+        propertyName: kind
+        mapping:
+          web_login: '#/components/schemas/WebLoginSecret'
+          api_key: '#/components/schemas/ApiKeySecret'
+          ssh_key: '#/components/schemas/SshKeySecret'
+          session_token: '#/components/schemas/SessionTokenSecret'
+          browser_session: '#/components/schemas/BrowserSessionSecret'
+          database: '#/components/schemas/DatabaseSecret'
+          cloud: '#/components/schemas/CloudSecret'
+          certificate: '#/components/schemas/CertificateSecret'
+          env_bundle: '#/components/schemas/EnvBundleSecret'
+          note: '#/components/schemas/NoteSecret'
+    WebLoginSecret:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { $ref: '#/components/schemas/SecretString' }
+        password: { $ref: '#/components/schemas/SecretString' }
+        url: { type: [string, 'null'], format: uri }
+    ApiKeySecret:
+      type: object
+      additionalProperties: false
+      required: [key]
+      properties:
+        key: { $ref: '#/components/schemas/SecretString' }
+        key_id: { type: [string, 'null'] }
+        header_name: { type: [string, 'null'] }
+        base_url: { type: [string, 'null'], format: uri }
+    SshKeySecret:
+      type: object
+      additionalProperties: false
+      required: [private_key, public_key, fingerprint]
+      properties:
+        private_key: { $ref: '#/components/schemas/SecretString' }
+        passphrase: { oneOf: [ { $ref: '#/components/schemas/SecretString' }, { type: 'null' } ] }
+        public_key: { type: string, description: "OpenSSH public key line." }
+        fingerprint: { type: string, pattern: '^SHA256:' }
+        host: { type: [string, 'null'] }
+        port: { type: [integer, 'null'], minimum: 1, maximum: 65535 }
+        user: { type: [string, 'null'] }
+    SessionTokenSecret:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: { $ref: '#/components/schemas/SecretString' }
+        token_type: { type: [string, 'null'], description: "For example Bearer." }
+        header_name: { type: [string, 'null'] }
+    BrowserSessionSecret:
+      type: object
+      additionalProperties: false
+      required: [storage_state, origin]
+      properties:
+        storage_state: { allOf: [ { $ref: '#/components/schemas/SecretString' } ], description: "Playwright storage state as JSON text." }
+        origin: { type: string, format: uri }
+    DatabaseSecret:
+      type: object
+      additionalProperties: false
+      properties:
+        url: { oneOf: [ { $ref: '#/components/schemas/SecretString' }, { type: 'null' } ] }
+        engine: { type: [string, 'null'], description: "postgres, mysql, sqlite, mongodb, redis, or other text." }
+        host: { type: [string, 'null'] }
+        port: { type: [integer, 'null'], minimum: 1, maximum: 65535 }
+        database: { type: [string, 'null'] }
+        username: { oneOf: [ { $ref: '#/components/schemas/SecretString' }, { type: 'null' } ] }
+        password: { oneOf: [ { $ref: '#/components/schemas/SecretString' }, { type: 'null' } ] }
+        params: { type: [object, 'null'], additionalProperties: { type: string } }
+    CloudSecret:
+      type: object
+      additionalProperties: false
+      required: [provider]
+      properties:
+        provider: { type: string, description: "aws, gcp, azure, or other text." }
+        access_key_id: { oneOf: [ { $ref: '#/components/schemas/SecretString' }, { type: 'null' } ] }
+        secret_access_key: { oneOf: [ { $ref: '#/components/schemas/SecretString' }, { type: 'null' } ] }
+        session_token: { oneOf: [ { $ref: '#/components/schemas/SecretString' }, { type: 'null' } ] }
+        region: { type: [string, 'null'] }
+        extra: { type: [object, 'null'], additionalProperties: { $ref: '#/components/schemas/SecretString' } }
+    CertificateSecret:
+      type: object
+      additionalProperties: false
+      required: [cert_pem]
+      properties:
+        cert_pem: { type: string }
+        key_pem: { oneOf: [ { $ref: '#/components/schemas/SecretString' }, { type: 'null' } ] }
+        chain_pem: { type: [string, 'null'] }
+    EnvBundleSecret:
+      type: object
+      additionalProperties: false
+      required: [vars]
+      properties:
+        vars:
+          type: object
+          maxProperties: 200
+          propertyNames: { pattern: '^[A-Z_][A-Z0-9_]*$' }
+          additionalProperties: { $ref: '#/components/schemas/SecretString' }
+    NoteSecret:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: { $ref: '#/components/schemas/SecretString' }
+    TotpAlgorithmWire:
+      type: string
+      enum: [SHA1, SHA256, SHA512]
+      default: SHA1
+    TotpSeedInput:
+      type: object
+      additionalProperties: false
+      required: [secret]
+      description: TOTP seed for a web login. Write-only. Never returned.
+      properties:
+        secret: { allOf: [ { $ref: '#/components/schemas/SecretString' } ], description: "Base32 seed." }
+        algorithm: { $ref: '#/components/schemas/TotpAlgorithmWire' }
+        digits: { type: integer, enum: [6, 8], default: 6 }
+        period: { type: integer, minimum: 15, maximum: 120, default: 30 }
+
+    # ---------------------------------------------------------------- create
+    CreateItemRequest:
+      type: object
+      additionalProperties: false
+      required: [workspace, title, environment, payload]
+      properties:
+        workspace: { type: string, maxLength: 128, description: "Workspace slug." }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        environment: { $ref: '#/components/schemas/Environment' }
+        role_label: { type: string, maxLength: 64 }
+        category: { type: string, maxLength: 64 }
+        tags: { type: array, maxItems: 20, items: { type: string, minLength: 1, maxLength: 50 } }
+        target: { type: string, maxLength: 512 }
+        ttl_seconds: { type: integer, minimum: 60, maximum: 31536000, description: "No value = no expiry." }
+        max_uses: { type: integer, minimum: 1, maximum: 1000000 }
+        payload: { $ref: '#/components/schemas/SecretPayload' }
+        totp: { $ref: '#/components/schemas/TotpSeedInput' }
+    CreateSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [workspace, title, environment, payload]
+      properties:
+        workspace: { type: string, maxLength: 128 }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        environment: { $ref: '#/components/schemas/Environment' }
+        role_label: { type: string, maxLength: 64 }
+        target: { type: string, maxLength: 512 }
+        ttl_seconds: { type: integer, minimum: 60, maximum: 604800, default: 3600, description: "Must be <= session_ttl_max_seconds (default 86400)." }
+        payload: { $ref: '#/components/schemas/SessionPayload' }
+    SessionPayload:
+      description: A session token or a browser session. The `kind` property sits next to the fields.
+      oneOf:
+        - $ref: '#/components/schemas/SessionTokenSecret'
+        - $ref: '#/components/schemas/BrowserSessionSecret'
+      discriminator:
+        propertyName: kind
+        mapping:
+          session_token: '#/components/schemas/SessionTokenSecret'
+          browser_session: '#/components/schemas/BrowserSessionSecret'
+    CreatedItem:
+      type: object
+      additionalProperties: false
+      required: [item]
+      properties:
+        item: { $ref: '#/components/schemas/ItemSummary' }
+
+    # ---------------------------------------------------------------- approvals and leases
+    AccessPermission:
+      type: string
+      enum: [read, use_ssh]
+      description: "The permission of a lease or an access request. Default for a new request: read."
+    CreateAccessRequest:
+      type: object
+      additionalProperties: false
+      required: [item_id, reason]
+      properties:
+        item_id: { type: string, format: uuid }
+        permission: { $ref: '#/components/schemas/AccessPermission' }
+        reason: { type: string, minLength: 1, maxLength: 500, description: "Shown to the person as untrusted text. Not used for policy." }
+        ttl_seconds: { type: integer, minimum: 60, maximum: 86400 }
+    AccessRequestView:
+      type: object
+      additionalProperties: false
+      required: [id, item_id, permission, status, requested_ttl_seconds, created_at, expires_at, decided_at, lease]
+      properties:
+        id: { type: string, format: uuid }
+        item_id: { type: string, format: uuid }
+        permission: { $ref: '#/components/schemas/AccessPermission' }
+        status: { $ref: '#/components/schemas/AccessRequestStatus' }
+        requested_ttl_seconds: { type: [integer, 'null'] }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        decided_at: { oneOf: [ { type: string, format: date-time }, { type: 'null' } ] }
+        lease: { oneOf: [ { $ref: '#/components/schemas/LeaseView' }, { type: 'null' } ] }
+    LeaseView:
+      type: object
+      additionalProperties: false
+      required: [id, item_id, permission, expires_at, uses_left]
+      properties:
+        id: { type: string, format: uuid }
+        item_id: { type: string, format: uuid }
+        permission: { $ref: '#/components/schemas/AccessPermission' }
+        expires_at: { type: string, format: date-time }
+        uses_left: { type: [integer, 'null'], minimum: 0, description: "null = no use limit." }
+    ReleaseResponse:
+      type: object
+      additionalProperties: false
+      required: [lease_id, released_at]
+      properties:
+        lease_id: { type: string, format: uuid }
+        released_at: { type: string, format: date-time }
+
+    # ---------------------------------------------------------------- ssh (T22)
+    SshPrepareRequest:
+      type: object
+      additionalProperties: false
+      required: [purpose]
+      properties:
+        purpose: { type: string, minLength: 1, maxLength: 500 }
+        ttl_seconds: { type: integer, minimum: 60, maximum: 86400, default: 900 }
+        lease_id: { type: string, format: uuid }
+    SshPrepareResponse:
+      type: object
+      additionalProperties: false
+      required: [request_id, socket_path, public_key, fingerprint, host, port, user, expires_at, lease]
+      properties:
+        request_id: { type: string, format: uuid }
+        socket_path: { type: string, description: "Set SSH_AUTH_SOCK to this path." }
+        public_key: { type: string }
+        fingerprint: { type: string, pattern: '^SHA256:' }
+        host: { type: [string, 'null'] }
+        port: { type: [integer, 'null'] }
+        user: { type: [string, 'null'] }
+        expires_at: { type: string, format: date-time }
+        lease: { $ref: '#/components/schemas/LeaseView' }

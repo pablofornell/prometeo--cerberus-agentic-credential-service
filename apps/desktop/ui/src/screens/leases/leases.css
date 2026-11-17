@@ -1,0 +1,13 @@
+/* Leases screen. Tokens and base classes come from styles/app.css. */
+.leases { display: grid; gap: 20px; }
+.stop { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 18px 20px; border-radius: var(--r-lg); border: 1px solid var(--c-danger-fg); background: var(--c-danger-tint); color: var(--c-danger-on-tint); }
+.stop h2 { font-size: var(--t-title-size); }
+.stop .acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.stop .btn:not(.danger) { background: transparent; color: var(--c-danger-on-tint); border-color: currentColor; }
+.ends { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.src { font-size: 12px; color: var(--c-text-muted); }
+.leases .filter { height: 28px; width: auto; }
+.leases .pad { padding: 12px 16px; }
+.leases .foot-note { padding: 10px 16px; border-top: 1px solid var(--c-border-subtle); display: flex; gap: 6px; align-items: center; }
+.leases .center { text-align: center; }
+@media (max-width: 760px) { .stop { grid-template-columns: 1fr; } .stop .acts { justify-content: flex-start; } }

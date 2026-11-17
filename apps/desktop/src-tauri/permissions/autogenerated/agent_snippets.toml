@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-agent-snippets"
+description = "Enables the agent_snippets command without any pre-configured scope."
+commands.allow = ["agent_snippets"]
+
+[[permission]]
+identifier = "deny-agent-snippets"
+description = "Denies the agent_snippets command without any pre-configured scope."
+commands.deny = ["agent_snippets"]

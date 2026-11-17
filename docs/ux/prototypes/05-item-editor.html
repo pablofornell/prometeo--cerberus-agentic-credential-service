@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'">
+<title>Cerberus Item Editor</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .editor { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+  .formcol { display: grid; gap: 20px; }
+  fieldset.group { border: 1px solid var(--c-border-subtle); border-radius: var(--r-md); background: var(--c-bg-surface); padding: 16px; margin: 0; display: grid; gap: 16px; min-width: 0; }
+  fieldset.group legend { padding: 0 6px; font-weight: 600; }
+  .kinds { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .kinds label { display: grid; justify-items: center; gap: 6px; padding: 10px 6px; border-radius: var(--r-sm); border: 1px solid var(--c-border-subtle); background: var(--c-bg-sunken); cursor: pointer; font-size: var(--t-body-sm-size); text-align: center; color: var(--c-text-secondary); }
+  .kinds input { position: absolute; opacity: 0; pointer-events: none; }
+  .kinds label:has(input:checked) { border-color: var(--c-ring-gate); color: var(--c-text-primary); background: var(--c-bg-raised); font-weight: 560; }
+  .kinds label:has(input:focus-visible) { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
+  .envs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .envs label { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--r-sm); border: 1px solid var(--c-border-default); cursor: pointer; }
+  .envs label:has(input:checked) { border-color: var(--c-ring-gate); background: var(--c-bg-raised); font-weight: 560; }
+  .envs input { accent-color: var(--c-accent-solid); margin: 0; }
+  .drop { display: grid; justify-items: center; gap: 8px; padding: 24px; border: 1.5px dashed var(--c-border-default); border-radius: var(--r-md); text-align: center; color: var(--c-text-secondary); background: var(--c-bg-sunken); }
+  .drop.over { border-color: var(--c-ring-gate); background: var(--c-accent-tint); color: var(--c-accent-on-tint); }
+  .gen { display: grid; gap: 10px; padding: 12px; border-radius: var(--r-sm); background: var(--c-bg-sunken); border: 1px solid var(--c-border-subtle); }
+  .gen input[type=range] { accent-color: var(--c-accent-solid); width: 100%; }
+  .preview-code { font-family: var(--font-mono); font-size: 22px; letter-spacing: 0.12em; font-weight: 600; }
+  .side { position: sticky; top: 112px; display: grid; gap: 16px; }
+  .side pre { margin: 0; white-space: pre-wrap; font-family: var(--font-mono); font-size: 12px; line-height: 18px; color: var(--c-text-secondary); background: var(--c-bg-sunken); border-radius: var(--r-sm); padding: 10px 12px; border: 1px solid var(--c-border-subtle); }
+  .savebar { position: sticky; bottom: 0; display: flex; gap: 8px; justify-content: flex-end; padding: 12px 0; background: linear-gradient(transparent, var(--c-bg-canvas) 30%); }
+  .pubkey { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; color: var(--c-text-secondary); }
+  @media (max-width: 1100px) { .editor { grid-template-columns: 1fr; } .side { position: static; } .kinds { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body data-page="editor" data-layout="app" data-title="New item" data-crumb="Vault" data-variants="ssh_key:SSH key kind,session_token:Session token kind,api_key:API key kind,prod:Prod environment">
+<div id="page">
+  <form class="editor" data-state="ready empty error" novalidate aria-labelledby="page-title">
+    <div class="formcol">
+      <div class="notice bad" data-state="error" role="alert"><i data-i="alert"></i><div class="grow"><strong>2 fields need a fix before you can save.</strong> Nothing was saved.</div></div>
+
+      <fieldset class="group">
+        <legend>Kind</legend>
+        <div class="kinds" role="radiogroup" aria-label="Item kind" id="kinds"></div>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>How agents find it</legend>
+        <div class="form-grid">
+          <div class="field full"><label for="title">Title</label><input id="title" class="input" value="Shop staging admin" data-empty-value="" aria-describedby="title-p">
+            <span class="problem" id="title-p" data-state="error"><i data-i="alert"></i>Add a title. Agents see it in candidates.</span></div>
+          <div class="field"><label for="ws">Workspace</label><select id="ws" class="input"><option>shop-frontend</option><option>billing-api</option><option>build-infra</option><option>New workspace…</option></select></div>
+          <div class="field"><label for="cat">Category</label><select id="cat" class="input"><option>Web login</option><option>API key</option><option>SSH</option><option>Session</option><option>Database</option><option>Cloud</option><option>Certificate</option><option>Other</option></select></div>
+          <div class="field full"><span class="label" id="env-l">Environment</span>
+            <div class="envs" role="radiogroup" aria-labelledby="env-l">
+              <label><input type="radio" name="env" value="dev">dev</label>
+              <label><input type="radio" name="env" value="staging" checked>staging</label>
+              <label><input type="radio" name="env" value="prod" id="env-prod">prod</label>
+              <label><input type="radio" name="env" value="other">other</label>
+            </div>
+            <div class="notice warn" id="prod-note" hidden><i data-i="shieldAlert"></i><div class="grow">Prod items ask you every time an agent wants to read them, unless the owner changes the grant.</div></div>
+          </div>
+          <div class="field full"><span class="label" id="role-l">Role label</span>
+            <div class="row-inline" role="group" aria-labelledby="role-l" data-single>
+              <button class="chip" type="button" aria-pressed="true">admin</button>
+              <button class="chip" type="button" aria-pressed="false">normal user</button>
+              <button class="chip" type="button" aria-pressed="false">read-only</button>
+              <button class="chip" type="button" aria-pressed="false">SAI user</button>
+              <input class="input" style="width:160px;height:28px" placeholder="Custom role" aria-label="Custom role">
+            </div>
+            <span class="hint">Agents ask by role, for example "role admin". Synonyms like "administrator" also match.</span>
+          </div>
+          <div class="field full"><label for="target">Target</label><input id="target" class="input mono" value="https://staging.shop.example" aria-describedby="target-p target-h">
+            <span class="hint" id="target-h">URL, host or app name. It helps the match when the workspace name differs.</span>
+            <span class="problem" id="target-p" data-state="error"><i data-i="alert"></i>This is not a valid URL. Start with https:// or use a host name.</span></div>
+          <div class="field full"><label for="desc">Description</label><textarea id="desc" class="input" aria-describedby="desc-h">Admin account for the staging shop. Use for checkout and refund tests.</textarea>
+            <span class="hint" id="desc-h">You and agents search this text. Say what the account is for. Do not put secrets here.</span></div>
+          <div class="field"><label for="tags">Tags</label><input id="tags" class="input" value="e2e, checkout"></div>
+          <div class="field"><label for="exp">Expires</label><select id="exp" class="input"><option>Never</option><option>In 1 hour</option><option>In 1 day</option><option>On a date…</option></select></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="group" data-kind-panel="web_login">
+        <legend>Login</legend>
+        <div class="form-grid">
+          <div class="field"><label for="user">Username</label><input id="user" class="input mono" value="qa-admin@example.test" autocomplete="off"></div>
+          <div class="field"><label for="url">Sign-in URL</label><input id="url" class="input mono" value="https://staging.shop.example/login"></div>
+          <div class="field full"><label for="pw">Password</label>
+            <div class="input-row"><input id="pw" class="input mono" type="password" value="demo-only-NOT-A-REAL-PASSWORD" autocomplete="off"><button class="btn" type="button" aria-expanded="true" aria-controls="gen"><i data-i="dice"></i>Generator</button></div>
+            <div class="gen" id="gen">
+              <div class="between"><label for="len">Length</label><output id="len-o" for="len" class="num">24</output></div>
+              <input id="len" type="range" min="12" max="64" value="24">
+              <div class="row-inline"><label class="check"><input type="checkbox" checked> Letters</label><label class="check"><input type="checkbox" checked> Digits</label><label class="check"><input type="checkbox" checked> Symbols</label></div>
+              <button class="btn sm" type="button" style="justify-self:start" data-toast="New password set in the field.">Generate password</button>
+            </div>
+          </div>
+          <div class="field full"><label for="totp">TOTP seed (optional)</label>
+            <input id="totp" class="input mono" type="password" value="DEMODEMODEMODEMO" autocomplete="off" aria-describedby="totp-h">
+            <span class="hint" id="totp-h">The seed stays in the vault. Agents only get the current code.</span>
+            <div class="row-inline"><span class="ttl" data-total="30" data-left="21" data-size="28" data-live></span><span class="preview-code" aria-label="Preview code, example">104 772</span><span class="small muted">Live preview. Check it matches your authenticator.</span></div>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="group" data-kind-panel="ssh_key" hidden>
+        <legend>SSH key</legend>
+        <div class="drop" id="drop" role="group" aria-label="Key file drop zone">
+          <i data-i="upload" class="lg"></i>
+          <span>Drop a private key file here</span>
+          <span class="small muted">or</span>
+          <div class="row-inline"><button class="btn sm" type="button">Choose file</button><button class="btn sm primary" type="button" id="gen-ssh">Generate ed25519</button></div>
+        </div>
+        <div class="stack" id="ssh-out">
+          <div class="field"><span class="label">Public key</span><span class="pubkey" data-no-i18n>ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDEMOONLYDEMOONLYDEMOONLYDEMOONLY0000 build-01-deploy</span></div>
+          <div class="field"><span class="label">Fingerprint</span><span class="pubkey" data-no-i18n>SHA256:DEMOdemoDEMOdemoDEMOdemoDEMOdemo0000000</span></div>
+          <p class="small muted">The private key stays inside the backend draft. The UI never receives it.</p>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="host">Host</label><input id="host" class="input mono" value="build-01.internal"></div>
+          <div class="field"><label for="port">Port</label><input id="port" class="input mono" value="22" inputmode="numeric"></div>
+          <div class="field"><label for="suser">User</label><input id="suser" class="input mono" value="deploy"></div>
+          <div class="field"><label for="kpp">Key passphrase (optional)</label><input id="kpp" class="input mono" type="password" autocomplete="off"></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="group" data-kind-panel="api_key" hidden>
+        <legend>API key</legend>
+        <div class="form-grid">
+          <div class="field full"><label for="ak">Key</label><input id="ak" class="input mono" type="password" value="demo_key_NOT_REAL_0000" autocomplete="off"></div>
+          <div class="field"><label for="akid">Key ID (optional)</label><input id="akid" class="input mono" value="key-demo-01"></div>
+          <div class="field"><label for="hdr">Header name</label><input id="hdr" class="input mono" value="Authorization"></div>
+          <div class="field full"><label for="base">Base URL</label><input id="base" class="input mono" value="https://api.billing.example"></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="group" data-kind-panel="session_token browser_session" hidden>
+        <legend>Session</legend>
+        <div class="form-grid">
+          <div class="field full"><label for="tok">Token or storage state</label><textarea id="tok" class="input mono" rows="3">demo-session-token-NOT-REAL</textarea></div>
+          <div class="field"><label for="ttl">Time to live</label><select id="ttl" class="input"><option>15 minutes</option><option selected>60 minutes</option><option>8 hours</option><option>24 hours (maximum)</option></select></div>
+          <div class="field"><label for="ttype">Token type</label><input id="ttype" class="input mono" value="Bearer"></div>
+        </div>
+        <div class="row-inline"><span class="ttl" data-total="3600" data-left="3600" data-size="28"></span><span class="small secondary">Session items always expire. Cerberus deletes them at the end.</span></div>
+      </fieldset>
+
+      <fieldset class="group" data-kind-panel="database cloud certificate env_bundle note" hidden>
+        <legend>Values</legend>
+        <p class="small muted">Each kind has its own fields: database URL or host, port, user and password; cloud key ID, secret and region; certificate, key and chain; env bundle name and value pairs; note text.</p>
+        <div class="form-grid">
+          <div class="field"><label for="vk">Name</label><input id="vk" class="input mono" value="DATABASE_URL"></div>
+          <div class="field"><label for="vv">Value</label><input id="vv" class="input mono" type="password" value="demo-value" autocomplete="off"></div>
+        </div>
+        <button class="btn sm" type="button" style="justify-self:start"><i data-i="plus"></i>Add value</button>
+      </fieldset>
+
+      <div class="savebar">
+        <a class="btn ghost" href="04-vault-browser.html">Cancel</a>
+        <button class="btn primary" type="button" data-toast="Item saved. Agents can find it now.">Save item</button>
+      </div>
+    </div>
+
+    <aside class="side" aria-label="Match preview">
+      <section class="panel">
+        <header><i data-i="search"></i><h2>How an agent asks</h2></header>
+        <div class="body stack">
+          <pre data-no-i18n>resolve {
+  app: "shop-frontend",
+  environment: "staging",
+  role: "admin"
+}</pre>
+          <div class="notice ok"><i data-i="check"></i><div class="grow">This item is the one confident match: workspace 100, role 50.</div></div>
+        </div>
+      </section>
+      <section class="panel">
+        <header><i data-i="policy"></i><h2>Who can see it</h2></header>
+        <ul class="rows">
+          <li><span class="grow">QA runner</span><span class="small muted">read, never asks</span></li>
+          <li><span class="grow">Docs writer</span><span class="small muted">no grant</span></li>
+        </ul>
+      </section>
+    </aside>
+  </form>
+
+  <div data-state="loading" role="status" aria-busy="true" aria-label="Loading item">
+    <div class="editor"><div class="formcol">
+      <div class="panel"><div class="body stack"><div class="skel" style="width:30%"></div><div class="skel" style="height:34px"></div><div class="skel" style="height:34px"></div></div></div>
+      <div class="panel"><div class="body stack"><div class="skel" style="width:20%"></div><div class="skel" style="height:34px"></div><div class="skel" style="height:76px"></div></div></div>
+    </div><div class="panel"><div class="body stack"><div class="skel"></div><div class="skel" style="height:80px"></div></div></div></div>
+  </div>
+</div>
+<script src="assets/icons.js"></script>
+<script src="assets/i18n-es.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(() => {
+  const { $, $$, icon } = Cerb;
+  const kinds = [["web_login", "Web login"], ["api_key", "API key"], ["ssh_key", "SSH key"], ["session_token", "Session token"], ["browser_session", "Browser session"], ["database", "Database"], ["cloud", "Cloud"], ["certificate", "Certificate"], ["env_bundle", "Env bundle"], ["note", "Note"]];
+  $("#kinds").innerHTML = kinds.map(([k, l], i) => `<label><input type="radio" name="kind" value="${k}" ${i ? "" : "checked"}>${icon(window.CERB_KIND_ICON[k], "lg")}<span>${l}</span></label>`).join("");
+  const setKind = (k) => {
+    $$("[data-kind-panel]").forEach((p) => { p.hidden = !p.dataset.kindPanel.split(" ").includes(k); });
+    const r = $(`#kinds input[value="${k}"]`); if (r) r.checked = true;
+  };
+  $("#kinds").addEventListener("change", (e) => setKind(e.target.value));
+  const setProd = (on) => { $("#prod-note").hidden = !on; if (on) $("#env-prod").checked = true; };
+  document.addEventListener("change", (e) => { if (e.target.name === "env") setProd(e.target.value === "prod"); });
+  $("#len").addEventListener("input", (e) => { $("#len-o").textContent = e.target.value; });
+  const drop = $("#drop");
+  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); if (ev === "drop") Cerb.toast("Key imported. Fingerprint checked.", { icon: "key" }); }));
+  $("#gen-ssh").addEventListener("click", () => Cerb.toast("New ed25519 key made. Copy the public key to the server.", { icon: "key" }));
+  const applyV = (v) => {
+    setKind(["ssh_key", "session_token", "api_key"].includes(v) ? v : "web_login");
+    setProd(v === "prod");
+  };
+  document.addEventListener("cerb:variant", (e) => applyV(e.detail));
+  applyV(document.body.dataset.variant);
+  const empty = () => { if (document.body.dataset.view === "empty") $$("input.input, textarea.input").forEach((i) => { if (i.type !== "range") i.value = ""; }); };
+  document.addEventListener("cerb:view", empty); empty();
+  const markErr = () => { const on = document.body.dataset.view === "error"; $("#title").setAttribute("aria-invalid", String(on)); $("#target").setAttribute("aria-invalid", String(on)); if (on) $("#title").value = ""; };
+  document.addEventListener("cerb:view", markErr); markErr();
+  Cerb.paintTtls(); Cerb.translate();
+})();
+</script>
+</body>
+</html>

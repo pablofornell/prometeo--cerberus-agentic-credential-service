@@ -1,0 +1,1 @@
+{"title": "Login", "kind": "web_login", "payload": {"type": "web_login", "username": "u", "password": "fake-pass", "url": "https://example.test"}}
