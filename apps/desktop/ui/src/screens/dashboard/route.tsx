@@ -131,7 +131,7 @@ function Band({ m, waiting, leases, agents, onConnect }: BandProps) {
   const role = useRole();
   const left = useAutolockSeconds();
   return (
-    <section className="band" aria-labelledby="dash-band-h">
+    <section className="band guilloche" aria-labelledby="dash-band-h">
       <GateMark size={76} mode="open" />
       <div>
         <h2 id="dash-band-h">{m("band.title")}</h2>

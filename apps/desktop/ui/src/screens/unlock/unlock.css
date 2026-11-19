@@ -1,24 +1,98 @@
-/* Unlock. Ported from docs/ux/prototypes/02-unlock.html. Only tokens and app.css classes. */
-.solo:has(.unlock-screen) { background: radial-gradient(60% 50% at 50% 30%, var(--c-bg-surface) 0%, var(--c-bg-canvas) 70%); }
-.solo-wrap:has(.unlock-screen) { width: min(440px, 100%); }
-.unlock-screen .unlock { display: grid; gap: 22px; justify-items: stretch; }
-.unlock-screen .mark { justify-self: center; display: grid; }
-.unlock-screen h1 { text-align: center; font-size: var(--t-display-size); line-height: var(--t-display-line); letter-spacing: var(--t-display-track); font-weight: 680; }
+/* Unlock. A calm, centered gate: a faint guilloche of the three rings behind the mark, a serif headline, one brass action.
+   Only tokens and app.css classes. Anchored to the top of the page so errors and the wait timer grow downward (no jumps). */
+.solo:has(.unlock-screen) {
+  align-items: start; overflow: clip;
+  padding-top: clamp(40px, 11vh, 104px);
+  background:
+    radial-gradient(46% 38% at 50% 14%, var(--brass-wash) 0%, transparent 100%),
+    radial-gradient(70% 60% at 50% 22%, var(--c-bg-surface) 0%, var(--c-bg-canvas) 72%);
+}
+.solo-wrap:has(.unlock-screen) { width: min(420px, 100%); }
+
+/* The guilloche is centered on the gate mark (mark is 120 px tall, the block starts 100 px above the screen block). */
+.unlock-screen.guilloche::before {
+  inset: -100px -50vw -400px; --gx: 50%; --gy: 160px;
+  -webkit-mask-image: radial-gradient(circle 440px at var(--gx) var(--gy), black 0, transparent 100%);
+  mask-image: radial-gradient(circle 440px at var(--gx) var(--gy), black 0, transparent 100%);
+}
+/* No overflow:clip (older WebKitGTK): keep the pattern inside the viewport so it never adds a scrollbar. */
+@supports not (overflow: clip) {
+  .unlock-screen.guilloche::before { inset: -100px calc(50% - 48vw) 0; }
+}
+
+.unlock-screen .unlock { display: grid; gap: 20px; justify-items: stretch; }
+.unlock-screen .mark { justify-self: center; display: grid; position: relative; margin-bottom: 4px; }
+/* Soft brass halo behind the mark. */
+.unlock-screen .mark::before { content: ""; position: absolute; inset: -34px; border-radius: 50%; background: radial-gradient(closest-side, var(--brass-glow), transparent); pointer-events: none; }
+.unlock-screen .mark .gate { position: relative; filter: drop-shadow(0 6px 14px var(--brass-wash)); }
+/* The closed gate is brass on this screen: the signature of the app, not a disabled grey. */
+.unlock-screen .mark .gate.is-locked circle { stroke: var(--c-ring-gate); }
+.unlock-screen .mark .gate.is-locked .r1 { opacity: 0.95; }
+.unlock-screen .mark .gate.is-locked .r2 { opacity: 0.75; }
+.unlock-screen .mark .gate.is-locked .r3 { opacity: 0.55; }
+.unlock-screen .mark .gate.is-locked .core { fill: var(--c-ring-gate); }
+
+.unlock-screen h1 { text-align: center; font-size: 44px; line-height: 48px; letter-spacing: 0.002em; text-wrap: balance; }
 .unlock-screen h1:focus { outline: none; }
-.unlock-screen .sub { text-align: center; color: var(--c-text-secondary); margin-top: -12px; }
-.unlock-screen .ops { display: grid; gap: 6px; border: 0; padding: 0; margin: 0; min-width: 0; }
-.unlock-screen .ops legend { font-weight: 550; font-size: var(--t-body-sm-size); color: var(--c-text-secondary); margin-bottom: 6px; padding: 0; }
-.unlock-screen .op { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--c-border-subtle); background: var(--c-bg-surface); cursor: pointer; }
-.unlock-screen .op:has(input:checked) { border-color: var(--c-ring-gate); background: var(--c-bg-raised); }
-.unlock-screen .op:has(input:focus-visible) { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
-.unlock-screen .op input { accent-color: var(--c-accent-solid); width: 16px; height: 16px; margin: 0; }
-.unlock-screen .op .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.unlock-screen .avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--c-accent-tint); color: var(--c-accent-on-tint); font-weight: 650; font-size: 13px; flex: none; }
-.unlock-screen .tries { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: var(--t-body-sm-size); color: var(--c-text-muted); }
+.unlock-screen .sub { text-align: center; color: var(--c-text-secondary); margin-top: -8px; text-wrap: balance; }
+.unlock-screen .unlock > p.small.muted { margin-top: -6px; text-wrap: balance; }
+
+/* Operator picker: one hairline list, the chosen row picked out in brass. */
+.unlock-screen .ops { display: grid; gap: 0; border: 0; padding: 0; margin: 10px 0 0; min-width: 0; }
+.unlock-screen .ops legend,
+.unlock-screen .field > label { font-size: var(--t-caption-size); line-height: var(--t-caption-line); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-text-muted); padding: 0; }
+.unlock-screen .ops legend { margin-bottom: 8px; }
+.unlock-screen .op {
+  position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 14px; min-height: 52px;
+  border: 1px solid var(--hair); margin-top: -1px; background: var(--c-bg-surface); cursor: pointer;
+  transition: background-color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard);
+}
+.unlock-screen .op:first-of-type { margin-top: 0; border-radius: var(--r-md) var(--r-md) 0 0; box-shadow: var(--sh-raised); }
+.unlock-screen .op:last-of-type { border-radius: 0 0 var(--r-md) var(--r-md); }
+.unlock-screen .op:only-of-type { border-radius: var(--r-md); }
+.unlock-screen .op:hover { background: var(--c-bg-raised); }
+.unlock-screen .op:has(input:checked) { z-index: 1; border-color: color-mix(in srgb, var(--c-accent-solid) 70%, transparent); background: var(--c-bg-raised); box-shadow: inset 0 0 0 1px var(--brass-glow), inset 0 0 24px var(--brass-wash); }
+.unlock-screen .op:has(input:focus-visible) { z-index: 2; outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
+.unlock-screen .op:has(input:disabled) { cursor: default; }
+/* The radio is a small ring that closes on a brass core when chosen, like the gate mark. */
+.unlock-screen .op input {
+  appearance: none; -webkit-appearance: none; flex: none; width: 16px; height: 16px; margin: 0; cursor: inherit;
+  border-radius: 50%; border: 1.5px solid var(--c-border-default); background: transparent;
+  transition: border-color var(--d-fast) var(--ease-standard), box-shadow var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard);
+}
+.unlock-screen .op input:checked { border-color: var(--c-ring-gate); background: var(--c-ring-gate); box-shadow: inset 0 0 0 3px var(--c-bg-raised); }
+.unlock-screen .op input:focus-visible { outline: none; }
+/* Forced colors drop backgrounds and shadows: the chosen operator is the filled radio plus a system-color outline. */
+@media (forced-colors: active) {
+  .unlock-screen .op input:checked { forced-color-adjust: none; background: Highlight; border-color: Highlight; box-shadow: inset 0 0 0 3px Canvas; }
+  .unlock-screen .op:has(input:checked) { outline: 2px solid Highlight; outline-offset: -2px; }
+  .unlock-screen .op:has(input:focus-visible) { outline-color: CanvasText; outline-offset: 2px; }
+}
+.unlock-screen .op .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 520; }
+.unlock-screen .op .small.muted { font-size: var(--t-caption-size); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+.unlock-screen .avatar {
+  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: var(--brass-wash); color: var(--c-accent-fg); border: 1px solid color-mix(in srgb, var(--c-accent-solid) 55%, transparent);
+  font-family: var(--font-display); font-style: italic; font-size: 16px; line-height: 1; padding-bottom: 1px;
+}
+
+.unlock-screen .field { gap: 8px; }
+.unlock-screen .input.lg { height: 50px; letter-spacing: 0.04em; }
+.unlock-screen .unlock > .btn.lg { height: 48px; margin-top: 2px; letter-spacing: 0.01em; }
+.unlock-screen .unlock > .btn.lg:disabled, .unlock-screen .unlock > .btn.lg[aria-disabled="true"] { filter: saturate(0.6); }
+
+/* Footer: tries on the left, the other way in on the right, under a hairline. */
+.unlock-screen .tries { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: var(--t-body-sm-size); color: var(--c-text-muted); padding-top: 14px; border-top: 1px solid var(--hair); margin-top: 2px; }
 .unlock-screen .tries .warn { color: var(--c-warning-fg); }
+.unlock-screen .tries > .btn { flex: none; margin-right: -8px; }
 .unlock-screen .center { justify-content: center; }
-.unlock-screen .wait { text-align: center; font-size: var(--t-display-lg-size); line-height: var(--t-display-lg-line); font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--c-warning-fg); }
+.unlock-screen .unlock > .btn.lg + .btn.lg { margin-top: -10px; }
+/* The wait timer: sans digits (tabular, so the line never jitters), light weight, one warning color. */
+.unlock-screen .wait { text-align: center; font-size: 52px; line-height: 56px; font-weight: 300; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; color: var(--c-warning-fg); padding: 4px 0 2px; }
 .unlock-screen .code { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-muted); text-align: center; }
+.unlock-screen .stack .code { text-align: left; padding: 8px 10px; border: 1px solid var(--hair-ctl); border-radius: var(--r-sm); background: var(--c-bg-sunken); box-shadow: var(--sh-inset); overflow-wrap: anywhere; color: var(--c-text-secondary); }
+.unlock-screen .stack > .label { font-size: var(--t-caption-size); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-text-muted); }
+.unlock-screen .skeleton { width: 100%; }
 .unlock-screen .opening .gate .r1 { animation: unlock-open var(--d-gate) var(--ease-standard) forwards; }
 .unlock-screen .opening .gate .r2 { animation: unlock-open var(--d-gate) var(--ease-standard) 60ms forwards; }
 .unlock-screen .opening .gate .r3 { animation: unlock-open var(--d-gate) var(--ease-standard) 120ms forwards; }
@@ -27,3 +101,6 @@
   .unlock-screen .opening .gate .r1, .unlock-screen .opening .gate .r2, .unlock-screen .opening .gate .r3 { animation: none; opacity: 0.25; }
 }
 .unlock-screen .center-text { text-align: center; }
+@media (max-width: 480px) {
+  .unlock-screen h1 { font-size: 36px; line-height: 40px; }
+}

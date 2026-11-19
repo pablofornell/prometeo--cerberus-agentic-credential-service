@@ -16,7 +16,7 @@ function shadows(theme) {
   return Object.entries(t.shadow[theme]).map(([k, val]) => `  --sh-${k}: ${val};`).join("\n");
 }
 const shared = [];
-shared.push(`  --font-sans: ${t.font["family.sans"]};`, `  --font-mono: ${t.font["family.mono"]};`);
+shared.push(`  --font-sans: ${t.font["family.sans"]};`, `  --font-display: ${t.font["family.display"]};`, `  --font-mono: ${t.font["family.mono"]};`);
 for (const [k, s] of Object.entries(t.type)) {
   if (k.startsWith("$")) continue;
   shared.push(`  --t-${k}-size: ${s.size};`, `  --t-${k}-line: ${s.line};`, `  --t-${k}-weight: ${s.weight};`, `  --t-${k}-track: ${s.tracking};`);

@@ -18,7 +18,11 @@ const shadows = (theme) =>
   Object.entries(t.shadow[theme]).map(([k, val]) => `  --sh-${k}: ${val};`).join("\n");
 const indent = (text) => text.replace(/^/gm, "  ");
 
-const shared = [`  --font-sans: ${t.font["family.sans"]};`, `  --font-mono: ${t.font["family.mono"]};`];
+const shared = [
+  `  --font-sans: ${t.font["family.sans"]};`,
+  `  --font-display: ${t.font["family.display"]};`,
+  `  --font-mono: ${t.font["family.mono"]};`,
+];
 for (const [k, s] of Object.entries(t.type)) {
   if (k.startsWith("$")) continue;
   shared.push(

@@ -377,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "cerberus-api"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "cerberus-core",
@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "cerberus-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cerberus-crypto",
  "cerberus-store",
@@ -431,7 +431,7 @@ dependencies = [
 
 [[package]]
 name = "cerberus-crypto"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "argon2",
  "cerberus-types",
@@ -473,7 +473,7 @@ dependencies = [
 
 [[package]]
 name = "cerberus-mcp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "cerberus-api",
@@ -489,7 +489,7 @@ dependencies = [
 
 [[package]]
 name = "cerberus-ssh-agent"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cerberus-core",
  "cerberus-types",
@@ -502,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "cerberus-store"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cerberus-crypto",
  "cerberus-types",
@@ -519,7 +519,7 @@ dependencies = [
 
 [[package]]
 name = "cerberus-types"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "jiff",
  "serde",

@@ -9,7 +9,7 @@ Example: a QA agent needs the staging login for `shop-frontend`. It asks for the
 It does not need to know the user name. Cerberus returns the best item the agent may read, or it asks the person
 for approval first.
 
-Status: version 0.1.0. Linux installers (deb, rpm, AppImage) and binary tarballs are built with `just package`
+Status: version 0.2.0. Linux installers (deb, rpm, AppImage) and binary tarballs are built with `just package`
 and `just package-binaries`; see [packaging and release](docs/guides/packaging-and-release.md). macOS and Windows
 builds are set up in CI but not yet tested. Final acceptance: [docs/acceptance-report.md](docs/acceptance-report.md).
 

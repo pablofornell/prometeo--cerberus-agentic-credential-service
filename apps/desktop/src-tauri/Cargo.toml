@@ -16,7 +16,7 @@ name = "cerberus_desktop"
 path = "src/lib.rs"
 
 [dependencies]
-cerberus-api = { path = "../../../crates/cerberus-api", version = "0.1.0" }
+cerberus-api = { path = "../../../crates/cerberus-api", version = "0.2.0" }
 cerberus-core.workspace = true
 cerberus-mcp.workspace = true
 cerberus-crypto.workspace = true

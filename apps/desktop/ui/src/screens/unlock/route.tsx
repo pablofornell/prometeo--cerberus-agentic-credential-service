@@ -85,7 +85,7 @@ export default function UnlockScreen() {
   const status = useVaultStatus();
   const stranded = status.data?.stranded_restore ?? [];
   return (
-    <div className="unlock-screen" data-screen="unlock">
+    <div className="unlock-screen guilloche" data-screen="unlock">
       {status.data?.state === "no_vault" ? stranded.length > 0 ? <Stranded paths={stranded} /> : <NoVault /> : <UnlockForm />}
     </div>
   );

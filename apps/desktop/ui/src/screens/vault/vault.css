@@ -1,64 +1,108 @@
-/* Vault browser (screen 4). Prefix vb- keeps these rules away from other screens. Tokens only. */
+/* Vault browser (screen 4). Prefix vb- keeps these rules away from other screens. Tokens only.
+   Three panes (rail, list, details) that scroll on their own, so the details stay in view while the list moves. */
 main.content:has(> .vb-browser) { padding: 0; gap: 0; }
-.vb-browser { display: grid; grid-template-columns: 220px minmax(0, 1fr) clamp(340px, 30vw, 420px); min-height: calc(100vh - 96px); }
+.vb-browser { display: grid; grid-template-columns: 224px minmax(0, 1fr) clamp(340px, 30vw, 420px); grid-template-rows: minmax(0, 1fr); height: calc(100vh - var(--topbar-h)); min-height: 480px; }
 /* Nothing selected: the placeholder needs less room than an open item. */
-.vb-browser:has(> .vb-drawer.is-empty) { grid-template-columns: 220px minmax(0, 1fr) 280px; }
+.vb-browser:has(> .vb-drawer.is-empty) { grid-template-columns: 224px minmax(0, 1fr) 300px; }
 
-.vb-facets { border-right: 1px solid var(--c-border-subtle); padding: 16px 10px; display: grid; gap: 18px; align-content: start; }
-.vb-facet-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px; margin-bottom: 4px; min-height: 28px; }
-.vb-facet-head h2 { font-size: var(--t-body-sm-size); color: var(--c-text-muted); font-weight: 600; }
+/* Rail: workspaces, categories, tags. One engraved label per group. */
+.vb-facets { min-height: 0; overflow-y: auto; border-right: 1px solid var(--hair); padding: 18px 10px 24px; display: grid; gap: 22px; align-content: start; }
+.vb-facet-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px; margin-bottom: 6px; min-height: 28px; }
+.vb-facet-head h2 { font-size: var(--t-caption-size); line-height: var(--t-caption-line); color: var(--c-text-muted); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
 .vb-facets ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
-.vb-facets ul button { all: unset; box-sizing: border-box; width: 100%; display: flex; gap: 8px; align-items: center; padding: 5px 8px; border-radius: var(--r-sm); color: var(--c-text-secondary); cursor: pointer; }
+.vb-facets ul button { all: unset; box-sizing: border-box; width: 100%; min-height: 30px; display: flex; gap: 9px; align-items: center; padding: 4px 8px; border-radius: var(--r-sm); color: var(--c-text-secondary); cursor: pointer;
+  transition: background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
+.vb-facets ul button .icon { color: var(--c-text-muted); transition: color var(--d-fast) var(--ease-standard); }
 .vb-facets ul button:hover { background: var(--c-bg-hover); color: var(--c-text-primary); }
+.vb-facets ul button:hover .icon { color: var(--c-text-secondary); }
 .vb-facets ul button:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: -2px; }
-.vb-facets ul button[aria-pressed="true"] { background: var(--c-bg-selected); color: var(--c-text-primary); font-weight: 560; }
+.vb-facets ul button[aria-pressed="true"] { background: var(--c-bg-selected); color: var(--c-text-primary); box-shadow: inset 2px 0 0 var(--c-ring-gate); }
+.vb-facets ul button[aria-pressed="true"] .icon { color: var(--c-accent-fg); }
 .vb-facets .n { margin-left: auto; font-size: 12px; color: var(--c-text-muted); font-variant-numeric: tabular-nums; }
 .vb-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px; }
 .vb-facet-empty { padding: 0 8px; }
 
-.vb-listcol { min-width: 0; display: flex; flex-direction: column; container: vb-list / inline-size; }
+/* List column: search, filters, a status strip with the view switch, then the scrolling list. */
+.vb-listcol { min-width: 0; min-height: 0; display: flex; flex-direction: column; container: vb-list / inline-size; }
+.vb-listcol > ul { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.vb-listcol > .state-block { margin: auto; }
+.vb-listcol > .skeleton { flex: 0 0 auto; margin: 16px; }
+.vb-facets > .skeleton { margin: 0 8px; }
 /* A narrow list keeps the whole title: the badges move under it. */
-@container vb-list (max-width: 500px) {
+@container vb-list (max-width: 540px) {
   .vb-items > li { flex-wrap: wrap; row-gap: 6px; }
   .vb-items .grow { flex: 1 1 calc(100% - 50px); }
   .vb-items .vb-meta { flex: 1 1 100%; padding-left: 42px; flex-wrap: wrap; }
 }
-.vb-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--c-border-subtle); }
-.vb-search { flex: 1 1 100%; position: relative; display: block; }
+.vb-toolbar { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr); gap: 8px; padding: 14px 16px 12px; }
+.vb-search { grid-column: 1 / -1; position: relative; display: block; }
 .vb-search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--c-text-muted); pointer-events: none; }
 .vb-search input { padding-left: 32px; }
-.vb-toolbar select.input { width: auto; height: var(--ctl-sm, 32px); }
-.vb-count { padding: 8px 16px; font-size: var(--t-body-sm-size); color: var(--c-text-muted); border-bottom: 1px solid var(--c-border-subtle); }
+.vb-toolbar select.input { width: 100%; min-width: 0; height: var(--ctl-sm, 32px); font-size: var(--t-body-sm-size); padding-left: 8px; padding-right: 24px; text-overflow: ellipsis; background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%; }
+/* The view switch sits on the status strip below, so the filters keep one tidy row. */
+.vb-toolbar .seg { position: absolute; right: 16px; top: calc(100% + 6px); z-index: 1; }
+.vb-count { display: flex; align-items: center; min-height: 42px; padding: 0 144px 0 16px; font-size: var(--t-body-sm-size); color: var(--c-text-muted); font-variant-numeric: tabular-nums; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
 
+/* Rows: the selection is an inset brass edge (no size change); prod keeps a red edge. */
 .vb-items > li:focus-visible, .vb-tiles > li:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: -2px; }
+.vb-items > li { align-items: flex-start; }
+.vb-items > li.prod:not([aria-selected="true"]) { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--c-danger-fg) 75%, transparent); }
+.vb-items > li .grow .title { font-weight: 560; }
+.vb-items > li .grow .sub { margin-top: 1px; }
 .vb-meta { display: flex; gap: 8px; align-items: center; flex: none; }
-.vb-tiles { list-style: none; margin: 0; padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
-.vb-tiles > li { display: grid; gap: 10px; padding: 14px; border-radius: var(--r-md); border: 1px solid var(--c-border-subtle); background: var(--c-bg-surface); cursor: pointer; align-content: start; }
-.vb-tiles > li:hover { background: var(--c-bg-hover); }
-.vb-tiles > li[aria-selected="true"] { border-color: var(--c-ring-gate); background: var(--c-bg-selected); }
+.vb-items > li .vb-meta { min-height: 22px; }
+
+/* Grid view: quiet tiles; selected is brass-edged, prod carries a red top edge. */
+.vb-tiles { list-style: none; margin: 0; padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(188px, 1fr)); grid-auto-rows: max-content; align-content: start; gap: 12px; }
+.vb-tiles > li { display: grid; grid-template-rows: auto 1fr auto; gap: 12px; padding: 14px; border-radius: var(--r-md); border: 1px solid var(--hair); background: var(--c-bg-surface); box-shadow: var(--sh-raised); cursor: pointer; min-width: 0;
+  transition: background-color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard); }
+.vb-tiles > li:hover { background: var(--c-bg-hover); border-color: var(--hair-ctl); }
+.vb-tiles > li.prod:not([aria-selected="true"]) { box-shadow: var(--sh-raised), inset 0 2px 0 color-mix(in srgb, var(--c-danger-fg) 75%, transparent); }
+.vb-tiles > li[aria-selected="true"] { border-color: var(--c-ring-gate); background: linear-gradient(180deg, var(--brass-wash), transparent 70%), var(--c-bg-selected); box-shadow: 0 0 0 1px var(--brass-glow); }
 .vb-tiles > li:focus-visible { outline-offset: 2px; }
 .vb-tiles .top { display: flex; justify-content: space-between; align-items: center; }
-.vb-tiles .title { font-weight: 600; overflow-wrap: anywhere; }
-.vb-tiles .sub { color: var(--c-text-muted); font-size: var(--t-body-sm-size); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vb-tiles .title { font-weight: 600; overflow-wrap: anywhere; line-height: 20px; }
+.vb-tiles .sub { color: var(--c-text-muted); font-size: var(--t-body-sm-size); margin-top: 2px; overflow-wrap: anywhere; }
+.vb-tiles .row-inline { min-height: 22px; }
 
-.vb-drawer { padding: 0; display: flex; flex-direction: column; }
-.vb-drawer > header { padding: 16px 20px; border-bottom: 1px solid var(--c-border-subtle); display: grid; gap: 8px; }
-.vb-drawer > header h2 { font-size: var(--t-title-lg-size); line-height: var(--t-title-lg-line); overflow-wrap: anywhere; }
+/* Details pane. */
+.vb-drawer { min-height: 0; overflow-y: auto; padding: 0; display: flex; flex-direction: column; }
+.vb-drawer.is-empty { justify-content: center; }
+.vb-drawer.is-empty .state-block { padding: 24px; }
+.vb-drawer > header { padding: 18px 20px 16px; border-bottom: 1px solid var(--hair); display: grid; gap: 10px; }
+.vb-drawer > header h2 { font-family: var(--font-display); font-weight: 400; font-size: 30px; line-height: 34px; letter-spacing: 0; overflow-wrap: anywhere; }
 .vb-drawer > header h2:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
-.vb-drawer .sec { padding: 16px 20px; border-bottom: 1px solid var(--c-border-subtle); display: grid; gap: 12px; }
-.vb-drawer .sec h3 { font-size: var(--t-body-sm-size); color: var(--c-text-muted); font-weight: 600; }
-.vb-secret-row { display: grid; gap: 4px; }
-.vb-drawer .acts { padding: 14px 20px; display: flex; gap: 8px; margin-top: auto; }
+.vb-drawer .sec { padding: 16px 20px 18px; border-bottom: 1px solid var(--hair); display: grid; gap: 12px; }
+.vb-drawer .sec h3 { font-size: var(--t-caption-size); line-height: var(--t-caption-line); color: var(--c-text-muted); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.vb-secret-row { display: grid; gap: 5px; }
+.vb-drawer .kv { grid-template-columns: 110px minmax(0, 1fr); gap: 12px 16px; align-items: center; }
+.vb-drawer .kv dd { display: block; font-variant-numeric: tabular-nums; }
+.vb-drawer .kv dd.row-inline { display: flex; }
+.vb-drawer .acts { position: sticky; bottom: 0; margin-top: auto; padding: 14px 20px; display: flex; gap: 8px; border-top: 1px solid var(--hair); background: var(--c-bg-surface); }
 .vb-loading-drawer { padding: 20px; }
 
+/* Narrower than 1200px the rail folds into a band of chips above, and the details stay in the grid beside the list
+   (never an overlay), so the list, the filters and the selection are all in view and usable. */
 @media (max-width: 1200px) {
-  .vb-browser { grid-template-columns: 200px minmax(0, 1fr); }
-  .vb-browser:has(> .vb-drawer.is-empty) { grid-template-columns: 200px minmax(0, 1fr); }
-  .vb-drawer, .vb-drawer.is-empty { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--c-border-subtle); }
-  .vb-drawer.is-empty { display: none; }
+  .vb-browser, .vb-browser:has(> .vb-drawer.is-empty) { grid-template-columns: minmax(0, 1fr) min(360px, 45%); grid-template-rows: auto minmax(0, 1fr); }
+  .vb-browser:has(> .vb-drawer.is-empty) { grid-template-columns: minmax(0, 1fr); }
+  .vb-drawer.is-empty, .vb-drawer.vb-loading-drawer { display: none; }
+  .vb-drawer { border-left: 1px solid var(--hair); }
+  .vb-facets { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr); border-right: 0; border-bottom: 1px solid var(--hair); overflow-y: visible; padding: 8px 16px; gap: 0; }
+  .vb-facets > div { display: flex; align-items: flex-start; gap: 12px; }
+  .vb-facet-head { flex: 0 0 104px; padding: 0; margin: 0; min-height: 30px; }
+  /* One scrolling line per group keeps the band short. */
+  .vb-facets ul, .vb-tags { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: nowrap; gap: 6px; padding: 2px 2px 5px; overflow-x: auto; }
+  .vb-facets ul button, .vb-tags .chip { flex: none; }
+  .vb-facets ul button { width: auto; min-height: 28px; padding: 2px 10px; border: 1px solid var(--hair); }
+  .vb-facet-empty { padding: 0; line-height: 30px; }
+  .vb-tags { padding-top: 5px; }
+  .vb-facets ul li { flex: none; }
 }
 @media (max-width: 760px) {
-  .vb-browser, .vb-browser:has(> .vb-drawer.is-empty) { grid-template-columns: 1fr; }
-  .vb-facets { border-right: 0; border-bottom: 1px solid var(--c-border-subtle); }
+  .vb-browser, .vb-browser:has(> .vb-drawer.is-empty) { grid-template-columns: 1fr; grid-template-rows: auto; height: auto; }
+  .vb-listcol > ul { overflow-y: visible; }
+  .vb-drawer, .vb-drawer.is-empty { position: static; width: auto; grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--hair); overflow-y: visible; box-shadow: none; }
+  .vb-drawer.vb-loading-drawer { display: block; }
   .vb-role { display: none; }
 }

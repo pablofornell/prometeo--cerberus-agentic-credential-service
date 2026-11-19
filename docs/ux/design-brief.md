@@ -28,7 +28,7 @@ other work when an approval window appears, so the window must be readable in 3 
 2. **Masked by default.** Secrets are dots in the mono face. A deliberate hold (500 ms) reveals. They hide again
    after 15 s. Copy clears the clipboard after 30 s. The UI states these times next to the control.
 3. **Prod is loud, the rest is calm.** Only `prod`, danger actions and broken integrity get red. The base palette is
-   cool graphite and brass. A screen full of red means something is wrong.
+   warm ink black, ivory and brass. A screen full of red means something is wrong.
 4. **Plain-word policy.** Grants read as sentences ("QA runner can read items in shop-frontend, env staging, and I
    approve: never"). Wire words (`ask_once`, `secrets:read`) appear only in mono, as secondary detail.
 5. **Every state is designed.** Ready, empty, loading, error and locked exist for every screen. Empty states invite
@@ -63,14 +63,26 @@ the only warm color in the dark theme besides warnings, so it marks "the gate" a
 
 ## 5. Look and feel
 
-- **Palette (dark first).** Graphite canvas `#131920`, surfaces stepped by about 4% lightness, brass accent
-  `#E0AE55`, coral danger `#FF8C82`, lichen green success `#71D4A2`, steel blue info `#90BDF6`. Light theme: cool
-  paper `#EEF1F4`, ink `#141B23`, darker brass `#875800` for text and `#93610A` for buttons. Full list in
-  `tokens.json`. Every text pair passes WCAG AA (`a11y-contrast-report.md`).
-- **Type.** Inter for all text (with `cv11`, `ss01`, tabular numbers for timers). JetBrains Mono only for secret
-  values, IDs, hashes, fingerprints, scopes and code. Scale 12 / 13 / 14 / 16 / 18 / 21 / 24 / 36 / 48 px, base 14.
+- **Palette, "Obsidian & Brass" (dark first).** Warm ink black, not blue slate: canvas `#0F0F10`, sunken `#0A0A0B`,
+  surfaces stepped about 4% (`#151517`, `#1B1B1E`), text `#EDEBE6` ivory. Brass is the only accent and marks the
+  gate: primary actions, the current nav item, gate rings and focus (`#C9A45C` solid, `#D9B46A` for text, champagne
+  `#E9D7AE` focus ring). Patina green (verdigris, the color brass turns) for success `#7CCBA6`, coral for danger
+  `#F2877C`, steel blue for info `#9DB8E0`. Light theme "vellum": ivory paper `#F6F4EF`, white panels, ink
+  `#1A1917`, bronze `#7A5410` for brass text and `#8A6118` for buttons. Neutrals are warm in both themes and
+  shadows are warm-tinted. Full list in `tokens.json`. Every text pair passes WCAG AA (`a11y-contrast-report.md`).
+- **Finish.** Hairline, not heavy: 1px alpha borders (`line.hair`), panels flat on the canvas with a faint inner top
+  highlight in dark, like a beveled metal edge. The primary button is polished brass (vertical gradient plus inset
+  top highlight), never flat yellow. Brass is used rarely. A very faint concentric "guilloche" of the gate rings
+  (2 to 4% opacity) may sit behind the unlock and create screens and the dashboard hero, nowhere else. Scrollbars
+  are thin and themed, text selection is a brass tint.
+- **Type.** Three families. Instrument Serif (400 and italic, local woff2, SIL OFL) for big moments only: the
+  brand wordmark, page titles in the top bar, the unlock and create headlines, the dashboard hero title, dialog
+  and drawer titles, empty-state titles. Inter for all UI text (with `cv11`, `ss01`, tabular numbers for timers).
+  JetBrains Mono only for secret values, IDs, hashes, fingerprints, scopes and code. Small engraved labels (panel
+  and table headers, group labels) are caption size, uppercase, tracking 0.08em, muted. Scale 12 / 13 / 14 / 16 /
+  18 / 21 / 24 / 36 / 48 px, base 14; the serif runs about one step larger than Inter because of its small x-height.
 - **Layout.** A 232 px rail (brand, navigation with `G` hints, and the "collar": who unlocked, auto-lock ring, Lock
-  and panic buttons). A 54 px top bar with the page title and the palette trigger. Content is left aligned.
+  and panic buttons). A 56 px top bar with the serif page title and the palette trigger. Content is left aligned.
   Panels have a header rule and a quiet body; they are not a grid of identical cards.
 - **Radius by hierarchy.** 3 px chips, 6 px controls, 8 px panels, 12 px dialogs and the approval window, full for rings.
 - **Untrusted text** has its own surface: dashed brass border, mono face, a fixed label above it.

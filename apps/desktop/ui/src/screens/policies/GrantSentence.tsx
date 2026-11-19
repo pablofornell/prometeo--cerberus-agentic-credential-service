@@ -13,6 +13,8 @@ export function ModeBadge({ mode }: { mode: GrantView_Serialize["mode"] }) {
 }
 
 const B = ({ children }: { children: ReactNode }) => <b>{children}</b>;
+/** A value that is also a wire word (workspace slug, environment, tag): mono, a step below the sentence. */
+const W = ({ children }: { children: ReactNode }) => <b className="wire">{children}</b>;
 
 function join(values: readonly string[], or: string): string {
   if (values.length <= 1) return values.join("");
@@ -41,7 +43,7 @@ export function GrantSentence({ grant, workspaces, id }: { grant: GrantView_Seri
   const or = s("sentence.or");
   const perms = grant.permissions.map((p) => s(`perm.${p}`));
   const extras: ReactNode[] = [];
-  if (sel.tags.length) extras.push(<span key="tags">{s("sentence.tags")} <B>{join(sel.tags.map((x) => `#${x}`), or)}</B></span>);
+  if (sel.tags.length) extras.push(<span key="tags">{s("sentence.tags")} <W>{join(sel.tags.map((x) => `#${x}`), or)}</W></span>);
   if (sel.kinds.length) extras.push(<span key="kinds">{s("sentence.kinds")} <B>{join(sel.kinds.map((k) => s(`kind.${k}`)), or)}</B></span>);
   if (sel.role_labels.length) extras.push(<span key="roles">{s("sentence.roles")} <B>{join(sel.role_labels, or)}</B></span>);
   if (sel.item_ids.length) extras.push(<span key="ids"><B>{s("sentence.items", { count: sel.item_ids.length })}</B></span>);
@@ -55,7 +57,7 @@ export function GrantSentence({ grant, workspaces, id }: { grant: GrantView_Seri
           {s("sentence.blocked")} <B>{s("sentence.blockedWord")}</B>{" "}
           {names.length ? (
             <>
-              {s("sentence.from")} {s("sentence.workspaceWord")} <B>{join(names, or)}</B>
+              {s("sentence.from")} {s("sentence.workspaceWord")} <W>{join(names, or)}</W>
             </>
           ) : (
             s("sentence.fromAny")
@@ -66,7 +68,7 @@ export function GrantSentence({ grant, workspaces, id }: { grant: GrantView_Seri
           {s("sentence.can")} <B>{join(perms, or)}</B>{" "}
           {names.length ? (
             <>
-              {s("sentence.itemsIn")} <B>{join(names, or)}</B>
+              {s("sentence.itemsIn")} <W>{join(names, or)}</W>
             </>
           ) : (
             s("sentence.inAny")
@@ -76,7 +78,7 @@ export function GrantSentence({ grant, workspaces, id }: { grant: GrantView_Seri
       ,{" "}
       {sel.environments.length ? (
         <>
-          {s("sentence.env")} <B>{join(sel.environments, or)}</B>
+          {s("sentence.env")} <W>{join(sel.environments, or)}</W>
         </>
       ) : (
         s("sentence.any.env")
