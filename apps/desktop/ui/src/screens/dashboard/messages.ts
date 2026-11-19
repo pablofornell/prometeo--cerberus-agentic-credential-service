@@ -13,6 +13,13 @@ export const messages = defineMessages({
   "band.waiting.one": "1 request waits for you",
   "band.leases": "{n} active leases",
   "band.leases.one": "1 active lease",
+  // The same three stats without the number: the label that sits under the figure. The full sentence above stays the screen-reader text.
+  "band.agents.label": "agents active",
+  "band.agents.label.one": "agent active",
+  "band.waiting.label": "requests wait for you",
+  "band.waiting.label.one": "request waits for you",
+  "band.leases.label": "active leases",
+  "band.leases.label.one": "active lease",
   "band.trace": "Activity now",
   "band.connect": "Connect an agent",
   "band.viewerNote": "You are signed in as a viewer. You can read the dashboard but not change anything.",

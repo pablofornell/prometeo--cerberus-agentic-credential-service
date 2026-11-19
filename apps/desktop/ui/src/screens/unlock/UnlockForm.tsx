@@ -5,8 +5,9 @@ import { useScreenT } from "../../i18n";
 import { ipc, isIpcFailure, type UiError } from "../../ipc/client";
 import { qk } from "../../ipc/keys";
 import { useCountdown, formatLeft } from "../../state/time";
-import { Button, ErrorState, errorText, Field, GateMark, Icon, Notice, Skeleton } from "../../ui";
+import { Button, ErrorState, errorText, Field, Icon, Notice, Skeleton } from "../../ui";
 import { useOperators, useVaultStatus } from "../../ipc/queries";
+import { Brand } from "./Brand";
 import { messages } from "./messages";
 
 const initials = (label: string) =>
@@ -58,11 +59,17 @@ export function UnlockForm() {
   useEffect(() => {
     if (waitedOut) (mode === "phrase" ? phraseRef : recoveryRef).current?.focus();
   }, [waitedOut, mode]);
+  // The fields are disabled while the key is derived (the form stays in place, so nothing moves), which drops focus.
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (wasBusy.current && !busy && !opening) (mode === "phrase" ? phraseRef : recoveryRef).current?.focus();
+    wasBusy.current = busy;
+  }, [busy, opening, mode]);
 
   const list = sortOperators(operators.data ?? []);
   const operator = list.find((o) => o.id === selected) ?? list[0];
 
-  const fail = (error: UiError | null) => {
+  const fail = async (error: UiError | null) => {
     setPhrase("");
     setRecovery("");
     setFailure(null);
@@ -75,7 +82,8 @@ export function UnlockForm() {
     } else if (code !== "too_many_failures") {
       setFailure(error ?? { code: "ipc_unreachable", message: "", command: mode === "phrase" ? "vault_unlock" : "vault_unlock_recovery", retryAfterSeconds: null, fields: [] });
     }
-    void queryClient.invalidateQueries({ queryKey: qk.vault.status() });
+    // Wait for the new tries count, so the status line goes straight from "Deriving" to the new count.
+    await queryClient.invalidateQueries({ queryKey: qk.vault.status() });
     queueMicrotask(() => (mode === "phrase" ? phraseRef : recoveryRef).current?.focus());
   };
 
@@ -90,10 +98,13 @@ export function UnlockForm() {
     setBusy(true);
     setProblem(null);
     setFailure(null);
+    // The secret leaves the fields (and the DOM) while the key is derived; it lives only in this call.
+    setPhrase("");
+    setRecovery("");
     try {
       if (mode === "phrase") {
         if (!operator) return;
-        await ipc.vaultUnlock(operator.id, phrase);
+        await ipc.vaultUnlock(operator.id, secret);
       } else {
         await ipc.vaultUnlockRecovery(secret);
       }
@@ -102,7 +113,7 @@ export function UnlockForm() {
       setOpening(true);
       await queryClient.invalidateQueries({ queryKey: qk.vault.status() });
     } catch (error) {
-      fail(isIpcFailure(error) ? error.error : null);
+      await fail(isIpcFailure(error) ? error.error : null);
     } finally {
       setBusy(false);
     }
@@ -111,8 +122,7 @@ export function UnlockForm() {
   if (operators.isPending) {
     return (
       <div className="unlock">
-        <span className="mark"><GateMark size={120} mode="locked" /></span>
-        <h1>{t("title")}</h1>
+        <Brand mode="locked" title={t("title")} />
         <Skeleton label={t("operators.loading")} rows={2} />
       </div>
     );
@@ -121,16 +131,6 @@ export function UnlockForm() {
     return (
       <div className="unlock">
         <ErrorState as="h1" action={t("operators.error")} error={operators.error} onRetry={() => void operators.refetch()} retrying={operators.isFetching} />
-      </div>
-    );
-  }
-
-  if (busy && !opening) {
-    return (
-      <div className="unlock" aria-busy="true">
-        <span className="mark"><GateMark size={120} mode="spin" /></span>
-        <h1 tabIndex={-1} ref={headingRef}>{t("loading.title")}</h1>
-        <p className="sub" role="status">{t("loading.body")}</p>
       </div>
     );
   }
@@ -145,19 +145,22 @@ export function UnlockForm() {
   const isWait = waiting;
 
   return (
-    <form className={opening ? "unlock opening" : "unlock"} noValidate onSubmit={(e) => void submit(e)}>
-      <span className="mark">
-        <GateMark size={120} mode={opening ? "open" : "locked"} />
-      </span>
-      <h1 tabIndex={-1} ref={headingRef}>{isWait ? t("wait.title") : t("title")}</h1>
-      {opening ? (
-        <p className="sub" role="status">{t("opening")}</p>
-      ) : isWait ? (
-        <p className="sub">{t("wait.body")}</p>
-      ) : (
-        <p className="sub">{t("sub")}</p>
+    <form className={opening ? "unlock opening" : "unlock"} noValidate aria-busy={busy || undefined} onSubmit={(e) => void submit(e)}>
+      <Brand mode={opening ? "open" : busy ? "spin" : "locked"} title={isWait ? t("wait.title") : busy ? t("loading.title") : t("title")} headingRef={headingRef}>
+        {opening ? (
+          <p className="sub" role="status">{t("opening")}</p>
+        ) : isWait ? (
+          <p className="sub">{t("wait.body")}</p>
+        ) : (
+          <p className="sub">{t("sub")}</p>
+        )}
+      </Brand>
+      {lockReason && !opening && (
+        <p className="reason">
+          <Icon name="lock" size={14} />
+          {t(`reason.${lockReason}`)}
+        </p>
       )}
-      {lockReason && !opening && <p className="small muted center-text">{t(`reason.${lockReason}`)}</p>}
 
       {isWait && (
         <div className="wait" role="timer" aria-live="off" aria-label={t("wait.timer")}>
@@ -182,14 +185,17 @@ export function UnlockForm() {
           {!isWait && list.length > 0 && (
             <fieldset className="ops">
               <legend>{t("who")}</legend>
-              {list.map((o) => (
-                <label className="op" key={o.id}>
-                  <input type="radio" name="operator" value={o.id} checked={o.id === operator?.id} onChange={() => setSelected(o.id)} disabled={busy || opening} />
-                  <span className="avatar" aria-hidden="true">{initials(o.label)}</span>
-                  <span className="grow">{o.label}</span>
-                  <span className="small muted">{t(`role.${o.role}`)}</span>
-                </label>
-              ))}
+              <div className="ops-list">
+                {list.map((o) => (
+                  <label className="op" key={o.id}>
+                    <input type="radio" name="operator" value={o.id} checked={o.id === operator?.id} onChange={() => setSelected(o.id)} disabled={busy || opening} />
+                    <span className="avatar" aria-hidden="true">{initials(o.label)}</span>
+                    <span className="name">{o.label}</span>
+                    <span className="role">{t(`role.${o.role}`)}</span>
+                    <Icon name="check" size={16} className="tick" />
+                  </label>
+                ))}
+              </div>
             </fieldset>
           )}
           <Field label={t("phrase.label")} {...(problem ? { problem } : {})}>
@@ -202,7 +208,7 @@ export function UnlockForm() {
                 autoFocus
                 autoComplete="current-password"
                 spellCheck={false}
-                disabled={isWait || opening}
+                disabled={isWait || opening || busy}
                 aria-label={isWait ? t("wait.phrase.disabled") : undefined}
                 value={phrase}
                 onChange={(e) => {
@@ -225,7 +231,7 @@ export function UnlockForm() {
               autoComplete="off"
               spellCheck={false}
               placeholder={t("recovery.placeholder")}
-              disabled={isWait || opening}
+              disabled={isWait || opening || busy}
               value={recovery}
               onChange={(e) => {
                 setRecovery(e.target.value);
@@ -236,17 +242,19 @@ export function UnlockForm() {
         </Field>
       )}
 
-      <Button variant="primary" size="lg" type="submit" icon="unlock" className="center" disabled={isWait || opening} aria-disabled={isWait || opening}>
+      <Button variant="primary" size="lg" type="submit" icon="unlock" loading={busy} disabled={isWait || opening} aria-disabled={isWait || opening}>
         {t("submit")}
       </Button>
       <div className="tries">
-        <span className={failedTries > 0 ? "warn" : undefined}>
-          {failedTries > 0 && <Icon name="alert" size={13} />} {triesText}
+        {/* While the key is derived, this line says so, in the place of the tries (it is always a live region). */}
+        <span role="status" className={failedTries > 0 && !busy ? "warn" : undefined}>
+          {failedTries > 0 && !busy && <Icon name="alert" size={14} />}
+          {busy ? t("loading.body") : triesText}
         </span>
         <Button
           size="sm"
           variant="ghost"
-          disabled={opening}
+          disabled={opening || busy}
           onClick={() => {
             setMode(mode === "phrase" ? "recovery" : "phrase");
             setProblem(null);

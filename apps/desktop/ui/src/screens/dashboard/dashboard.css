@@ -1,67 +1,74 @@
 /* Dashboard. Tokens and classes of styles/app.css only. */
 .dash { display: grid; gap: 20px; }
 
-/* Hero: the signature. A serif headline, the gate mark on a faint guilloche, a brass thread on the top edge and the gate trace as a readout strip. */
-.dash .band { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 28px; align-items: center; padding: 26px 28px; border-radius: var(--r-lg); border: 1px solid var(--hair);
-  background: radial-gradient(90% 150% at 0% 50%, var(--brass-wash) 0%, transparent 62%), var(--c-bg-surface); box-shadow: var(--sh-raised); }
-.dash .band.guilloche::before { --gx: 66px; --gy: 50%; -webkit-mask-image: radial-gradient(circle at var(--gx) var(--gy), black 0, transparent 340px); mask-image: radial-gradient(circle at var(--gx) var(--gy), black 0, transparent 340px); }
-.dash .band::after { content: ""; position: absolute; left: 0; top: -1px; width: 34%; height: 1px; background: linear-gradient(90deg, var(--c-ring-gate), transparent); opacity: 0.75; pointer-events: none; }
-.dash .band h2 { font-family: var(--font-display); font-size: 40px; line-height: 44px; letter-spacing: -0.01em; font-weight: 400; margin: 0; }
-.dash .band .facts { display: flex; flex-wrap: wrap; gap: 4px 22px; margin-top: 6px; color: var(--c-text-secondary); }
-.dash .band .facts b { color: var(--c-accent-fg); font-family: var(--font-mono); font-weight: 600; font-size: 0.95em; font-variant-numeric: tabular-nums; }
+/* Header: a flat panel. The gate mark, the title and the facts on one line, then a strip of three stat figures under a hairline. */
+.dash .band { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 16px; row-gap: 20px; align-items: center; padding: 20px 24px 0; border-radius: var(--r-md); border: 1px solid var(--hair); background: var(--c-bg-surface); box-shadow: var(--sh-raised); }
+.dash .band h2 { font-size: var(--t-title-size); line-height: var(--t-title-line); letter-spacing: var(--t-title-track); font-weight: 600; margin: 0; }
+.dash .band .facts { display: flex; flex-wrap: wrap; gap: 0 20px; margin-top: 2px; color: var(--c-text-secondary); font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); }
+.dash .band .facts b { color: var(--c-text-primary); font-family: var(--font-mono); font-weight: 500; font-size: 0.95em; font-variant-numeric: tabular-nums; }
 .dash .band .acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.dash .band .flow { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hair); }
-.dash .band .trace .step + .step::before { width: 30px; background: var(--hair-ctl); margin: 0 10px; }
-.dash .band .trace .pass .dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-success-fg) 13%, transparent); }
-.dash .band .trace .step { font-variant-numeric: tabular-nums; }
+.dash .band .figs { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 -24px; border-top: 1px solid var(--hair); }
+.dash .band .fig { display: grid; gap: 4px; align-content: start; padding: 16px 24px 18px; min-width: 0; }
+.dash .band .fig + .fig { border-left: 1px solid var(--hair); }
+.dash .band .fig .n { font-size: var(--t-display-size); line-height: 36px; font-weight: 600; letter-spacing: var(--t-display-track); font-variant-numeric: tabular-nums; color: var(--c-text-primary); }
+.dash .band .fig.warn .n { color: var(--c-warning-fg); }
+.dash .band .fig .l { font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); color: var(--c-text-secondary); }
+.dash .band .viewer-note { grid-column: 1 / -1; margin: 0 -24px; padding: 12px 24px; border-top: 1px solid var(--hair); background: var(--c-bg-sunken); border-radius: 0 0 var(--r-md) var(--r-md); }
 
-/* Waiting for you: prod is loud (red edge and wash), the rest is calm (a neutral hairline edge). */
-.dash .queue li { position: relative; box-shadow: inset 2px 0 0 var(--hair-ctl); }
-.dash .queue li.prod { box-shadow: inset 3px 0 0 var(--c-danger-fg); background: color-mix(in srgb, var(--c-danger-tint) 55%, transparent); }
+/* Waiting for you: prod is loud (a red edge and a faint tint), the rest is calm. */
+.dash .queue li { position: relative; }
+.dash .queue li.prod { box-shadow: inset 2px 0 0 var(--c-danger-fg); background: var(--c-danger-tint); }
 .dash .queue li .sub:first-of-type { color: var(--c-text-secondary); }
 
 /* Health */
 .dash .health li { align-items: flex-start; }
 .dash .health li .status { padding-top: 3px; }
 .dash .health li .grow { display: grid; gap: 1px; }
-.dash .health li .grow > span:first-child { font-weight: 520; }
+.dash .health li .grow > span:first-child { font-weight: 500; }
 
-/* Live feed: a time column, the sentence, an engraved outcome. */
+/* Live feed: a time column, the sentence, the outcome in plain words. */
 .dash .feed li { align-items: flex-start; }
 .dash .feed time { width: 62px; flex: none; color: var(--c-text-muted); font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 2px; }
 .dash .feed .what { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--c-text-secondary); }
-.dash .feed .what .ag { font-weight: 600; color: var(--c-text-primary); }
-.dash .feed .what .target { font-weight: 560; color: var(--c-text-primary); }
-.dash .out { font-size: 11px; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; padding-top: 3px; }
+.dash .feed .what .ag { font-weight: 500; color: var(--c-text-primary); }
+.dash .feed .what .target { font-weight: 500; color: var(--c-text-primary); }
+.dash .out { font-size: 12px; line-height: 18px; font-weight: 500; white-space: nowrap; padding-top: 2px; }
 .dash .out.ok { color: var(--c-success-fg); }
-.dash .out.wait { color: var(--c-accent-fg); }
+.dash .out.wait { color: var(--c-text-primary); }
 .dash .out.bad { color: var(--c-danger-fg); }
 .dash .out.info { color: var(--c-text-muted); }
-.dash .panel-note { padding: 18px 16px; color: var(--c-text-secondary); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+/* Empty and failed parts of a panel: a quiet centered line with a fixed minimum height, so the panel does not jump when data arrives. */
+.dash .panel-note { min-height: 96px; padding: 24px 16px; color: var(--c-text-muted); font-size: var(--t-body-sm-size); display: flex; gap: 12px; align-items: center; justify-content: center; text-align: center; flex-wrap: wrap; }
+.dash .panel-note[role="alert"] { color: var(--c-text-secondary); }
 .dash .panel > header { min-height: 48px; }
+/* Loading keeps the footprint of the page: a header block, then two panels of rows. */
+.dash > .skeleton.block .skel.block { height: 176px; }
+.dash .panel > header .skel { width: 112px; height: 14px; }
+.dash .skeleton.rows { box-shadow: none; border: 0; border-radius: 0; background: transparent; }
 .dash .rows .sub.wrap { white-space: normal; }
 .dash .viewer-note { color: var(--c-text-secondary); }
+.dash > .state-block { padding-bottom: 0; }
 .dash-empty { display: grid; justify-items: center; gap: 12px; }
 .dash-empty .steps { list-style: none; counter-reset: s; padding: 0; margin: 0; display: grid; gap: 10px; text-align: left; width: 100%; max-width: 560px; }
-.dash-empty .steps li { counter-increment: s; display: flex; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--c-bg-surface); box-shadow: var(--sh-raised); }
-.dash-empty .steps li::before { content: counter(s); width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--c-ring-gate); color: var(--c-accent-fg); font-family: var(--font-display); font-size: 17px; line-height: 1; padding-bottom: 1px; flex: none; }
+.dash-empty .steps li { counter-increment: s; display: flex; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--c-bg-surface); }
+.dash-empty .steps li::before { content: counter(s); width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--hair-ctl); color: var(--c-text-secondary); font-size: 12px; font-weight: 600; line-height: 1; flex: none; font-variant-numeric: tabular-nums; }
 .dash-empty .steps li .grow { flex: 1; }
 
 /* Connect guide. */
 .connect { display: grid; gap: 18px; }
 .connect .facts-grid { display: grid; gap: 10px; }
-.connect .fact { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--c-bg-sunken); box-shadow: var(--sh-inset); }
-.connect .fact .k { grid-column: 1 / -1; color: var(--c-text-muted); font-size: var(--t-caption-size); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.connect .fact { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--c-bg-sunken); }
+.connect .fact .k { grid-column: 1 / -1; color: var(--c-text-muted); font-size: var(--t-caption-size); font-weight: 500; }
 .connect .fact code { font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
 .connect ol.guide { list-style: none; counter-reset: g; padding: 0; margin: 0; display: grid; gap: 16px; }
-.connect ol.guide > li { counter-increment: g; display: grid; gap: 8px; padding-left: 38px; position: relative; }
-.connect ol.guide > li::before { content: counter(g); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--c-ring-gate); color: var(--c-accent-fg); font-family: var(--font-display); font-size: 17px; line-height: 1; padding-bottom: 1px; }
+.connect ol.guide > li { counter-increment: g; display: grid; gap: 8px; padding-left: 34px; position: relative; }
+.connect ol.guide > li::before { content: counter(g); position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--hair-ctl); color: var(--c-text-secondary); font-size: 12px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
 .connect .step-title { font-weight: 600; }
-.connect pre.code-block { margin: 0; padding: 12px 14px; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--c-bg-sunken); box-shadow: var(--sh-inset); font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; overflow-x: auto; white-space: pre; color: var(--c-text-primary); }
+.connect pre.code-block { margin: 0; padding: 12px 14px; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--c-bg-sunken); font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; overflow-x: auto; white-space: pre; color: var(--c-text-primary); }
 .connect pre.code-block:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
 .connect .snippet { display: grid; gap: 6px; }
 .connect .snippet .snippet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .connect .snippet .label { font-size: var(--t-body-sm-size); color: var(--c-text-secondary); font-family: var(--font-mono); }
 .connect .tab-body { display: grid; gap: 12px; padding-top: 12px; }
-@media (max-width: 960px) { .dash .band { grid-template-columns: auto minmax(0, 1fr); } .dash .band .acts { grid-column: 1 / -1; justify-content: flex-start; } .dash .band .trace { flex-wrap: wrap; gap: 8px 22px; } .dash .band .trace .step { white-space: nowrap; } .dash .band .trace .step + .step::before { display: none; } }
-@media (max-width: 760px) { .dash .band { grid-template-columns: minmax(0, 1fr); padding: 18px 16px; } .dash .band .flow { flex-direction: column; align-items: flex-start; gap: 6px; } .dash .band .flow .step + .step::before { display: none; } }
+@media (max-width: 960px) { .dash .band { grid-template-columns: auto minmax(0, 1fr); } .dash .band .acts { grid-column: 1 / -1; justify-content: flex-start; } }
+@media (max-width: 760px) { .dash .band { grid-template-columns: minmax(0, 1fr); padding: 16px 16px 0; } .dash .band .figs, .dash .band .viewer-note { margin: 0 -16px; } .dash .band .figs { grid-template-columns: minmax(0, 1fr); } .dash .band .fig { padding: 12px 16px; } .dash .band .fig + .fig { border-left: 0; border-top: 1px solid var(--hair); } .dash .band .viewer-note { padding: 12px 16px; } }

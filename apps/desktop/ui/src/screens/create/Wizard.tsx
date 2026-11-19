@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { errorText } from "../../ui";
 import { ipc, isIpcFailure, type UiError } from "../../ipc/client";
 import { useScreenT } from "../../i18n";
@@ -16,13 +16,25 @@ type Phase = "form" | "creating" | "failed" | "recovery";
 const STEP_KEYS = ["step.name", "step.phrase", "step.cost", "step.recovery"] as const;
 const PHRASE_WORDS = 7;
 
+/** The five spectrum colors, as the variables of tokens.css. They appear on one thin stroke only: the ring of the current step. */
+const SPECTRUM_VARS = ["--c-spectrum-red", "--c-spectrum-amber", "--c-spectrum-green", "--c-spectrum-blue", "--c-spectrum-violet"] as const;
+
 function Rings({ step }: { step: Step }) {
+  const grad = `${useId().replace(/[^a-zA-Z0-9_-]/g, "")}-rings`;
   const cls = (k: number) => (k < step ? "done" : k === step ? "now" : "");
+  const props = (k: number) => ({ className: cls(k), ...(k === step ? { style: { stroke: `url(#${grad})` } } : {}) });
   return (
     <svg className="rings" viewBox="0 0 200 200" aria-hidden="true" focusable="false">
-      <circle className={cls(1)} cx="100" cy="100" r="92" />
-      <circle className={cls(2)} cx="100" cy="100" r="68" />
-      <circle className={cls(3)} cx="100" cy="100" r="44" />
+      <defs>
+        <linearGradient id={grad} gradientUnits="userSpaceOnUse" x1="8" y1="192" x2="192" y2="8">
+          {SPECTRUM_VARS.map((name, i) => (
+            <stop key={name} offset={i / (SPECTRUM_VARS.length - 1)} style={{ stopColor: `var(${name})` }} />
+          ))}
+        </linearGradient>
+      </defs>
+      <circle {...props(1)} cx="100" cy="100" r="92" />
+      <circle {...props(2)} cx="100" cy="100" r="68" />
+      <circle {...props(3)} cx="100" cy="100" r="44" />
       <circle className={`core ${cls(4)}`} cx="100" cy="100" r="18" />
     </svg>
   );
@@ -119,7 +131,7 @@ export function Wizard() {
   if (phase === "creating") {
     body = (
       <div className="state-block" role="status" aria-busy="true">
-        <GateMark size={88} mode="spin" />
+        <GateMark size={48} mode="spin" />
         <h1 id="create-h" tabIndex={-1}>
           {t("creating.title")}
         </h1>

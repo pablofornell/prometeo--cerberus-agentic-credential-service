@@ -1,27 +1,26 @@
-/* Agents screen, "Obsidian & Brass". Tokens and base classes come from styles/app.css. */
+/* Agents screen. Tokens and base classes come from styles/app.css. */
 .agents { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
 .agents .rows li { padding: 0; }
 
-/* Agent list: one quiet row per agent, a brass edge marks the one open on the right. */
+/* Agent list: one quiet row per agent; the one open on the right takes the selected fill and an inset rule. */
 .row-btn { all: unset; box-sizing: border-box; display: flex; gap: 12px; align-items: center; width: 100%; padding: var(--row-y, 10px) 14px; cursor: pointer; transition: background-color var(--d-fast) var(--ease-standard), box-shadow var(--d-fast) var(--ease-standard); }
 .row-btn:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: -2px; }
 .row-btn .grow { display: grid; min-width: 0; }
 .row-btn:hover { background: var(--c-bg-hover); }
-.row-btn[aria-current="true"] { background: var(--c-bg-selected); box-shadow: inset 2px 0 0 var(--c-ring-gate); }
-.agents .rows .title { font-weight: 560; }
+.row-btn[aria-current="true"] { background: var(--c-bg-hover); box-shadow: inset 2px 0 0 var(--c-text-primary); }
+.agents .rows .title { font-weight: 500; }
 .agents .status { flex: none; font-size: 12px; }
 
-/* Agent avatar: a small metal disc, brass glyph when the agent can act. */
-.bot { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--metal-grad); border: 1px solid var(--hair-ctl); box-shadow: var(--sh-raised); color: var(--c-accent-fg); flex: none; }
-.bot.off { color: var(--c-text-muted); box-shadow: none; background: var(--c-bg-sunken); }
-.bot.lg-bot { width: 52px; height: 52px; box-shadow: var(--sh-raised), 0 0 0 4px var(--brass-wash); }
-.bot.lg-bot.off { box-shadow: none; }
+/* Agent avatar: a flat hairline disc, ink glyph when the agent can act. */
+.bot { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--c-bg-sunken); border: 1px solid var(--hair-ctl); color: var(--c-text-primary); flex: none; }
+.bot.off { color: var(--c-text-muted); }
+.bot.lg-bot { width: 48px; height: 48px; }
 
-/* Agent detail: the name is a serif title, the facts under it stay small. */
+/* Agent detail: the name is a Geist title, the facts under it stay small. */
 .detail { display: grid; gap: 20px; min-width: 0; }
 .detail > header { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding-bottom: 4px; }
 .detail > header .grow { flex: 1; display: grid; gap: 2px; min-width: 220px; }
-.detail > header h2 { font-family: var(--font-display); font-weight: 400; font-size: 34px; line-height: 38px; letter-spacing: -0.005em; }
+.detail > header h2 { font-size: var(--t-title-lg-size); line-height: var(--t-title-lg-line); font-weight: 600; letter-spacing: var(--t-display-track); }
 .detail > header .grow > .small { margin-top: 4px; }
 .detail > header .grow > .small .mono { color: var(--c-text-secondary); font-size: 12px; }
 
@@ -29,28 +28,26 @@
 .detail .panel.flush { overflow-x: auto; }
 .detail .keys-table th, .detail .keys-table td { padding-inline: 12px; }
 .detail .keys-table td.small, .detail .keys-table td:first-child { white-space: nowrap; }
-.detail .keys-table td:first-child { color: var(--c-text-primary); letter-spacing: 0.01em; }
+.detail .keys-table td:first-child { color: var(--c-text-primary); }
 .detail .keys-table td.small { color: var(--c-text-secondary); font-variant-numeric: tabular-nums; }
 .detail .keys-table .row-inline { flex-wrap: nowrap; justify-content: flex-end; gap: 6px; }
 .scopes { display: flex; flex-wrap: wrap; gap: 4px; }
-.scopes .chip { height: 20px; padding: 0 6px; border-radius: var(--r-xs); font-size: 11.5px; font-weight: 500; background: var(--c-bg-sunken); color: var(--c-text-secondary); }
+.scopes .chip { height: 20px; padding: 0 6px; border-radius: var(--r-xs); font-size: 11.5px; font-weight: 500; background: var(--c-bg-strong); color: var(--c-text-secondary); }
 .scopes-field { border: 0; padding: 0; margin: 0; grid-column: 1 / -1; }
-.scopes-field legend { font-weight: 550; font-size: var(--t-body-sm-size); color: var(--c-text-secondary); margin-bottom: 6px; padding: 0; }
+.scopes-field legend { font-weight: 500; font-size: var(--t-body-sm-size); color: var(--c-text-secondary); margin-bottom: 6px; padding: 0; }
 
 /* Snippets: code is mono on a sunken slab, nothing else competes with it. */
-.snippets .tablist { margin: 0; padding: 0 12px; background: color-mix(in srgb, var(--c-bg-sunken) 40%, transparent); }
-.snip { margin: 0; padding: 16px 18px; background: var(--c-bg-sunken); box-shadow: var(--sh-inset); font-family: var(--font-mono); font-feature-settings: "zero"; font-size: 12.5px; line-height: 20px; white-space: pre; overflow-x: auto; color: var(--c-text-primary); tab-size: 2; }
+.snippets .tablist { margin: 0; padding: 0 12px; background: var(--c-bg-sunken); }
+.snip { margin: 0; padding: 16px 18px; background: var(--c-bg-sunken); font-family: var(--font-mono); font-feature-settings: "zero"; font-size: 12.5px; line-height: 20px; white-space: pre; overflow-x: auto; color: var(--c-text-primary); tab-size: 2; }
 .snip:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: -2px; border-radius: 0; }
 .snip-note { padding: 10px 18px; border-top: 1px solid var(--hair); }
 .pad { padding: 14px 16px; }
 
-/* Token dialog: shown once, so it is the one place that glows. A slip of brass-edged metal, then a firm confirm strip. */
+/* Token dialog: shown once, so the token sits alone in a flat, firm box, then a plain confirm strip. */
 .token-box { display: grid; gap: 8px; }
-.token-label { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-caption-size); line-height: var(--t-caption-line); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-accent-fg); }
-.token-label::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--c-ring-gate); box-shadow: 0 0 0 3px var(--brass-wash); }
-.token { position: relative; display: block; font-family: var(--font-mono); font-feature-settings: "zero"; font-size: 14.5px; line-height: 24px; letter-spacing: 0.02em; padding: 18px 18px 16px; border-radius: var(--r-md); color: var(--c-text-primary); background: var(--c-bg-sunken); border: 1px solid color-mix(in srgb, var(--c-ring-gate) 55%, transparent); box-shadow: var(--sh-inset), 0 0 0 4px var(--brass-wash), 0 10px 28px -10px var(--brass-glow); overflow-wrap: anywhere; user-select: all; }
-.token::before { content: ""; position: absolute; left: 14px; right: 14px; top: -1px; height: 1px; background: linear-gradient(90deg, transparent, var(--c-accent-hi), transparent); opacity: 0.9; }
-.token-box ~ .check { align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--r-sm); background: var(--brass-wash); border: 1px solid color-mix(in srgb, var(--c-ring-gate) 30%, transparent); font-weight: 550; }
+.token-label { font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); font-weight: 500; color: var(--c-text-primary); }
+.token { display: block; font-family: var(--font-mono); font-feature-settings: "zero"; font-size: 14px; line-height: 24px; letter-spacing: 0; padding: 14px 16px; border-radius: var(--r-sm); color: var(--c-text-primary); background: var(--c-bg-sunken); border: 1px solid var(--c-border-strong); overflow-wrap: anywhere; user-select: all; }
+.token-box ~ .check { align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--r-sm); background: var(--c-bg-sunken); border: 1px solid var(--hair-ctl); font-weight: 500; }
 .token-box ~ .check input { margin: 0; }
 .token-box ~ .row-inline { gap: 10px; }
 

@@ -1,15 +1,12 @@
 /* The recovery key grid, shared by the create screen and the settings rotate dialog.
-   A plate: sunken ground, a brass hairline frame with a second inner rule, and the groups in even columns. */
+   A flat sunken plate with one hairline: the groups sit in even columns, numbered in muted type. */
 .rk {
-  list-style: none; margin: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px 10px; padding: 22px 24px;
-  position: relative; border-radius: var(--r-md); background: var(--c-bg-sunken);
-  border: 1px solid color-mix(in srgb, var(--c-ring-gate) 70%, transparent);
-  box-shadow: var(--sh-inset), 0 0 0 4px var(--brass-wash), inset 0 0 40px var(--brass-wash);
-  font-family: var(--font-mono); font-size: var(--t-mono-lg-size); letter-spacing: 0.06em;
+  list-style: none; margin: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px 10px; padding: 20px 24px;
+  border-radius: var(--r-md); background: var(--c-bg-sunken); border: 1px solid var(--hair-ctl);
+  font-family: var(--font-mono); font-size: var(--t-mono-lg-size); line-height: var(--t-mono-lg-line); letter-spacing: 0;
 }
-.rk::before { content: ""; position: absolute; inset: 4px; border: 1px solid color-mix(in srgb, var(--c-ring-gate) 22%, transparent); border-radius: calc(var(--r-md) - 3px); pointer-events: none; }
 .rk li { display: inline-flex; gap: 6px; align-items: baseline; justify-content: center; position: relative; }
-.rk small { font-size: 10px; color: var(--c-accent-fg); letter-spacing: 0; font-family: var(--font-sans); font-variant-numeric: tabular-nums; width: 14px; text-align: right; flex: none; }
+.rk small { font-size: 11px; color: var(--c-text-muted); letter-spacing: 0; font-family: var(--font-sans); font-variant-numeric: tabular-nums; width: 14px; text-align: right; flex: none; }
 .print-only { display: none; }
 @media (max-width: 860px) { .rk { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media print {
@@ -18,6 +15,5 @@
   .print-area { position: fixed; inset: 0 auto auto 0; padding: 24px; background: white; }
   .print-only { display: block; color: black; }
   .rk { border: 2px solid black; color: black; background: white; box-shadow: none; }
-  .rk::before { display: none; }
   .rk small { color: black; }
 }

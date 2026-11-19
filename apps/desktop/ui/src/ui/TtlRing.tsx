@@ -20,7 +20,7 @@ interface TtlRingProps {
   /** Time the span ends, in ms since epoch. The ring ticks each second. */
   endsAt?: number;
   size?: 20 | 22 | 24 | 28 | 30 | 32;
-  /** `gate` is the brass ring of the auto-lock timer. Other tones come from the time left. */
+  /** `gate` is the ink ring of the auto-lock timer. Other tones come from the time left. */
   gate?: boolean;
   /** Show the time inside the ring. */
   showLabel?: boolean;

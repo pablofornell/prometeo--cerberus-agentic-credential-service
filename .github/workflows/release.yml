@@ -248,7 +248,7 @@ jobs:
       - name: SHA256SUMS
         run: |
           cd dist
-          find . -maxdepth 1 -type f | sed 's|^\./||' | LC_ALL=C sort | xargs sha256sum > SHA256SUMS
+          find . -maxdepth 1 -type f ! -name SHA256SUMS | sed 's|^\./||' | LC_ALL=C sort | xargs sha256sum > SHA256SUMS
           sha256sum --check --strict SHA256SUMS
           cat SHA256SUMS
           gh release upload "$TAG" SHA256SUMS --clobber

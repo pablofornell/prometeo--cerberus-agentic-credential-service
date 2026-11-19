@@ -2,6 +2,7 @@
 // Screens keep their own strings in `src/screens/<name>/messages.ts` (see `defineMessages`).
 export const en = {
   "app.name": "Cerberus",
+  "app.tagline": "Agent vault",
   "app.skip": "Skip to content",
   "app.loading": "Loading",
   "app.boot": "Reading the vault status",

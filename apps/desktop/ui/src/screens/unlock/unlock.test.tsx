@@ -85,6 +85,30 @@ describe("unlock", () => {
     expect(calls).toBe(0);
   });
 
+  it("takes the phrase out of the field while the key is derived and allows one call only", async () => {
+    const user = userEvent.setup();
+    let calls = 0;
+    let release: () => void = () => {};
+    renderUnlock({
+      vault_unlock: async () => {
+        calls += 1;
+        await new Promise<void>((resolve) => (release = resolve));
+        throw mockError("bad_credentials", "wrong phrase");
+      },
+    });
+    const input = await screen.findByLabelText("Master phrase");
+    await user.type(input, WRONG);
+    await user.click(screen.getByRole("button", { name: "Unlock" }));
+    await waitFor(() => expect(calls).toBe(1));
+    expect(screen.getByLabelText(/Master phrase/)).toHaveValue("");
+    expect(screen.getByLabelText(/Master phrase/)).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Unlock" }));
+    expect(calls).toBe(1);
+    release();
+    expect(await screen.findByText("That phrase does not open the slot for Ana Ruiz.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Master phrase")).toHaveFocus());
+  });
+
   it("shows the back-off countdown, disables the input and then lets the person try again", async () => {
     const user = userEvent.setup();
     const { container } = renderUnlock({
@@ -111,7 +135,8 @@ describe("unlock", () => {
     for (let i = 0; i < 6; i++) {
       await user.type(await screen.findByLabelText("Master phrase"), WRONG);
       await user.click(screen.getByRole("button", { name: "Unlock" }));
-      await waitFor(() => expect(screen.getByLabelText(/Master phrase/)).toHaveValue(""));
+      // The field empties as soon as the key is derived, so wait for the try to end, not for the empty field.
+      await waitFor(() => expect(screen.queryByText(/Deriving the key/)).not.toBeInTheDocument());
     }
     expect(await screen.findByRole("heading", { name: "Too many failed tries" })).toBeInTheDocument();
   });

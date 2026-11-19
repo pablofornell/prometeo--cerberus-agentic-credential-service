@@ -5,20 +5,20 @@ main.content:has(> .vb-browser) { padding: 0; gap: 0; }
 /* Nothing selected: the placeholder needs less room than an open item. */
 .vb-browser:has(> .vb-drawer.is-empty) { grid-template-columns: 224px minmax(0, 1fr) 300px; }
 
-/* Rail: workspaces, categories, tags. One engraved label per group. */
-.vb-facets { min-height: 0; overflow-y: auto; border-right: 1px solid var(--hair); padding: 18px 10px 24px; display: grid; gap: 22px; align-content: start; }
+/* Rail: workspaces, categories, tags. One quiet sentence-case label per group. */
+.vb-facets { min-height: 0; overflow-y: auto; border-right: 1px solid var(--hair); padding: 16px 10px 24px; display: grid; gap: 20px; align-content: start; }
 .vb-facet-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px; margin-bottom: 6px; min-height: 28px; }
-.vb-facet-head h2 { font-size: var(--t-caption-size); line-height: var(--t-caption-line); color: var(--c-text-muted); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.vb-facet-head h2 { font-size: var(--t-caption-size); line-height: var(--t-caption-line); color: var(--c-text-muted); font-weight: 500; }
 .vb-facets ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
-.vb-facets ul button { all: unset; box-sizing: border-box; width: 100%; min-height: 30px; display: flex; gap: 9px; align-items: center; padding: 4px 8px; border-radius: var(--r-sm); color: var(--c-text-secondary); cursor: pointer;
+.vb-facets ul button { all: unset; box-sizing: border-box; width: 100%; min-height: 30px; display: flex; gap: 10px; align-items: center; padding: 4px 8px; border-radius: var(--r-sm); color: var(--c-text-secondary); cursor: pointer;
   transition: background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
 .vb-facets ul button .icon { color: var(--c-text-muted); transition: color var(--d-fast) var(--ease-standard); }
 .vb-facets ul button:hover { background: var(--c-bg-hover); color: var(--c-text-primary); }
 .vb-facets ul button:hover .icon { color: var(--c-text-secondary); }
 .vb-facets ul button:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: -2px; }
-.vb-facets ul button[aria-pressed="true"] { background: var(--c-bg-selected); color: var(--c-text-primary); box-shadow: inset 2px 0 0 var(--c-ring-gate); }
-.vb-facets ul button[aria-pressed="true"] .icon { color: var(--c-accent-fg); }
-.vb-facets .n { margin-left: auto; font-size: 12px; color: var(--c-text-muted); font-variant-numeric: tabular-nums; }
+.vb-facets ul button[aria-pressed="true"] { background: var(--press); color: var(--c-text-primary); font-weight: 500; }
+.vb-facets ul button[aria-pressed="true"] .icon { color: var(--c-text-primary); }
+.vb-facets .n { margin-left: auto; font-family: var(--font-mono); font-size: 12px; font-weight: 400; color: var(--c-text-muted); font-variant-numeric: tabular-nums; }
 .vb-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px; }
 .vb-facet-empty { padding: 0 8px; }
 
@@ -43,25 +43,25 @@ main.content:has(> .vb-browser) { padding: 0; gap: 0; }
 .vb-toolbar .seg { position: absolute; right: 16px; top: calc(100% + 6px); z-index: 1; }
 .vb-count { display: flex; align-items: center; min-height: 42px; padding: 0 144px 0 16px; font-size: var(--t-body-sm-size); color: var(--c-text-muted); font-variant-numeric: tabular-nums; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
 
-/* Rows: the selection is an inset brass edge (no size change); prod keeps a red edge. */
+/* Rows: the selection is a faint fill and an inset 2 px rule from app.css (no size change); prod keeps a red edge. */
 .vb-items > li:focus-visible, .vb-tiles > li:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: -2px; }
 .vb-items > li { align-items: flex-start; }
 .vb-items > li.prod:not([aria-selected="true"]) { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--c-danger-fg) 75%, transparent); }
-.vb-items > li .grow .title { font-weight: 560; }
+.vb-items > li .grow .title { font-weight: 500; }
 .vb-items > li .grow .sub { margin-top: 1px; }
 .vb-meta { display: flex; gap: 8px; align-items: center; flex: none; }
 .vb-items > li .vb-meta { min-height: 22px; }
 
-/* Grid view: quiet tiles; selected is brass-edged, prod carries a red top edge. */
+/* Grid view: flat tiles with a hairline; the selected tile takes a text-colored edge, prod carries a red top edge. */
 .vb-tiles { list-style: none; margin: 0; padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(188px, 1fr)); grid-auto-rows: max-content; align-content: start; gap: 12px; }
-.vb-tiles > li { display: grid; grid-template-rows: auto 1fr auto; gap: 12px; padding: 14px; border-radius: var(--r-md); border: 1px solid var(--hair); background: var(--c-bg-surface); box-shadow: var(--sh-raised); cursor: pointer; min-width: 0;
+.vb-tiles > li { display: grid; grid-template-rows: auto 1fr auto; gap: 12px; padding: 14px; border-radius: var(--r-md); border: 1px solid var(--hair); background: var(--c-bg-surface); cursor: pointer; min-width: 0;
   transition: background-color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard); }
 .vb-tiles > li:hover { background: var(--c-bg-hover); border-color: var(--hair-ctl); }
-.vb-tiles > li.prod:not([aria-selected="true"]) { box-shadow: var(--sh-raised), inset 0 2px 0 color-mix(in srgb, var(--c-danger-fg) 75%, transparent); }
-.vb-tiles > li[aria-selected="true"] { border-color: var(--c-ring-gate); background: linear-gradient(180deg, var(--brass-wash), transparent 70%), var(--c-bg-selected); box-shadow: 0 0 0 1px var(--brass-glow); }
+.vb-tiles > li.prod:not([aria-selected="true"]) { box-shadow: inset 0 2px 0 color-mix(in srgb, var(--c-danger-fg) 75%, transparent); }
+.vb-tiles > li[aria-selected="true"] { border-color: var(--c-text-primary); background: var(--c-bg-hover); }
 .vb-tiles > li:focus-visible { outline-offset: 2px; }
 .vb-tiles .top { display: flex; justify-content: space-between; align-items: center; }
-.vb-tiles .title { font-weight: 600; overflow-wrap: anywhere; line-height: 20px; }
+.vb-tiles .title { font-weight: 500; overflow-wrap: anywhere; line-height: 20px; }
 .vb-tiles .sub { color: var(--c-text-muted); font-size: var(--t-body-sm-size); margin-top: 2px; overflow-wrap: anywhere; }
 .vb-tiles .row-inline { min-height: 22px; }
 
@@ -69,11 +69,11 @@ main.content:has(> .vb-browser) { padding: 0; gap: 0; }
 .vb-drawer { min-height: 0; overflow-y: auto; padding: 0; display: flex; flex-direction: column; }
 .vb-drawer.is-empty { justify-content: center; }
 .vb-drawer.is-empty .state-block { padding: 24px; }
-.vb-drawer > header { padding: 18px 20px 16px; border-bottom: 1px solid var(--hair); display: grid; gap: 10px; }
-.vb-drawer > header h2 { font-family: var(--font-display); font-weight: 400; font-size: 30px; line-height: 34px; letter-spacing: 0; overflow-wrap: anywhere; }
+.vb-drawer > header { padding: 16px 20px; border-bottom: 1px solid var(--hair); display: grid; gap: 10px; }
+.vb-drawer > header h2 { font-size: var(--t-title-size); line-height: var(--t-title-line); font-weight: 600; letter-spacing: var(--t-title-track); overflow-wrap: anywhere; }
 .vb-drawer > header h2:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
 .vb-drawer .sec { padding: 16px 20px 18px; border-bottom: 1px solid var(--hair); display: grid; gap: 12px; }
-.vb-drawer .sec h3 { font-size: var(--t-caption-size); line-height: var(--t-caption-line); color: var(--c-text-muted); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.vb-drawer .sec h3 { font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); color: var(--c-text-primary); font-weight: 600; letter-spacing: -0.01em; }
 .vb-secret-row { display: grid; gap: 5px; }
 .vb-drawer .kv { grid-template-columns: 110px minmax(0, 1fr); gap: 12px 16px; align-items: center; }
 .vb-drawer .kv dd { display: block; font-variant-numeric: tabular-nums; }
@@ -106,3 +106,5 @@ main.content:has(> .vb-browser) { padding: 0; gap: 0; }
   .vb-drawer.vb-loading-drawer { display: block; }
   .vb-role { display: none; }
 }
+/* The ring is ink while there is time; it turns warning and danger as the time runs out (app.css). */
+.vb-browser .ttl:not(.low):not(.critical) .val { stroke: var(--c-text-primary); }

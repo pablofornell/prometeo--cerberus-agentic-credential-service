@@ -1,50 +1,37 @@
 /* Create vault. Only tokens and the classes of styles/app.css. Ported from docs/ux/prototypes/01-create-vault.html.
    Anchored to the top of the page so a longer step grows downward instead of re-centering (no jumps). */
-.solo:has(.create-screen) { align-items: start; overflow: clip; padding-top: clamp(32px, 9vh, 88px); }
+.solo:has(.create-screen) { align-items: start; padding-top: clamp(32px, 9vh, 88px); }
 .solo-wrap:has(.create-screen) { width: min(920px, 100%); }
-/* The guilloche is centered on the ring diagram of the rail (200 px wide, 154 px below the top of the wizard). */
-.create-screen.guilloche::before {
-  inset: -200px -50vw -300px; --gx: calc(50vw + 100px); --gy: 354px;
-  -webkit-mask-image: radial-gradient(circle 420px at var(--gx) var(--gy), black 0, transparent 100%);
-  mask-image: radial-gradient(circle 420px at var(--gx) var(--gy), black 0, transparent 100%);
-}
-/* No overflow:clip (older WebKitGTK): keep the pattern inside the viewport so it never adds a scrollbar. */
-@supports not (overflow: clip) {
-  .create-screen.guilloche::before { inset: -200px 0 0 -100px; --gx: 200px; }
-}
 .create-screen .wizard { display: grid; grid-template-columns: 280px minmax(0, 560px); gap: 48px; align-items: start; width: 100%; }
 .create-screen .rail { position: sticky; top: 48px; display: grid; gap: 24px; }
-.create-screen .rail .word { font-family: var(--font-display); font-size: 30px; line-height: 30px; font-weight: 400; letter-spacing: 0.005em; }
+.create-screen .rail .word { font-size: var(--t-title-size); line-height: 30px; font-weight: 600; letter-spacing: var(--t-title-track); }
 .create-screen .rail .row-inline { gap: 10px; flex-wrap: nowrap; height: 30px; }
-/* The ring diagram: each step closes one ring. Hairline rings, brass when done, dashed while it is the current step. */
+/* The ring diagram: each step closes one ring. Flat 1.5 px strokes: a hairline track, ink when done, and the current ring dashed with one thin spectrum stroke (the colors of the ring logo). No glow. */
 .create-screen .rings { width: 200px; height: 200px; overflow: visible; }
-.create-screen .rings circle { fill: none; stroke-width: 3; stroke-linecap: round; stroke: var(--c-ring-track); transition: stroke var(--d-slow) var(--ease-standard); }
+.create-screen .rings circle { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke: var(--c-ring-track); transition: stroke var(--d-slow) var(--ease-standard); }
 .create-screen .rings circle.done { stroke: var(--c-ring-gate); }
-.create-screen .rings circle.now { stroke: var(--c-ring-gate); stroke-dasharray: 2 9; stroke-width: 4; }
+.create-screen .rings circle.now { stroke: var(--c-ring-gate); stroke-dasharray: 3 8; stroke-width: 2; }
 .create-screen .rings circle.core { stroke: none; fill: var(--c-ring-track); }
 .create-screen .rings circle.core.done, .create-screen .rings circle.core.now { fill: var(--c-ring-gate); }
-.create-screen .rings { filter: drop-shadow(0 8px 20px var(--brass-wash)); }
 .create-screen .steplist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .create-screen .steplist li { position: relative; }
-/* A hairline joins the step numbers; it turns brass once the step before it is done. */
+/* A hairline joins the step numbers; it turns to ink once the step before it is done. */
 .create-screen .steplist li + li::before { content: ""; position: absolute; left: 18px; top: -7px; width: 1px; height: 12px; background: var(--hair); }
-.create-screen .steplist li:has(button.done) + li::before { background: color-mix(in srgb, var(--c-ring-gate) 70%, transparent); }
+.create-screen .steplist li:has(button.done) + li::before { background: var(--c-text-secondary); }
 .create-screen .steplist button { all: unset; box-sizing: border-box; width: 100%; display: flex; gap: 12px; align-items: center; padding: 6px 8px; border-radius: var(--r-sm); color: var(--c-text-muted); cursor: default; transition: background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
 .create-screen .steplist button.done { cursor: pointer; color: var(--c-text-secondary); }
 .create-screen .steplist button.done:hover { background: var(--c-bg-hover); color: var(--c-text-primary); }
 .create-screen .steplist button:focus-visible { outline: 2px solid var(--c-focus-ring); }
-.create-screen .steplist button[aria-current="step"] { color: var(--c-text-primary); font-weight: 600; background: var(--c-bg-raised); box-shadow: var(--sh-raised); }
+.create-screen .steplist button[aria-current="step"] { color: var(--c-text-primary); font-weight: 500; background: var(--press); }
 .create-screen .steplist .n { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--hair-ctl); display: grid; place-items: center; font-size: 12px; font-weight: 600; flex: none; font-variant-numeric: tabular-nums; }
-.create-screen .steplist button[aria-current="step"] .n { border-color: var(--c-ring-gate); color: var(--c-accent-fg); box-shadow: 0 0 0 3px var(--brass-glow); }
-.create-screen .steplist .done .n { background: var(--brass-grad); border-color: var(--c-accent-lo); color: var(--c-accent-on-solid); box-shadow: var(--sh-brass); }
+.create-screen .steplist button[aria-current="step"] .n { border-color: var(--c-text-primary); color: var(--c-text-primary); }
+.create-screen .steplist .done .n { background: var(--c-accent-solid); border-color: var(--c-accent-solid); color: var(--c-accent-on-solid); }
 .create-screen .pane { display: grid; gap: 20px; }
-.create-screen .pane h1, .create-screen .pane-wrap > .state-block h1 { font-size: 44px; line-height: 48px; letter-spacing: 0.002em; text-wrap: balance; }
+.create-screen .pane h1, .create-screen .pane-wrap > .state-block h1 { font-size: var(--t-display-size); line-height: var(--t-display-line); letter-spacing: var(--t-display-track); text-wrap: balance; }
 .create-screen .pane h1 { margin-bottom: -4px; }
 .create-screen h1:focus { outline: none; }
 .create-screen .lede { color: var(--c-text-secondary); font-size: var(--t-body-lg-size); line-height: var(--t-body-lg-line); max-width: 52ch; margin-top: -6px; }
-.create-screen .field > label, .create-screen .field > .label { font-size: var(--t-caption-size); line-height: var(--t-caption-line); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-text-muted); }
-.create-screen .field .hint { text-transform: none; letter-spacing: 0; }
-.create-screen .input.lg { height: 50px; }
+.create-screen .input.lg { height: 44px; }
 .create-screen summary { cursor: pointer; border-radius: var(--r-xs); }
 .create-screen summary:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
 .create-screen .host-box { margin-top: 12px; }
@@ -61,24 +48,23 @@
 .create-screen .strength.ok { color: var(--c-success-fg); }
 .create-screen .strength.danger { color: var(--c-danger-fg); }
 .create-screen .words { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.create-screen .words li { font-family: var(--font-mono); padding: 4px 9px; border-radius: var(--r-xs); background: var(--c-bg-raised); border: 1px solid var(--hair); box-shadow: var(--sh-raised); }
+.create-screen .words li { font-family: var(--font-mono); padding: 4px 9px; border-radius: var(--r-xs); background: var(--c-bg-sunken); border: 1px solid var(--hair); }
 .create-screen .reqs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--t-body-sm-size); }
 .create-screen .reqs li { display: flex; gap: 8px; align-items: center; }
 .create-screen .reqs li.yes { color: var(--c-success-fg); }
 .create-screen .reqs li.no { color: var(--c-text-muted); }
-.create-screen .bench { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--c-bg-surface); box-shadow: var(--sh-raised); }
+.create-screen .bench { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--c-bg-surface); }
 .create-screen .bench div { padding: 14px 16px 12px; display: grid; gap: 2px; border-right: 1px solid var(--hair); }
 .create-screen .bench div:last-child { border-right: 0; }
-.create-screen .bench dd { margin: 0; font-family: var(--font-display); font-size: 30px; line-height: 34px; font-weight: 400; font-variant-numeric: tabular-nums; }
-.create-screen .bench dt { margin: 0; font-size: var(--t-caption-size); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.create-screen .bench dd { margin: 0; white-space: nowrap; font-size: var(--t-display-sm-size); line-height: 32px; font-weight: 600; letter-spacing: var(--t-display-sm-track); font-variant-numeric: tabular-nums; }
+.create-screen .bench dt { margin: 0; font-size: var(--t-body-sm-size); font-weight: 400; color: var(--c-text-secondary); }
 .create-screen .nav-row { display: flex; gap: 8px; justify-content: space-between; align-items: center; padding-top: 16px; margin-top: 4px; border-top: 1px solid var(--hair); }
-.create-screen .nav-row .btn.lg { height: 46px; }
+.create-screen .nav-row .btn.lg { height: 40px; }
 .create-screen .state-block { padding-top: 24px; }
-.create-screen .progress-list { list-style: none; padding: 14px 18px; margin: 0; display: grid; gap: 10px; text-align: left; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--c-bg-surface); box-shadow: var(--sh-raised); }
+.create-screen .progress-list { list-style: none; padding: 14px 18px; margin: 0; display: grid; gap: 10px; text-align: left; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--c-bg-surface); }
 .create-screen .progress-list li { display: flex; gap: 10px; align-items: center; }
 .create-screen .problem-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; color: var(--c-danger-fg); text-align: left; }
 @media (max-width: 860px) {
-  .create-screen.guilloche::before { --gx: 50%; --gy: 215px; }
   .create-screen .wizard { grid-template-columns: 1fr; gap: 24px; }
   .create-screen .rail { position: static; }
   .create-screen .rings { display: none; }

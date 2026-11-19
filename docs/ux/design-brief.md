@@ -28,7 +28,7 @@ other work when an approval window appears, so the window must be readable in 3 
 2. **Masked by default.** Secrets are dots in the mono face. A deliberate hold (500 ms) reveals. They hide again
    after 15 s. Copy clears the clipboard after 30 s. The UI states these times next to the control.
 3. **Prod is loud, the rest is calm.** Only `prod`, danger actions and broken integrity get red. The base palette is
-   warm ink black, ivory and brass. A screen full of red means something is wrong.
+   monochrome. A screen full of red means something is wrong.
 4. **Plain-word policy.** Grants read as sentences ("QA runner can read items in shop-frontend, env staging, and I
    approve: never"). Wire words (`ask_once`, `secrets:read`) appear only in mono, as secondary detail.
 5. **Every state is designed.** Ready, empty, loading, error and locked exist for every screen. Empty states invite
@@ -58,34 +58,41 @@ Where the motif appears (and nowhere else, so it keeps meaning):
   checks passed and which waits.
 - **TTL ring**: the same ring geometry shows time left for leases, sessions, TOTP codes and the auto-lock timer.
 
-Color of the motif: brass (`ring.gate`). Brass reads as an old lock or a gate fitting: warm, physical, rare. It is
-the only warm color in the dark theme besides warnings, so it marks "the gate" at a glance.
+Color of the motif: the text color (`ring.gate`), so the rings are the one white shape in the dark theme and read as
+"the gate" at a glance. The brand mark itself is a dark glass tile with spectrum light and is drawn separately.
 
 ## 5. Look and feel
 
-- **Palette, "Obsidian & Brass" (dark first).** Warm ink black, not blue slate: canvas `#0F0F10`, sunken `#0A0A0B`,
-  surfaces stepped about 4% (`#151517`, `#1B1B1E`), text `#EDEBE6` ivory. Brass is the only accent and marks the
-  gate: primary actions, the current nav item, gate rings and focus (`#C9A45C` solid, `#D9B46A` for text, champagne
-  `#E9D7AE` focus ring). Patina green (verdigris, the color brass turns) for success `#7CCBA6`, coral for danger
-  `#F2877C`, steel blue for info `#9DB8E0`. Light theme "vellum": ivory paper `#F6F4EF`, white panels, ink
-  `#1A1917`, bronze `#7A5410` for brass text and `#8A6118` for buttons. Neutrals are warm in both themes and
-  shadows are warm-tinted. Full list in `tokens.json`. Every text pair passes WCAG AA (`a11y-contrast-report.md`).
-- **Finish.** Hairline, not heavy: 1px alpha borders (`line.hair`), panels flat on the canvas with a faint inner top
-  highlight in dark, like a beveled metal edge. The primary button is polished brass (vertical gradient plus inset
-  top highlight), never flat yellow. Brass is used rarely. A very faint concentric "guilloche" of the gate rings
-  (2 to 4% opacity) may sit behind the unlock and create screens and the dashboard hero, nowhere else. Scrollbars
-  are thin and themed, text selection is a brass tint.
-- **Type.** Three families. Instrument Serif (400 and italic, local woff2, SIL OFL) for big moments only: the
-  brand wordmark, page titles in the top bar, the unlock and create headlines, the dashboard hero title, dialog
-  and drawer titles, empty-state titles. Inter for all UI text (with `cv11`, `ss01`, tabular numbers for timers).
-  JetBrains Mono only for secret values, IDs, hashes, fingerprints, scopes and code. Small engraved labels (panel
-  and table headers, group labels) are caption size, uppercase, tracking 0.08em, muted. Scale 12 / 13 / 14 / 16 /
-  18 / 21 / 24 / 36 / 48 px, base 14; the serif runs about one step larger than Inter because of its small x-height.
-- **Layout.** A 232 px rail (brand, navigation with `G` hints, and the "collar": who unlocked, auto-lock ring, Lock
-  and panic buttons). A 56 px top bar with the serif page title and the palette trigger. Content is left aligned.
-  Panels have a header rule and a quiet body; they are not a grid of identical cards.
-- **Radius by hierarchy.** 3 px chips, 6 px controls, 8 px panels, 12 px dialogs and the approval window, full for rings.
-- **Untrusted text** has its own surface: dashed brass border, mono face, a fixed label above it.
+- **Direction: a monochrome Geist console.** Cerberus shares its look with Hermes and IRIS: near-black or white
+  surfaces, 1 px hairlines, dense 13 to 14 px type, no decoration. It replaces the earlier "Obsidian & Brass" look
+  (warm ink, brass accent, serif display, guilloche, engraved labels), which read as costume and not as a tool.
+- **Palette (dark first).** Canvas `#0A0A0A`, rail `#000000`, raised `#1A1A1A`, hairlines `#FFFFFF24` and `#FFFFFF3D`,
+  text `#EDEDED` / `#A1A1A1` / `#8F8F8F`. Light theme: `#FFFFFF`, rail `#FAFAFA`, text `#171717`. The primary button
+  is solid foreground ink (`#EDEDED` on dark, `#171717` on light): there is no accent hue, and the `accent.*`
+  tokens are that neutral primary. Color is for meaning only: info blue, warning amber, error red, ok green, each
+  with a text step, a fill step and a precomputed tint (14% dark, 10% light). Links and the focus ring are blue
+  (`#0072F5`). Form-control borders (`border.default`) are the one firm line: they pass 3:1. Full list in
+  `tokens.json`; every text pair passes WCAG AA (`a11y-contrast-report.md`).
+- **Finish.** Hairline, not heavy: 1 px alpha borders (`line.hair`), flat panels with a faint shadow, popups with a
+  ring shadow (`shadow.overlay`). Quiet nav: the current item is a faint fill and a brighter label, never an
+  accent. A selected row is a faint fill plus a 2 px inset rule in the text color. Hover and selection never move
+  layout. No gradients, no patterns, no uppercase labels.
+- **Signature (kept small).** The five spectrum colors (`spectrum.*`, the light of the brand mark) appear in two
+  places only: the signal band, a 1 px hairline along the top of the main area with a slow spectrum light (static
+  with reduced motion), and a faint 64 px blueprint grid behind the standalone gate screens (unlock, create),
+  faded by a radial mask. Nothing else uses them.
+- **Type.** Geist Variable for UI text and Geist Mono Variable for secret values, IDs, hashes, fingerprints,
+  scopes and code (local woff2, SIL OFL, no CDN). Tabular numbers everywhere. Headings are 600 with negative
+  tracking (-0.02em, page title -0.04em); no serif, no italic display, no engraved labels. Scale 12 / 13 / 14 /
+  16 / 20 / 24 / 32 px, base 14.
+- **Layout.** A 240 px rail (brand lockup with a 24 px mark, navigation with `G` hints that show on hover and
+  focus, and the "collar": who unlocked, auto-lock ring, Lock and panic buttons). A 56 px top bar with the page
+  title and the palette trigger. Content is left aligned. Panels have a header rule and a quiet body; they are not
+  a grid of identical cards. Controls are 32 px tall (28 px compact, 40 px large).
+- **Radius by hierarchy.** 4 px chips and keys, 6 px controls, 8 px panels, 12 px dialogs and the approval window,
+  full for pills and rings.
+- **Untrusted text** has its own surface: dashed amber border (a meaning color: it came from outside), mono face,
+  a fixed label above it.
 
 ## 6. Voice and tone
 
@@ -124,8 +131,8 @@ Copy samples:
 ## 7. What this brief rules out
 
 - No mascot illustration, no dog head drawing. The rings are the dog.
-- No gradients as decoration (one soft brass glow behind the dashboard gate band is the only one).
-- No all-caps eyebrows, no "→" on buttons, no emoji, no stock "security shield" hero.
+- No gradients or patterns as decoration. The spectrum signal band and the gate-screen grid are the only signatures.
+- No all-caps labels or eyebrows, no "→" on buttons, no emoji, no stock "security shield" hero.
 - No secret value in any toast, title, notification, tray badge or event payload.
 
 ## Related

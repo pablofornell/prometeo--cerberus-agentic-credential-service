@@ -68,7 +68,7 @@ Backend (Rust):
 Desktop and UI:
 - Tauri v2 with `tauri-specta` (typed IPC), tray, single instance, autostart
 - React, TypeScript, Vite, Tailwind, shadcn/ui, TanStack Query, Zustand, Framer Motion, Lucide icons
-- Fonts: Inter (text) and JetBrains Mono (secrets)
+- Fonts: Geist (text) and Geist Mono (secrets). Superseded 2026-11-19 (0.3.0): this was Inter and JetBrains Mono until 0.2.0.
 - Tests: Vitest, Playwright
 
 ## 3. Domain model

@@ -85,7 +85,7 @@ function ChainCard({
   if (chain.isPending || (verifying && !report)) {
     return (
       <section className="chain checking" aria-live="polite" aria-busy="true" aria-label={m("chain.checking")}>
-        <span className="seal"><GateMark size={40} mode="spin" /></span>
+        <span className="seal"><GateMark size={24} mode="spin" /></span>
         <div className="grow">
           <strong>{m("chain.checking")}</strong>
           <span className="small secondary">{m("chain.checkingSub")}</span>
@@ -199,7 +199,7 @@ function EventRow({ entry, m, names, breakSeq }: { entry: AuditEntryView_Seriali
           {target && <> <span className="target">{target}</span></>}
         </span>
         <span className="ev-row">
-          <span className="ev">
+          <span className={failed ? "ev bad" : "ev"}>
             {entry.event_type},{" "}
             {failed ? <span className="fail">{m("event.result.fail", { code: entry.result })}</span> : m("event.result.ok")}
             {entry.request_id ? `, ${entry.request_id}` : ""}

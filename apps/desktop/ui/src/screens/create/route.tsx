@@ -7,7 +7,7 @@ import "./create.css";
 export default function CreateScreen() {
   const t = useScreenT(messages);
   return (
-    <section aria-label={t("name.title")} data-screen="create" className="create-screen guilloche">
+    <section aria-label={t("name.title")} data-screen="create" className="create-screen">
       <Wizard />
     </section>
   );

@@ -1,12 +1,12 @@
 /* Additions for the React shell: density, overlays, drawer, tabs, spinner, layout details. Tokens only. */
 :root {
-  --ctl-md: 34px;
+  --ctl-md: 32px;
   --ctl-sm: 28px;
   --row-y: 10px;
 }
 :root[data-density="compact"] {
-  --ctl-md: 30px;
-  --ctl-sm: 26px;
+  --ctl-md: 28px;
+  --ctl-sm: 24px;
   --row-y: 6px;
 }
 
@@ -24,7 +24,7 @@ main.content:focus-visible { outline: none; }
 .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin 0.9s linear infinite; flex: none; }
 .input.select { appearance: none; padding-right: 30px; cursor: pointer;
   background-image: linear-gradient(45deg, transparent 50%, var(--c-text-muted) 50%), linear-gradient(135deg, var(--c-text-muted) 50%, transparent 50%);
-  background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
 .kind-ico.prod { border-color: var(--c-danger-fg); color: var(--c-danger-fg); }
 .right.num { font-variant-numeric: tabular-nums; }
 
@@ -48,9 +48,9 @@ main.content:focus-visible { outline: none; }
 .kv dd { display: flex; gap: 4px; flex-wrap: wrap; }
 
 /* Dialog and drawer (Radix). */
-.dlg-overlay { position: fixed; inset: 0; z-index: 70; background: var(--c-scrim); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); animation: fade-in var(--d-base) var(--ease-enter); }
+.dlg-overlay { position: fixed; inset: 0; z-index: 70; background: var(--c-scrim); animation: fade-in var(--d-base) var(--ease-enter); }
 .dlg { position: fixed; z-index: 71; left: 50%; top: 50%; transform: translate(-50%, -50%); max-height: calc(100vh - 32px); overflow: auto; animation: pop-in var(--d-base) var(--ease-enter); }
-.dlg h2 { font-family: var(--font-display); font-weight: 400; font-size: 28px; line-height: 32px; letter-spacing: 0; }
+.dlg h2 { font-size: var(--t-title-sm-size); line-height: var(--t-title-sm-line); font-weight: 600; letter-spacing: var(--t-title-sm-track); }
 .dlg:focus { outline: none; }
 @keyframes pop-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)) scale(0.985); } }
 @keyframes pop-in-top { from { opacity: 0; transform: translate(-50%, 6px) scale(0.985); } }
@@ -60,29 +60,29 @@ main.content:focus-visible { outline: none; }
 .drawer-panel { position: fixed; z-index: 71; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); display: flex; flex-direction: column;
   background: var(--c-bg-surface); border-left: 1px solid var(--hair); box-shadow: var(--sh-overlay); animation: drawer-in var(--d-slow) var(--ease-enter); }
 .drawer-panel:focus { outline: none; }
-.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px 8px; }
-.drawer-head h2 { font-family: var(--font-display); font-weight: 400; font-size: 28px; line-height: 32px; letter-spacing: 0; }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 12px 8px 20px; }
+.drawer-head h2 { font-size: var(--t-title-sm-size); line-height: var(--t-title-sm-line); font-weight: 600; letter-spacing: var(--t-title-sm-track); }
 .drawer-desc { padding: 0 20px; }
 .drawer-body { flex: 1; overflow: auto; padding: 12px 20px; display: grid; gap: 14px; align-content: start; }
-.drawer-panel .foot { padding: 12px 20px; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid var(--hair); background: color-mix(in srgb, var(--c-bg-sunken) 55%, transparent); }
+.drawer-panel .foot { padding: 12px 20px; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid var(--hair); background: var(--c-bg-sunken); }
 
-/* Toasts. */
-.toast.error { border-color: color-mix(in srgb, var(--c-danger-fg) 55%, transparent); }
+/* Toasts: a raised fill with the ring shadow. An error toast takes the danger tint. */
+.toast.error { background: var(--c-danger-tint); }
 .toast.success > .icon { color: var(--c-success-fg); }
 .toast.error > .icon { color: var(--c-danger-fg); }
 .toast.info > .icon { color: var(--c-info-fg); }
 
 /* Tabs. */
 .tablist { display: flex; gap: 2px; border-bottom: 1px solid var(--hair); margin-bottom: 16px; }
-.tablist [role="tab"] { all: unset; cursor: pointer; padding: 8px 14px; margin-bottom: -1px; color: var(--c-text-secondary); border-bottom: 2px solid transparent; font-weight: 550; box-sizing: border-box; }
+.tablist [role="tab"] { all: unset; cursor: pointer; padding: 8px 12px; margin-bottom: -1px; color: var(--c-text-secondary); border-bottom: 2px solid transparent; font-weight: 500; box-sizing: border-box; transition: color var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard); }
 .tablist [role="tab"]:hover { color: var(--c-text-primary); background: var(--c-bg-hover); }
-.tablist [role="tab"][aria-selected="true"] { color: var(--c-text-primary); border-bottom-color: var(--c-ring-gate); }
+.tablist [role="tab"][aria-selected="true"] { color: var(--c-text-primary); border-bottom-color: var(--c-text-primary); }
 .tablist [role="tab"]:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: -2px; }
 
 /* While the vault locks the rail is inert; show it. */
 .sidebar[inert] .nav { opacity: 0.5; }
 
-/* Rail nav links are <a>; keep the active mark. */
+/* Rail nav links are <a>. */
 .nav a { box-sizing: border-box; }
 
 /* Approval window: a calm single column. */
@@ -94,5 +94,7 @@ main.content:focus-visible { outline: none; }
   .spinner { animation: none; border-right-color: currentColor; }
 }
 @media (forced-colors: active) {
-  .kind-ico, .toast, .dlg, .drawer-panel { border: 1px solid CanvasText; }
+  .toast, .dlg, .drawer-panel { border: 1px solid CanvasText; }
+  .input:focus-visible { outline-color: Highlight; }
+  .tablist [role="tab"][aria-selected="true"] { border-bottom-color: Highlight; }
 }

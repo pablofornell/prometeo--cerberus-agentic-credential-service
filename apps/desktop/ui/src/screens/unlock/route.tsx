@@ -5,8 +5,9 @@ import { useScreenT } from "../../i18n";
 import { ipc, isIpcFailure, type UiError } from "../../ipc/client";
 import { qk } from "../../ipc/keys";
 import { useVaultStatus } from "../../ipc/queries";
-import { Button, GateMark, Notice, errorText, useToast } from "../../ui";
+import { Button, Notice, errorText, useToast } from "../../ui";
 import { RestoreDialog } from "../settings/RestoreDialog";
+import { Brand } from "./Brand";
 import { messages } from "./messages";
 import { UnlockForm } from "./UnlockForm";
 import "./unlock.css";
@@ -17,16 +18,18 @@ function NoVault() {
   const [restoring, setRestoring] = useState(false);
   return (
     <div className="unlock">
-      <span className="mark"><GateMark size={120} /></span>
-      <h1>{t("empty.title")}</h1>
-      <p className="sub">{t("empty.body")}</p>
-      <Button variant="primary" size="lg" icon="plus" className="center" onClick={() => navigate("~/create")}>
-        {t("empty.create")}
-      </Button>
-      <Button size="lg" icon="upload" className="center" onClick={() => setRestoring(true)}>
-        {t("empty.restore")}
-      </Button>
-      <p className="small muted center-text">{t("empty.note")}</p>
+      <Brand title={t("empty.title")}>
+        <p className="sub">{t("empty.body")}</p>
+      </Brand>
+      <div className="actions">
+        <Button variant="primary" size="lg" icon="plus" className="center" onClick={() => navigate("~/create")}>
+          {t("empty.create")}
+        </Button>
+        <Button size="lg" icon="upload" className="center" onClick={() => setRestoring(true)}>
+          {t("empty.restore")}
+        </Button>
+      </div>
+      <p className="foot">{t("empty.note")}</p>
       <RestoreDialog open={restoring} onOpenChange={setRestoring} />
     </div>
   );
@@ -59,9 +62,9 @@ function Stranded({ paths }: { paths: string[] }) {
 
   return (
     <div className="unlock">
-      <span className="mark"><GateMark size={120} /></span>
-      <h1>{t("stranded.title")}</h1>
-      <p className="sub">{t("stranded.body")}</p>
+      <Brand title={t("stranded.title")}>
+        <p className="sub">{t("stranded.body")}</p>
+      </Brand>
       <div className="stack">
         <span className="label">{t("stranded.files")}</span>
         <code className="code block" data-testid="stranded-path">{newest}</code>
@@ -75,17 +78,17 @@ function Stranded({ paths }: { paths: string[] }) {
       <Button variant="primary" size="lg" icon="upload" className="center" loading={busy} onClick={() => void recover()}>
         {t("stranded.recover")}
       </Button>
-      <p className="small muted center-text">{t("stranded.note")}</p>
+      <p className="foot">{t("stranded.note")}</p>
     </div>
   );
 }
 
-/** Screen 2: unlock. Calm and large. With no vault on the device it offers create and restore. */
+/** Screen 2: unlock. One quiet card on the grid. With no vault on the device it offers create and restore. */
 export default function UnlockScreen() {
   const status = useVaultStatus();
   const stranded = status.data?.stranded_restore ?? [];
   return (
-    <div className="unlock-screen guilloche" data-screen="unlock">
+    <div className="unlock-screen" data-screen="unlock">
       {status.data?.state === "no_vault" ? stranded.length > 0 ? <Stranded paths={stranded} /> : <NoVault /> : <UnlockForm />}
     </div>
   );

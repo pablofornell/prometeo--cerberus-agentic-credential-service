@@ -42,7 +42,7 @@ export function AboutSection({ status }: { status: VaultStatusView }) {
         <div className="stack">
           <p>{t("lic.body")}</p>
           <ul className="plain-list">
-            <li>{t("lic.inter")}</li>
+            <li>{t("lic.sans")}</li>
             <li>{t("lic.mono")}</li>
           </ul>
           <p className="small muted">{t("lic.deps")}</p>

@@ -8,7 +8,7 @@ import { useShellActions } from "./actions";
 import { navOwner, SCREENS, type ScreenDef } from "./screens";
 import { openOverlay } from "./uiStore";
 
-/** The 232 px rail: brand, navigation with `G` hints, and the collar (who unlocked, auto-lock ring, Lock, panic). */
+/** The 240 px rail: brand, navigation with `G` hints, and the collar (who unlocked, auto-lock ring, Lock, panic). */
 export function Rail({ current, inert }: { current: ScreenDef; inert?: boolean }) {
   const owner = navOwner(current);
   const pending = usePendingRequests();
@@ -38,8 +38,13 @@ export function Rail({ current, inert }: { current: ScreenDef; inert?: boolean }
   return (
     <aside className="sidebar" inert={inert}>
       <Link className="brand" href="/dashboard">
-        <GateMark size={30} />
-        <span className="word">{t("app.name")}</span>
+        <GateMark size={24} />
+        <span className="brand-txt">
+          <span className="word">{t("app.name")}</span>
+          <span className="tagline" aria-hidden="true">
+            {t("app.tagline")}
+          </span>
+        </span>
       </Link>
       <nav className="nav" aria-label={t("nav.label")}>
         {main.map(link)}

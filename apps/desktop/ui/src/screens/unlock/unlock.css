@@ -1,106 +1,137 @@
-/* Unlock. A calm, centered gate: a faint guilloche of the three rings behind the mark, a serif headline, one brass action.
-   Only tokens and app.css classes. Anchored to the top of the page so errors and the wait timer grow downward (no jumps). */
+/* Unlock. One flat card on a plain canvas, drawn like a Vercel frame: hairlines run out from the card edges and a small
+   "+" marks each corner. No gradients, glows or halos. Only tokens and app.css classes.
+   Anchored near the top of the page so errors and the wait timer grow downward (no jumps). */
 .solo:has(.unlock-screen) {
-  align-items: start; overflow: clip;
-  padding-top: clamp(40px, 11vh, 104px);
-  background:
-    radial-gradient(46% 38% at 50% 14%, var(--brass-wash) 0%, transparent 100%),
-    radial-gradient(70% 60% at 50% 22%, var(--c-bg-surface) 0%, var(--c-bg-canvas) 72%);
+  align-items: start; overflow: hidden; overflow: clip;
+  padding-top: clamp(32px, 14vh, 128px);
+  background: var(--c-bg-sunken);
 }
 .solo-wrap:has(.unlock-screen) { width: min(420px, 100%); }
 
-/* The guilloche is centered on the gate mark (mark is 120 px tall, the block starts 100 px above the screen block). */
-.unlock-screen.guilloche::before {
-  inset: -100px -50vw -400px; --gx: 50%; --gy: 160px;
-  -webkit-mask-image: radial-gradient(circle 440px at var(--gx) var(--gy), black 0, transparent 100%);
-  mask-image: radial-gradient(circle 440px at var(--gx) var(--gy), black 0, transparent 100%);
+/* ---------- The hairline frame ---------- */
+.unlock-screen { position: relative; isolation: isolate; --frame: var(--c-line-hair); --plus: var(--c-text-muted); }
+/* Two horizontal lines along the card's top and bottom edges, running off both sides of the window. */
+.unlock-screen::before {
+  content: ""; position: absolute; z-index: -1; inset: 0 -100vw; pointer-events: none;
+  background:
+    linear-gradient(var(--frame), var(--frame)) left top / 100% 1px no-repeat,
+    linear-gradient(var(--frame), var(--frame)) left bottom / 100% 1px no-repeat;
 }
-/* No overflow:clip (older WebKitGTK): keep the pattern inside the viewport so it never adds a scrollbar. */
-@supports not (overflow: clip) {
-  .unlock-screen.guilloche::before { inset: -100px calc(50% - 48vw) 0; }
+/* Two vertical lines along the left and right edges, running off the top and bottom. */
+.unlock-screen::after {
+  content: ""; position: absolute; z-index: -1; inset: -100vh 0; pointer-events: none;
+  background:
+    linear-gradient(var(--frame), var(--frame)) left top / 1px 100% no-repeat,
+    linear-gradient(var(--frame), var(--frame)) right top / 1px 100% no-repeat;
 }
 
-.unlock-screen .unlock { display: grid; gap: 20px; justify-items: stretch; }
-.unlock-screen .mark { justify-self: center; display: grid; position: relative; margin-bottom: 4px; }
-/* Soft brass halo behind the mark. */
-.unlock-screen .mark::before { content: ""; position: absolute; inset: -34px; border-radius: 50%; background: radial-gradient(closest-side, var(--brass-glow), transparent); pointer-events: none; }
-.unlock-screen .mark .gate { position: relative; filter: drop-shadow(0 6px 14px var(--brass-wash)); }
-/* The closed gate is brass on this screen: the signature of the app, not a disabled grey. */
-.unlock-screen .mark .gate.is-locked circle { stroke: var(--c-ring-gate); }
-.unlock-screen .mark .gate.is-locked .r1 { opacity: 0.95; }
-.unlock-screen .mark .gate.is-locked .r2 { opacity: 0.75; }
-.unlock-screen .mark .gate.is-locked .r3 { opacity: 0.55; }
-.unlock-screen .mark .gate.is-locked .core { fill: var(--c-ring-gate); }
+/* ---------- The card ---------- */
+.unlock-screen .unlock {
+  position: relative; display: grid; gap: 24px; justify-items: stretch; padding: 32px;
+  background: var(--c-bg-canvas); border: 1px solid var(--frame);
+}
+/* The "+" at each corner of the card: a 13 px cross made of two 1 px bars. */
+.unlock-screen .unlock::before {
+  content: ""; position: absolute; inset: -7px; pointer-events: none;
+  background:
+    linear-gradient(var(--plus), var(--plus)) left 0 top 6px / 13px 1px no-repeat,
+    linear-gradient(var(--plus), var(--plus)) left 6px top 0 / 1px 13px no-repeat,
+    linear-gradient(var(--plus), var(--plus)) right 0 top 6px / 13px 1px no-repeat,
+    linear-gradient(var(--plus), var(--plus)) right 6px top 0 / 1px 13px no-repeat,
+    linear-gradient(var(--plus), var(--plus)) left 0 bottom 6px / 13px 1px no-repeat,
+    linear-gradient(var(--plus), var(--plus)) left 6px bottom 0 / 1px 13px no-repeat,
+    linear-gradient(var(--plus), var(--plus)) right 0 bottom 6px / 13px 1px no-repeat,
+    linear-gradient(var(--plus), var(--plus)) right 6px bottom 0 / 1px 13px no-repeat;
+}
+/* One sharp 1 px spectrum line on the top edge: the only colour on the card. */
+.unlock-screen .unlock::after {
+  content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent 0, var(--c-spectrum-red) 18%, var(--c-spectrum-amber) 34%, var(--c-spectrum-green) 50%, var(--c-spectrum-blue) 66%, var(--c-spectrum-violet) 82%, transparent 100%);
+  opacity: 0.9;
+}
 
-.unlock-screen h1 { text-align: center; font-size: 44px; line-height: 48px; letter-spacing: 0.002em; text-wrap: balance; }
+/* ---------- Head: the small mark, the title and one line ---------- */
+.unlock-screen .unlock-brand { display: flex; align-items: center; gap: 16px; }
+.unlock-screen .unlock-brand > .gate-mark { flex: none; }
+.unlock-screen .brand-text { min-width: 0; display: grid; gap: 2px; }
+.unlock-screen h1 { font-size: var(--t-title-lg-size); line-height: var(--t-title-lg-line); font-weight: 600; letter-spacing: -0.04em; text-wrap: balance; }
 .unlock-screen h1:focus { outline: none; }
-.unlock-screen .sub { text-align: center; color: var(--c-text-secondary); margin-top: -8px; text-wrap: balance; }
-.unlock-screen .unlock > p.small.muted { margin-top: -6px; text-wrap: balance; }
+.unlock-screen .sub { font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); color: var(--c-text-muted); text-wrap: balance; }
+/* Why the vault is locked: a quiet line with an icon, not another box. */
+.unlock-screen .reason { display: flex; align-items: flex-start; gap: 8px; font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); color: var(--c-text-secondary); margin: -4px 0 0; }
+.unlock-screen .reason .icon { flex: none; margin-top: 2px; color: var(--c-text-muted); }
 
-/* Operator picker: one hairline list, the chosen row picked out in brass. */
-.unlock-screen .ops { display: grid; gap: 0; border: 0; padding: 0; margin: 10px 0 0; min-width: 0; }
+/* ---------- Operator picker: one hairline list, the chosen row filled ---------- */
+.unlock-screen .ops { display: grid; gap: 8px; border: 0; padding: 0; margin: 0; min-width: 0; }
 .unlock-screen .ops legend,
-.unlock-screen .field > label { font-size: var(--t-caption-size); line-height: var(--t-caption-line); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-text-muted); padding: 0; }
+.unlock-screen .field > label { font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); font-weight: 500; color: var(--c-text-secondary); padding: 0; }
 .unlock-screen .ops legend { margin-bottom: 8px; }
+/* Four rows show at once; more scroll inside the list. */
+.unlock-screen .ops-list { border: 1px solid var(--c-line-mid); border-radius: var(--r-sm); overflow: hidden auto; max-height: 194px; }
 .unlock-screen .op {
-  position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 14px; min-height: 52px;
-  border: 1px solid var(--hair); margin-top: -1px; background: var(--c-bg-surface); cursor: pointer;
-  transition: background-color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard);
+  position: relative; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 12px; cursor: pointer;
+  background: var(--c-bg-canvas);
+  transition: background-color var(--d-fast) var(--ease-standard);
 }
-.unlock-screen .op:first-of-type { margin-top: 0; border-radius: var(--r-md) var(--r-md) 0 0; box-shadow: var(--sh-raised); }
-.unlock-screen .op:last-of-type { border-radius: 0 0 var(--r-md) var(--r-md); }
-.unlock-screen .op:only-of-type { border-radius: var(--r-md); }
-.unlock-screen .op:hover { background: var(--c-bg-raised); }
-.unlock-screen .op:has(input:checked) { z-index: 1; border-color: color-mix(in srgb, var(--c-accent-solid) 70%, transparent); background: var(--c-bg-raised); box-shadow: inset 0 0 0 1px var(--brass-glow), inset 0 0 24px var(--brass-wash); }
-.unlock-screen .op:has(input:focus-visible) { z-index: 2; outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
+.unlock-screen .op + .op { border-top: 1px solid var(--frame); }
+.unlock-screen .op:hover { background: var(--c-bg-hover); }
+.unlock-screen .op:has(input:checked) { background: var(--c-bg-raised); }
 .unlock-screen .op:has(input:disabled) { cursor: default; }
-/* The radio is a small ring that closes on a brass core when chosen, like the gate mark. */
-.unlock-screen .op input {
-  appearance: none; -webkit-appearance: none; flex: none; width: 16px; height: 16px; margin: 0; cursor: inherit;
-  border-radius: 50%; border: 1.5px solid var(--c-border-default); background: transparent;
-  transition: border-color var(--d-fast) var(--ease-standard), box-shadow var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard);
-}
-.unlock-screen .op input:checked { border-color: var(--c-ring-gate); background: var(--c-ring-gate); box-shadow: inset 0 0 0 3px var(--c-bg-raised); }
-.unlock-screen .op input:focus-visible { outline: none; }
-/* Forced colors drop backgrounds and shadows: the chosen operator is the filled radio plus a system-color outline. */
-@media (forced-colors: active) {
-  .unlock-screen .op input:checked { forced-color-adjust: none; background: Highlight; border-color: Highlight; box-shadow: inset 0 0 0 3px Canvas; }
-  .unlock-screen .op:has(input:checked) { outline: 2px solid Highlight; outline-offset: -2px; }
-  .unlock-screen .op:has(input:focus-visible) { outline-color: CanvasText; outline-offset: 2px; }
-}
-.unlock-screen .op .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 520; }
-.unlock-screen .op .small.muted { font-size: var(--t-caption-size); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+/* The radio is the whole row, invisible: the label click, the arrow keys and the screen reader all still work. */
+.unlock-screen .op input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+.unlock-screen .op:has(input:focus-visible) { outline: 2px solid var(--c-focus-ring); outline-offset: -2px; }
 .unlock-screen .avatar {
-  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex: none;
-  background: var(--brass-wash); color: var(--c-accent-fg); border: 1px solid color-mix(in srgb, var(--c-accent-solid) 55%, transparent);
-  font-family: var(--font-display); font-style: italic; font-size: 16px; line-height: 1; padding-bottom: 1px;
+  width: 28px; height: 28px; border-radius: var(--r-full); display: grid; place-items: center; flex: none;
+  background: var(--c-bg-strong); color: var(--c-text-primary); border: 1px solid var(--frame);
+  font-size: 11px; line-height: 1; font-weight: 600; letter-spacing: 0;
+}
+.unlock-screen .op .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--c-text-primary); }
+.unlock-screen .op .role { flex: none; font-size: var(--t-caption-size); color: var(--c-text-muted); }
+/* The tick shows on the chosen row, and only where there is a choice to make. */
+.unlock-screen .op .tick { flex: none; color: var(--c-text-primary); visibility: hidden; margin-right: -2px; }
+.unlock-screen .op:has(input:checked) .tick { visibility: visible; }
+.unlock-screen .ops-list:not(:has(.op + .op)) .tick { display: none; }
+/* Forced colors drop backgrounds: the chosen row gets a system-color outline. */
+@media (forced-colors: active) {
+  .unlock-screen .op:has(input:checked) { outline: 2px solid Highlight; outline-offset: -2px; }
+  .unlock-screen .op:has(input:focus-visible) { outline-color: CanvasText; }
+  .unlock-screen .unlock::after { display: none; }
 }
 
-.unlock-screen .field { gap: 8px; }
-.unlock-screen .input.lg { height: 50px; letter-spacing: 0.04em; }
-.unlock-screen .unlock > .btn.lg { height: 48px; margin-top: 2px; letter-spacing: 0.01em; }
-.unlock-screen .unlock > .btn.lg:disabled, .unlock-screen .unlock > .btn.lg[aria-disabled="true"] { filter: saturate(0.6); }
+/* ---------- Fields ---------- */
+/* The message line under the input is reserved for two lines, so an error never moves the button. The error is drawn
+   over that gap (absolute), 6 px under the input; the 8 px left under two lines is the gap to the button. */
+.unlock-screen .field { gap: 8px; position: relative; padding-bottom: 38px; margin-bottom: -16px; }
+.unlock-screen .field .problem { position: absolute; left: 0; right: 0; top: calc(100% - 32px); line-height: 16px; align-items: flex-start; }
+.unlock-screen .field .problem .icon { flex: none; margin-top: 1px; }
+.unlock-screen .field .hint { line-height: 16px; }
+.unlock-screen .input.lg.mono { letter-spacing: 0.02em; }
+.unlock-screen .unlock > .btn.lg { width: 100%; }
+.unlock-screen .center { justify-content: center; }
 
-/* Footer: tries on the left, the other way in on the right, under a hairline. */
-.unlock-screen .tries { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: var(--t-body-sm-size); color: var(--c-text-muted); padding-top: 14px; border-top: 1px solid var(--hair); margin-top: 2px; }
+/* ---------- Footer: tries on the left, the other way in on the right, under a hairline ---------- */
+.unlock-screen .tries { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 49px; padding-top: 16px; border-top: 1px solid var(--frame); margin-top: 0; font-size: var(--t-caption-size); line-height: 16px; color: var(--c-text-muted); }
+.unlock-screen .tries > span { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.unlock-screen .tries .icon { flex: none; margin-top: 1px; }
 .unlock-screen .tries .warn { color: var(--c-warning-fg); }
 .unlock-screen .tries > .btn { flex: none; margin-right: -8px; }
-.unlock-screen .center { justify-content: center; }
-.unlock-screen .unlock > .btn.lg + .btn.lg { margin-top: -10px; }
-/* The wait timer: sans digits (tabular, so the line never jitters), light weight, one warning color. */
-.unlock-screen .wait { text-align: center; font-size: 52px; line-height: 56px; font-weight: 300; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; color: var(--c-warning-fg); padding: 4px 0 2px; }
-.unlock-screen .code { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-muted); text-align: center; }
-.unlock-screen .stack .code { text-align: left; padding: 8px 10px; border: 1px solid var(--hair-ctl); border-radius: var(--r-sm); background: var(--c-bg-sunken); box-shadow: var(--sh-inset); overflow-wrap: anywhere; color: var(--c-text-secondary); }
-.unlock-screen .stack > .label { font-size: var(--t-caption-size); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-text-muted); }
-.unlock-screen .skeleton { width: 100%; }
-.unlock-screen .opening .gate .r1 { animation: unlock-open var(--d-gate) var(--ease-standard) forwards; }
-.unlock-screen .opening .gate .r2 { animation: unlock-open var(--d-gate) var(--ease-standard) 60ms forwards; }
-.unlock-screen .opening .gate .r3 { animation: unlock-open var(--d-gate) var(--ease-standard) 120ms forwards; }
-@keyframes unlock-open { to { opacity: 0.25; } }
-@media (prefers-reduced-motion: reduce) {
-  .unlock-screen .opening .gate .r1, .unlock-screen .opening .gate .r2, .unlock-screen .opening .gate .r3 { animation: none; opacity: 0.25; }
+.unlock-screen .actions { display: grid; gap: 8px; justify-content: stretch; }
+.unlock-screen .actions > .btn { width: 100%; }
+.unlock-screen .foot { font-size: var(--t-caption-size); line-height: 16px; color: var(--c-text-muted); padding-top: 16px; border-top: 1px solid var(--frame); }
+
+/* The wait: one tabular timer on a flat warning tint, in the place of the operator list. */
+.unlock-screen .wait {
+  text-align: center; font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+  color: var(--c-warning-fg); background: var(--c-warning-tint); border: 1px solid color-mix(in srgb, var(--c-warning-fg) 30%, transparent);
+  border-radius: var(--r-sm); padding: 12px 0;
 }
-.unlock-screen .center-text { text-align: center; }
+.unlock-screen .code { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-muted); }
+.unlock-screen .stack .code { text-align: left; padding: 8px 10px; border: 1px solid var(--c-line-mid); border-radius: var(--r-sm); background: var(--c-bg-sunken); overflow-wrap: anywhere; color: var(--c-text-secondary); }
+.unlock-screen .stack > .label { font-size: var(--t-body-sm-size); font-weight: 500; color: var(--c-text-secondary); }
+.unlock-screen .skeleton { width: 100%; }
+/* The loading and error states sit inside the card, so they drop their own page padding. */
+.unlock-screen .state-block { padding: 0; max-width: none; justify-items: start; text-align: left; }
+
 @media (max-width: 480px) {
-  .unlock-screen h1 { font-size: 36px; line-height: 40px; }
+  .unlock-screen .unlock { padding: 24px 20px; }
 }

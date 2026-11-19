@@ -105,6 +105,7 @@ Large decisions have an ADR; this log points to it. Newest entries go at the end
   agents, scope names) and user data (item titles, agent names) are not translated. (`docs/ux/design-brief.md` section 6)
 - **DEC-041** — T14 — Fonts are vendored as WOFF2 (Inter and JetBrains Mono, SIL OFL 1.1, from `@fontsource-variable`
   5.3.0, latin + latin-ext only). T16 copies them into the app bundle. (`docs/ux/prototypes/assets/fonts/`)
+  Superseded 2026-11-19 (0.3.0): Geist + Geist Mono (SIL OFL 1.1, same `@fontsource-variable` source, latin + latin-ext).
 - **DEC-042** — T14 — Settings "empty" state = defaults on a new vault (no backup yet, only one owner) with a prompt to
   add a backup and a second owner; the other screens have a true empty list state. (`docs/ux/information-architecture.md` section 4)
 
@@ -1023,7 +1024,7 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
 - **DEC-T16-4** — T16 — Styling. Plain CSS on the generated tokens, not Tailwind: the prototypes (`docs/ux/prototypes/assets/app.css`)
   are the target and port 1:1, and the Tailwind map in `tokens.json` stays unused. `pnpm tokens` writes `src/styles/tokens.css`
   from `docs/ux/tokens.json` (`pnpm lint` fails when it is stale). Fonts Inter and JetBrains Mono are bundled from
-  `src/assets/fonts` (OFL licences kept); no remote content, CSP `style-src 'self'` holds (no inline style attributes except the
+  `src/assets/fonts` (OFL licences kept; superseded 2026-11-19 (0.3.0): Geist + Geist Mono, same folder); no remote content, CSP `style-src 'self'` holds (no inline style attributes except the
   CSSOM variable `--hold-ms`). Density is `data-density="comfortable|compact"` on `<html>` (variables `--ctl-md`, `--ctl-sm`,
   `--row-y`); theme is `data-theme` (none = follow the OS). Both come from `usePrefs()` and live in localStorage.
 - **DEC-T16-5** — T16 — SecretField takes callbacks, not item IDs: `onReveal` (call `item_reveal`) and `onCopy` (call

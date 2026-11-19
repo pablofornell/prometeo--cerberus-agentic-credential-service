@@ -1,0 +1,26 @@
+/* The Cerberus mark (GateMark.tsx): flat, solid, no glow. Ink follows the theme (white on dark, black on light). */
+.gate-mark { display: block; flex: none; color: var(--c-text-primary); }
+.gate-mark--locked { color: var(--c-text-muted); }
+
+/* The five bands of the innermost ring take the app's spectrum tokens, so there is one spectrum in the app. */
+.gate-mark__band--red { stop-color: var(--c-spectrum-red); }
+.gate-mark__band--amber { stop-color: var(--c-spectrum-amber); }
+.gate-mark__band--green { stop-color: var(--c-spectrum-green); }
+.gate-mark__band--blue { stop-color: var(--c-spectrum-blue); }
+.gate-mark__band--violet { stop-color: var(--c-spectrum-violet); }
+
+.gate-mark__ring {
+  transition: stroke-dasharray var(--d-gate) var(--ease-standard), stroke-dashoffset var(--d-gate) var(--ease-standard), transform var(--d-gate) var(--ease-standard);
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* Working: the rings turn at their own speeds. */
+.gate-mark--spin .gate-mark__ring--r1 { animation: gate-mark-turn 2.4s linear infinite; }
+.gate-mark--spin .gate-mark__ring--r2 { animation: gate-mark-turn 1.8s linear infinite reverse; }
+.gate-mark--spin .gate-mark__ring--r3 { animation: gate-mark-turn 1.2s linear infinite; }
+@keyframes gate-mark-turn { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .gate-mark--spin .gate-mark__ring { animation: none !important; }
+}

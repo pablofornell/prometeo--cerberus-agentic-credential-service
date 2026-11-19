@@ -177,7 +177,7 @@ export default function ApprovalScreen() {
     if (locked || (pending.isError && isLockError(pending.error))) {
       return (
         <div className="ap-result" role="status">
-          <GateMark size={56} mode="locked" />
+          <GateMark size={48} mode="locked" />
           <h1>{s("locked.title")}</h1>
           <p className="secondary">{s("locked.body")}</p>
           {!inWindow && (
@@ -195,7 +195,7 @@ export default function ApprovalScreen() {
     if (outcome && inWindow) {
       return (
         <div className="ap-result" role={outcome.tone === "done" ? "status" : "alert"}>
-          <GateMark size={56} mode={outcome.tone === "done" ? "open" : "locked"} />
+          <GateMark size={48} mode={outcome.tone === "done" ? "open" : "locked"} />
           <h1>{outcome.title}</h1>
           {outcome.body && <p className="secondary">{outcome.body}</p>}
           {outcome.code && <span className="code">{outcome.code}</span>}

@@ -1,50 +1,56 @@
-/* Policies screen, "Obsidian & Brass". Tokens and base classes come from styles/app.css. */
+/* Policies screen. Tokens and base classes come from styles/app.css. */
 .policies { display: grid; gap: 20px; }
 
-/* The builder is a sentence: serif connective words, plain controls for the choices. */
-.sentence { font-family: var(--font-display); font-size: 24px; line-height: 50px; font-weight: 400; letter-spacing: 0; color: var(--c-text-secondary); }
+/* The builder is a sentence: plain secondary words, input-like controls for the choices. */
+.sentence { font-size: var(--t-body-lg-size); line-height: 44px; font-weight: 400; letter-spacing: -0.01em; color: var(--c-text-secondary); }
 .sentence select, .sentence .slot {
-  font-family: var(--font-sans); font-size: var(--t-body-size); font-weight: 560; letter-spacing: var(--t-body-track); color: var(--c-text-primary);
-  background-color: var(--c-bg-sunken); border: 1px solid var(--hair-ctl); border-bottom: 2px solid var(--c-ring-gate); border-radius: var(--r-sm); box-shadow: var(--sh-inset);
-  padding: 0 10px; height: 32px; line-height: 30px; vertical-align: baseline; margin: 0 2px;
+  font-family: var(--font-sans); font-size: var(--t-body-size); font-weight: 500; letter-spacing: var(--t-body-track); color: var(--c-text-primary);
+  background-color: var(--c-bg-canvas); border: 1px solid var(--c-border-default); border-radius: var(--r-sm);
+  padding: 0 10px; height: var(--ctl-md); line-height: calc(var(--ctl-md) - 2px); vertical-align: baseline; margin: 0 2px;
 }
 .sentence select { appearance: none; padding-right: 28px; cursor: pointer;
   background-image: linear-gradient(45deg, transparent 50%, var(--c-text-muted) 50%), linear-gradient(135deg, var(--c-text-muted) 50%, transparent 50%);
   background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
-  transition: border-color var(--d-fast) var(--ease-standard); }
-.sentence select:hover { border-color: var(--c-border-strong); border-bottom-color: var(--c-ring-gate); }
-.sentence select:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 1px; box-shadow: 0 0 0 5px var(--focus-halo); }
+  transition: border-color var(--d-fast) var(--ease-standard), box-shadow var(--d-fast) var(--ease-standard); }
+.sentence select:hover { border-color: var(--c-border-strong); }
+.sentence select:focus-visible { outline: 2px solid transparent; outline-offset: 0; border-color: transparent; box-shadow: var(--sh-focus); }
 .sentence select:disabled { opacity: 0.6; cursor: not-allowed; }
-.sentence .slot { display: inline-block; }
+.sentence .slot { display: inline-block; background-color: var(--c-bg-sunken); border-color: var(--hair-ctl); }
 
-/* Approval mode: a small segmented control, brass for the chosen mode, coral for block. */
-.modes { display: inline-flex; gap: 2px; padding: 2px; vertical-align: baseline; flex-wrap: wrap; border-radius: var(--r-sm); background: var(--c-bg-sunken); border: 1px solid var(--hair-ctl); box-shadow: var(--sh-inset); }
-.modes button { font: inherit; font-family: var(--font-sans); font-size: var(--t-body-size); line-height: 1; font-weight: 550; letter-spacing: var(--t-body-track); height: 28px; padding: 0 12px; border-radius: 4px; border: 1px solid transparent; background: transparent; color: var(--c-text-secondary); cursor: pointer;
+/* Approval mode: a small segmented control. The chosen mode is solid ink, block is solid danger. */
+.modes { display: inline-flex; gap: 2px; padding: 2px; vertical-align: baseline; flex-wrap: wrap; border-radius: var(--r-sm); background: var(--c-bg-sunken); border: 1px solid var(--hair-ctl); }
+.modes button { font: inherit; font-family: var(--font-sans); font-size: var(--t-body-sm-size); line-height: 1; font-weight: 500; letter-spacing: var(--t-body-track); height: 28px; padding: 0 12px; border-radius: 4px; border: 1px solid transparent; background: transparent; color: var(--c-text-secondary); cursor: pointer;
   transition: background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
 .modes button:hover { background: var(--c-bg-hover); color: var(--c-text-primary); }
-.modes button[aria-checked="true"] { background: var(--brass-grad); border-color: var(--c-accent-lo); color: var(--c-accent-on-solid); box-shadow: var(--sh-brass); }
-.modes button.block[aria-checked="true"] { background: var(--danger-grad); border-color: var(--danger-edge); color: var(--c-danger-on-solid); }
+.modes button[aria-checked="true"] { background: var(--c-accent-solid); border-color: var(--c-accent-solid); color: var(--c-accent-on-solid); }
+.modes button.block[aria-checked="true"] { background: var(--c-danger-solid); border-color: var(--c-danger-solid); color: var(--c-danger-on-solid); }
 .modes button:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
 .modes button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* Saved grants read as sentences: the human words carry the weight, wire values step back into mono. */
 .grants { list-style: none; margin: 0; padding: 0; }
-.grants li { display: flex; gap: 16px; align-items: flex-start; padding: 16px 20px; border-bottom: 1px solid var(--hair); transition: background-color var(--d-fast) var(--ease-standard); }
-.grants li:last-child { border-bottom: 0; }
+.grants li { display: flex; gap: 16px; align-items: flex-start; padding: 14px 4px; border-bottom: 1px solid var(--hair); transition: background-color var(--d-fast) var(--ease-standard); }
+.grants li:first-child { padding-top: 0; }
+.grants li:last-child { padding-bottom: 0; border-bottom: 0; }
 .grants li > p, .grants li > div { flex: 1; min-width: 0; }
-.grants p { font-size: 15px; line-height: 24px; letter-spacing: 0; color: var(--c-text-secondary); text-wrap: pretty; }
+.grants p { font-size: var(--t-body-size); line-height: 24px; letter-spacing: 0; color: var(--c-text-secondary); text-wrap: pretty; }
 .grants b { font-weight: 600; color: var(--c-text-primary); }
-.grants b.wire { font-family: var(--font-mono); font-feature-settings: "zero"; font-size: 12.5px; font-weight: 500; color: var(--c-text-secondary); padding: 1px 5px; margin: 0 1px; border-radius: var(--r-xs); background: color-mix(in srgb, var(--c-text-primary) 6%, transparent); box-shadow: inset 0 0 0 1px var(--hair); white-space: normal; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.grants b.wire { font-family: var(--font-mono); font-feature-settings: "zero"; font-size: 12.5px; font-weight: 500; color: var(--c-text-secondary); padding: 1px 5px; margin: 0 1px; border-radius: var(--r-xs); background: var(--c-bg-strong); white-space: normal; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .grants .row-inline { flex: none; flex-wrap: nowrap; gap: 2px; align-self: center; }
 .grants li > .mode { align-self: center; }
 
-/* Mode badge: engraved, never colour alone (the words say it too). */
-.mode { flex: none; display: inline-flex; align-items: center; font-size: 11.5px; line-height: 1; font-weight: 650; letter-spacing: 0.02em; height: 22px; padding: 0 8px; border-radius: var(--r-xs); white-space: nowrap; box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent); }
+/* Mode badge: a quiet pill with a shape and the word, never colour alone. Circle = auto, ring = once, triangle = always, square = blocked, dash = no grant. */
+.mode { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1; font-weight: 500; height: 22px; padding: 0 8px; border-radius: var(--r-full); white-space: nowrap; }
+.mode::before { content: ""; flex: none; width: 7px; height: 7px; background: currentColor; border-radius: 50%; }
 .m-auto { background: var(--c-success-tint); color: var(--c-success-on-tint); }
-.m-once { background: var(--c-accent-tint); color: var(--c-accent-on-tint); }
+.m-once { background: var(--c-info-tint); color: var(--c-info-on-tint); }
+.m-once::before { background: transparent; border: 1.5px solid currentColor; }
 .m-always { background: var(--c-warning-tint); color: var(--c-warning-on-tint); }
+.m-always::before { border-radius: 0; width: 8px; height: 7px; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .m-deny { background: var(--c-danger-tint); color: var(--c-danger-on-tint); }
-.m-none { background: var(--c-bg-raised); color: var(--c-text-muted); box-shadow: inset 0 0 0 1px var(--hair); }
+.m-deny::before { border-radius: 1px; }
+.m-none { background: var(--c-bg-strong); color: var(--c-text-muted); }
+.m-none::before { border-radius: 1px; width: 8px; height: 2px; }
 
 .cond { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
 .policies details > summary { cursor: pointer; color: var(--c-text-secondary); padding: 2px 0; }
@@ -53,7 +59,7 @@
 .policies details[open] > summary { color: var(--c-text-primary); }
 .policies .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .policies .agent-pick { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.policies .agent-pick label { font-weight: 550; font-size: var(--t-body-sm-size); color: var(--c-text-secondary); }
+.policies .agent-pick label { font-weight: 500; font-size: var(--t-body-sm-size); color: var(--c-text-secondary); }
 .policies .agent-pick select { width: auto; }
 .policies .prod-switch { margin-top: 8px; }
 .policies .sim-empty { padding: 14px 16px; }

@@ -48,7 +48,7 @@ function visible(text: string): ReactNode[] {
 }
 
 /**
- * Text that an agent wrote. Dashed brass border, mono face, a fixed label. It is plain text only: React text,
+ * Text that an agent wrote. Dashed amber border, mono face, a fixed label. It is plain text only: React text,
  * never HTML (S-5, S-6). The backend already removed control characters and cut it to 500 characters. Invisible
  * and bidi characters show as codes, and the text is isolated (`bdi`), so it cannot reorder what is around it.
  */

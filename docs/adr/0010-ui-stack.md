@@ -34,6 +34,7 @@ to the backend.
 3. Languages: English (`en`, default) and Spanish (`es`). Strings are in `ui/src/locales/{en,es}.json`.
    A test fails if a key exists in one file and not in the other.
 4. Fonts Inter and JetBrains Mono are bundled as files. No font CDN (CSP has no remote origins).
+   Superseded 2026-11-19 (0.3.0): Geist + Geist Mono, bundled the same way.
 5. Secret values never go into a React Query cache, Zustand store or `localStorage`. They stay in a component
    state that clears on hide (15 s auto-hide).
 

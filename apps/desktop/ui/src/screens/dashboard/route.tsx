@@ -125,14 +125,25 @@ interface BandProps {
   onConnect: () => void;
 }
 
+/** One stat of the header: the number as a figure and its own translated label. The whole sentence stays as the screen-reader text. */
+function Figure({ m, k, n, tone }: { m: M; k: "band.agents" | "band.waiting" | "band.leases"; n: number; tone?: "warn" }) {
+  return (
+    <div className={tone ? `fig ${tone}` : "fig"}>
+      <span className="sr-only">{plural(m, k, n)}</span>
+      <span className="n" aria-hidden="true">{n}</span>
+      <span className="l" aria-hidden="true">{n === 1 ? m(`${k}.label.one`) : m(`${k}.label`)}</span>
+    </div>
+  );
+}
+
 function Band({ m, waiting, leases, agents, onConnect }: BandProps) {
   const status = useVaultStatus().data;
   const label = useSessionLabel();
   const role = useRole();
   const left = useAutolockSeconds();
   return (
-    <section className="band guilloche" aria-labelledby="dash-band-h">
-      <GateMark size={76} mode="open" />
+    <section className="band" aria-labelledby="dash-band-h">
+      <GateMark size={40} mode="open" />
       <div>
         <h2 id="dash-band-h">{m("band.title")}</h2>
         <div className="facts">
@@ -148,16 +159,16 @@ function Band({ m, waiting, leases, agents, onConnect }: BandProps) {
           </span>
           {status?.hard_lock_at && <span>{m("band.hardLock", { time: hourMinute(status.hard_lock_at) })}</span>}
         </div>
-        <div className="trace flow" role="group" aria-label={m("band.trace")}>
-          <span className="step pass"><span className="dot" aria-hidden="true" /><span>{plural(m, "band.agents", agents)}</span></span>
-          <span className={waiting > 0 ? "step wait" : "step pass"}><span className="dot" aria-hidden="true" /><span>{plural(m, "band.waiting", waiting)}</span></span>
-          <span className="step pass"><span className="dot" aria-hidden="true" /><span>{plural(m, "band.leases", leases)}</span></span>
-        </div>
-        {role === "viewer" && <p className="small viewer-note">{m("band.viewerNote")}</p>}
       </div>
       <div className="acts">
         <Button icon="plus" onClick={onConnect}>{m("band.connect")}</Button>
       </div>
+      <div className="figs" role="group" aria-label={m("band.trace")}>
+        <Figure m={m} k="band.agents" n={agents} />
+        <Figure m={m} k="band.waiting" n={waiting} tone={waiting > 0 ? "warn" : undefined} />
+        <Figure m={m} k="band.leases" n={leases} />
+      </div>
+      {role === "viewer" && <p className="small viewer-note">{m("band.viewerNote")}</p>}
     </section>
   );
 }
@@ -389,7 +400,14 @@ export default function DashboardScreen() {
     return (
       <section aria-label={t("screen.dashboard")} data-screen="dashboard" className="dash" aria-busy="true">
         <Skeleton label={m("loading")} variant="block" />
-        <Skeleton label={m("loading")} rows={4} />
+        <div className="cols c-main-side">
+          {[0, 1].map((i) => (
+            <div key={i} className="panel flush">
+              <header aria-hidden="true"><span className="skel" /></header>
+              <div className="body"><Skeleton label={m("loading")} rows={3} /></div>
+            </div>
+          ))}
+        </div>
       </section>
     );
   }
