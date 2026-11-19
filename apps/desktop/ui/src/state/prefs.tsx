@@ -1,6 +1,7 @@
 // Theme, density and language. They are per-person display settings, kept in localStorage (wrapped in
 // try/catch: storage can be blocked). They never hold vault data. Settings screen: use `usePrefs()`.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { windowLabel } from "../shell/windowLabel";
 
 export type ThemePref = "dark" | "light" | "system";
 export type DensityPref = "comfortable" | "compact";
@@ -38,11 +39,15 @@ function write(prefs: Prefs): void {
   }
 }
 
-/** Puts the prefs on `<html>`: no `data-theme` means follow the OS (tokens.css). */
+/**
+ * Puts the prefs on `<html>`: no `data-theme` means follow the OS (tokens.css). The approval window is a small popup, so
+ * it is always compact, whatever the pref is. It is set on `<html>` and not on the screen, so the toasts (which sit
+ * outside the screen) get the compact tokens too.
+ */
 export function applyPrefs(prefs: Prefs, root: HTMLElement = document.documentElement): void {
   if (prefs.theme === "system") root.removeAttribute("data-theme");
   else root.setAttribute("data-theme", prefs.theme);
-  root.setAttribute("data-density", prefs.density);
+  root.setAttribute("data-density", windowLabel() === "approval" ? "compact" : prefs.density);
   root.setAttribute("lang", prefs.language);
 }
 

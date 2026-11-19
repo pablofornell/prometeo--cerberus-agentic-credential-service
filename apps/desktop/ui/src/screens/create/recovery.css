@@ -1,18 +1,18 @@
 /* The recovery key grid, shared by the create screen and the settings rotate dialog.
    A flat sunken plate with one hairline: the groups sit in even columns, numbered in muted type. */
 .rk {
-  list-style: none; margin: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px 10px; padding: 20px 24px;
+  list-style: none; margin: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--s-3_5) var(--s-2_5); padding: var(--s-5) var(--s-6);
   border-radius: var(--r-md); background: var(--c-bg-sunken); border: 1px solid var(--hair-ctl);
   font-family: var(--font-mono); font-size: var(--t-mono-lg-size); line-height: var(--t-mono-lg-line); letter-spacing: 0;
 }
-.rk li { display: inline-flex; gap: 6px; align-items: baseline; justify-content: center; position: relative; }
-.rk small { font-size: 11px; color: var(--c-text-muted); letter-spacing: 0; font-family: var(--font-sans); font-variant-numeric: tabular-nums; width: 14px; text-align: right; flex: none; }
+.rk li { display: inline-flex; gap: var(--s-1_5); align-items: baseline; justify-content: center; position: relative; }
+.rk small { font-size: var(--t-micro-size); color: var(--c-text-muted); letter-spacing: 0; font-family: var(--font-sans); font-variant-numeric: tabular-nums; width: 16px; text-align: right; flex: none; }
 .print-only { display: none; }
 @media (max-width: 860px) { .rk { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media print {
   body * { visibility: hidden; }
   .print-area, .print-area * { visibility: visible; }
-  .print-area { position: fixed; inset: 0 auto auto 0; padding: 24px; background: white; }
+  .print-area { position: fixed; inset: 0 auto auto 0; padding: var(--s-6); background: white; }
   .print-only { display: block; color: black; }
   .rk { border: 2px solid black; color: black; background: white; box-shadow: none; }
   .rk small { color: black; }

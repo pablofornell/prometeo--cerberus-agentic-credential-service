@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- Cerberus mark, 1024 master: the gate (three gapped rings and a core, open), flat and solid white on a plain black tile, in the spirit of the Vercel triangle. The innermost ring is the only colour: sharp spectrum bands. No glow, halo or shading. The in-app GateMark is the same drawing without the tile. -->
+  <!-- Cerberus mark, 1024 master: the gate (three gapped rings and a core, open), flat and solid white on a plain black tile, in the spirit of the Vercel triangle. The core is the only colour: a crisp disc filled with an aurora of the five spectrum colours. No glow or halo outside the disc. The in-app GateMark is the same drawing without the tile. -->
   <defs><clipPath id="tile"><rect width="1024" height="1024" rx="228"/></clipPath></defs>
   <g clip-path="url(#tile)">
     <rect width="1024" height="1024" fill="#000"/>
-    <g transform="translate(188 188) scale(27)">
-    <defs><linearGradient id="bands" gradientUnits="userSpaceOnUse" x1="8.15" y1="14.7" x2="15.85" y2="9.3"><stop offset="0" stop-color="#FF4545"/><stop offset="0.2" stop-color="#FF4545"/><stop offset="0.2" stop-color="#FFB020"/><stop offset="0.4" stop-color="#FFB020"/><stop offset="0.4" stop-color="#3DDC6A"/><stop offset="0.6" stop-color="#3DDC6A"/><stop offset="0.6" stop-color="#3B8BFF"/><stop offset="0.8" stop-color="#3B8BFF"/><stop offset="0.8" stop-color="#9A6BFF"/><stop offset="1" stop-color="#9A6BFF"/></linearGradient></defs>
-    <circle cx="12" cy="12" r="10.5" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="58.06 7.92" stroke-dashoffset="45.52"/>
-    <circle cx="12" cy="12" r="7.2" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="38.00 7.24" stroke-dashoffset="30.31"/>
-    <circle cx="12" cy="12" r="3.9" fill="none" stroke="url(#bands)" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="18.62 5.88" stroke-dashoffset="15.44"/>
-    <circle cx="12" cy="12" r="1.4" fill="#fff"/>
+    <g transform="translate(176 176) scale(28)">
+    <defs><clipPath id="core"><circle cx="12" cy="12" r="2.5"/></clipPath><radialGradient id="red" gradientUnits="userSpaceOnUse" cx="10.25" cy="10.25" r="4.5"><stop offset="0" stop-color="#FF4545"/><stop offset="0.35" stop-color="#FF4545" stop-opacity="0.9"/><stop offset="1" stop-color="#FF4545" stop-opacity="0"/></radialGradient><radialGradient id="amber" gradientUnits="userSpaceOnUse" cx="9.62" cy="13.12" r="4"><stop offset="0" stop-color="#FFB020"/><stop offset="0.35" stop-color="#FFB020" stop-opacity="0.9"/><stop offset="1" stop-color="#FFB020" stop-opacity="0"/></radialGradient><radialGradient id="green" gradientUnits="userSpaceOnUse" cx="11.88" cy="14.5" r="4"><stop offset="0" stop-color="#3DDC6A"/><stop offset="0.35" stop-color="#3DDC6A" stop-opacity="0.9"/><stop offset="1" stop-color="#3DDC6A" stop-opacity="0"/></radialGradient><radialGradient id="blue" gradientUnits="userSpaceOnUse" cx="14.38" cy="12.88" r="3.75"><stop offset="0" stop-color="#3B8BFF"/><stop offset="0.35" stop-color="#3B8BFF" stop-opacity="0.9"/><stop offset="1" stop-color="#3B8BFF" stop-opacity="0"/></radialGradient><radialGradient id="violet" gradientUnits="userSpaceOnUse" cx="13.38" cy="10" r="3.75"><stop offset="0" stop-color="#9A6BFF"/><stop offset="0.35" stop-color="#9A6BFF" stop-opacity="0.9"/><stop offset="1" stop-color="#9A6BFF" stop-opacity="0"/></radialGradient></defs>
+    <circle cx="12" cy="12" r="10.25" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="56.67 7.73" stroke-dashoffset="44.44"/>
+    <circle cx="12" cy="12" r="7.25" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="38.26 7.29" stroke-dashoffset="30.52"/>
+    <circle cx="12" cy="12" r="4.25" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="20.29 6.41" stroke-dashoffset="16.82"/>
+    <g clip-path="url(#core)"><circle cx="12" cy="12" r="2.5" fill="#3B8BFF"/><circle cx="12" cy="12" r="6" fill="url(#red)"/><circle cx="12" cy="12" r="6" fill="url(#amber)"/><circle cx="12" cy="12" r="6" fill="url(#green)"/><circle cx="12" cy="12" r="6" fill="url(#blue)"/><circle cx="12" cy="12" r="6" fill="url(#violet)"/></g>
     </g>
   </g>
 </svg>

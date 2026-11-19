@@ -8,7 +8,7 @@ import { useShellActions } from "./actions";
 import { navOwner, SCREENS, type ScreenDef } from "./screens";
 import { openOverlay } from "./uiStore";
 
-/** The 240 px rail: brand, navigation with `G` hints, and the collar (who unlocked, auto-lock ring, Lock, panic). */
+/** The rail (272 px, 240 px in compact density): brand, navigation with `G` hints, and the collar (who unlocked, auto-lock ring, Lock, panic). */
 export function Rail({ current, inert }: { current: ScreenDef; inert?: boolean }) {
   const owner = navOwner(current);
   const pending = usePendingRequests();
@@ -38,7 +38,7 @@ export function Rail({ current, inert }: { current: ScreenDef; inert?: boolean }
   return (
     <aside className="sidebar" inert={inert}>
       <Link className="brand" href="/dashboard">
-        <GateMark size={24} />
+        <GateMark size={32} />
         <span className="brand-txt">
           <span className="word">{t("app.name")}</span>
           <span className="tagline" aria-hidden="true">
@@ -65,7 +65,7 @@ function Collar() {
   return (
     <div className="collar" role="group" aria-label={t("collar.label")}>
       <div className="who">
-        {open ? <TtlRing gate total={1800} left={left ?? 1800} size={30} /> : <GateMark size={30} mode="locked" />}
+        {open ? <TtlRing gate total={1800} left={left ?? 1800} size={32} /> : <GateMark size={32} mode="locked" />}
         <span className="t">
           <span className="small">
             {!open ? t(state === "locking" ? "collar.locking" : "collar.locked") : label ? t("collar.unlockedBy", { name: label }) : t("collar.unlocked")}

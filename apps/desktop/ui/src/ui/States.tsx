@@ -25,7 +25,7 @@ interface EmptyStateProps {
 export function EmptyState({ title, body, icon, gate, action, steps, as: Heading = "h2" }: EmptyStateProps) {
   return (
     <div className="state-block">
-      {gate ? <GateMark size={56} /> : icon && <Icon name={icon} size={32} />}
+      {gate ? <GateMark size={72} /> : icon && <Icon name={icon} size={32} />}
       <Heading>{title}</Heading>
       <p>{body}</p>
       {steps && (

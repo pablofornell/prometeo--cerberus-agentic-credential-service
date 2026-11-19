@@ -1,55 +1,55 @@
 /* Settings. Ported from docs/ux/prototypes/11-settings.html. Only tokens and app.css classes. */
-.settings { display: grid; grid-template-columns: 200px minmax(0, 760px); gap: 32px; align-items: start; }
+.settings { display: grid; grid-template-columns: 240px minmax(0, 1040px); gap: var(--s-8); align-items: start; }
 
 /* Section index: a quiet list; the current section is a faint fill with the 2 px ink rule on its leading edge. */
-.settings .subnav { position: sticky; top: 80px; display: grid; gap: 2px; padding-top: 4px; }
-.settings .subnav button { all: unset; box-sizing: border-box; position: relative; cursor: pointer; padding: 7px 12px; border-radius: var(--r-sm); color: var(--c-text-secondary); font-weight: 500; transition: background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
+.settings .subnav { position: sticky; top: calc(var(--topbar-h) + var(--s-6)); display: grid; gap: var(--s-0_5); padding-top: var(--s-1); }
+.settings .subnav button { all: unset; box-sizing: border-box; position: relative; cursor: pointer; padding: var(--s-2) var(--s-3); border-radius: var(--r-sm); color: var(--c-text-secondary); font-weight: 500; transition: background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
 .settings .subnav button:hover { background: var(--c-bg-hover); color: var(--c-text-primary); }
 .settings .subnav button:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 1px; }
 .settings .subnav button[aria-current="true"] { background: var(--c-bg-hover); color: var(--c-text-primary); font-weight: 500; border-radius: 0 var(--r-sm) var(--r-sm) 0; box-shadow: inset 2px 0 0 var(--c-text-primary); }
 
 /* Each section is one panel: a plain title over hairline rows. */
-.settings .sections { display: grid; gap: 24px; min-width: 0; }
-.settings .settings-section { display: grid; gap: 0; align-content: start; scroll-margin-top: 80px; padding: 0 20px; background: var(--c-bg-surface); border: 1px solid var(--hair); border-radius: var(--r-md); }
-.settings .settings-section > h2 { font-weight: 600; font-size: var(--t-title-sm-size); line-height: var(--t-title-sm-line); letter-spacing: var(--t-title-sm-track); padding: 14px 0 12px; border-bottom: 1px solid var(--hair); }
+.settings .sections { display: grid; gap: var(--s-6); min-width: 0; }
+.settings .settings-section { display: grid; gap: 0; align-content: start; scroll-margin-top: calc(var(--topbar-h) + var(--s-5)); padding: 0 var(--s-5); background: var(--c-bg-surface); border: 1px solid var(--hair); border-radius: var(--r-md); }
+.settings .settings-section > h2 { font-weight: 600; font-size: var(--t-title-sm-size); line-height: var(--t-title-sm-line); letter-spacing: var(--t-title-sm-track); padding: var(--s-3_5) 0 var(--s-3); border-bottom: 1px solid var(--hair); }
 .settings h2:focus { outline: none; }
 .settings h2:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
-.settings .settings-section > .notice { margin: 14px 0 0; }
-.settings .settings-section > form { padding: 14px 0; border-bottom: 1px solid var(--hair); }
+.settings .settings-section > .notice { margin: var(--s-3_5) 0 0; }
+.settings .settings-section > form { padding: var(--s-3_5) 0; border-bottom: 1px solid var(--hair); }
 
-.settings .setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 24px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--hair); }
+.settings .setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-1_5) var(--s-6); align-items: center; padding: var(--s-3_5) 0; border-bottom: 1px solid var(--hair); }
 .settings .setting:last-child { border-bottom: 0; }
 .settings .setting.wide { grid-template-columns: minmax(0, 1fr) auto; }
-.settings .setting.wide .body { grid-column: 1 / -1; display: grid; gap: 10px; }
-.settings .setting .lbl { display: grid; gap: 2px; min-width: 0; }
+.settings .setting.wide .body { grid-column: 1 / -1; display: grid; gap: var(--s-2_5); }
+.settings .setting .lbl { display: grid; gap: var(--s-0_5); min-width: 0; }
 .settings .setting .lbl b { font-weight: 500; }
 .settings .setting .lbl > span { font-size: var(--t-body-sm-size); color: var(--c-text-muted); text-wrap: pretty; }
-.settings .setting .ctl { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.settings .setting .ctl { display: flex; gap: var(--s-2); align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 .settings .setting .ctl .input { width: auto; }
-.settings .setting .ctl .chip.mono { font-size: 11.5px; }
-.settings .owner-only { font-size: 12px; color: var(--c-text-muted); display: inline-flex; gap: 4px; align-items: center; }
+.settings .setting .ctl .chip.mono { font-size: var(--t-micro-size); }
+.settings .owner-only { font-size: var(--t-caption-size); color: var(--c-text-muted); display: inline-flex; gap: var(--s-1); align-items: center; }
 
 /* Fingerprints and pins: mono, sunken, selectable. */
-.settings .fp { font-family: var(--font-mono); font-feature-settings: "zero"; font-size: 11.5px; line-height: 18px; overflow-wrap: anywhere; color: var(--c-text-secondary); display: block; margin-top: 4px; padding: 4px 8px; border-radius: var(--r-xs); background: var(--c-bg-sunken); border: 1px solid var(--hair); user-select: all; }
-.settings .reason { font-size: 12px; color: var(--c-text-muted); max-width: 30ch; text-align: right; }
-.settings .result { display: block; margin-top: 4px; color: var(--c-text-secondary); }
+.settings .fp { font-family: var(--font-mono); font-feature-settings: "zero"; font-size: var(--t-caption-size); line-height: 26px; overflow-wrap: anywhere; color: var(--c-text-secondary); display: block; margin-top: var(--s-1); padding: var(--s-1) var(--s-2); border-radius: var(--r-xs); background: var(--c-bg-sunken); border: 1px solid var(--hair); user-select: all; }
+.settings .reason { font-size: var(--t-caption-size); color: var(--c-text-muted); max-width: 30ch; text-align: right; }
+.settings .result { display: block; margin-top: var(--s-1); color: var(--c-text-secondary); }
 .settings .result.bad { color: var(--c-danger-fg); }
 .settings .switch-bare > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.settings .role-select { width: auto; height: 28px; }
+.settings .role-select { width: auto; height: var(--ctl-md); }
 .settings .self-start { justify-self: start; }
 .settings .block { display: block; }
-.settings .code { font-family: var(--font-mono); font-size: 12px; opacity: 0.85; }
-.settings .plain-list { margin: 0; padding-left: 18px; color: var(--c-text-secondary); }
+.settings .code { font-family: var(--font-mono); font-size: var(--t-caption-size); opacity: 0.85; }
+.settings .plain-list { margin: 0; padding-left: var(--s-4_5); color: var(--c-text-secondary); }
 .settings .setting-error { grid-column: 1 / -1; }
-.settings .save-error { position: sticky; top: 68px; z-index: 1; }
+.settings .save-error { position: sticky; top: calc(var(--topbar-h) + var(--s-3)); z-index: 1; }
 .settings .sections > .notice { margin: 0; }
 
 /* Operators sit in a nested hairline list. */
 .settings .rows.panel { box-shadow: none; background: var(--c-bg-sunken); }
-.settings .rows.panel > li { padding: 10px 16px; }
+.settings .rows.panel > li { padding: var(--s-2_5) var(--s-4); }
 
-@media (max-width: 900px) {
-  .settings { grid-template-columns: 1fr; gap: 16px; }
+@media (max-width: 1000px) {
+  .settings { grid-template-columns: 1fr; gap: var(--s-4); }
   .settings .subnav { position: static; display: flex; flex-wrap: wrap; }
   .settings .setting, .settings .setting.wide { grid-template-columns: 1fr; }
   .settings .setting .ctl { justify-content: flex-start; }

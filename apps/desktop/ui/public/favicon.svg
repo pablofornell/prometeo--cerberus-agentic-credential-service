@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Cerberus, small-size cut of cerberus-mark.svg: the same flat gate, slightly heavier strokes. -->
+  <!-- Cerberus, small-size cut of cerberus-mark.svg: the same flat gate with the aurora core, slightly heavier strokes and a slightly larger core. -->
   <defs><clipPath id="tile"><rect width="32" height="32" rx="7.5"/></clipPath></defs>
   <g clip-path="url(#tile)">
     <rect width="32" height="32" fill="#000"/>
     <g transform="translate(1.6 1.6) scale(1.2)">
-    <defs><linearGradient id="bands" gradientUnits="userSpaceOnUse" x1="8.15" y1="14.7" x2="15.85" y2="9.3"><stop offset="0" stop-color="#FF4545"/><stop offset="0.2" stop-color="#FF4545"/><stop offset="0.2" stop-color="#FFB020"/><stop offset="0.4" stop-color="#FFB020"/><stop offset="0.4" stop-color="#3DDC6A"/><stop offset="0.6" stop-color="#3DDC6A"/><stop offset="0.6" stop-color="#3B8BFF"/><stop offset="0.8" stop-color="#3B8BFF"/><stop offset="0.8" stop-color="#9A6BFF"/><stop offset="1" stop-color="#9A6BFF"/></linearGradient></defs>
-    <circle cx="12" cy="12" r="10.5" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="58.06 7.92" stroke-dashoffset="45.52"/>
-    <circle cx="12" cy="12" r="7.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="38.00 7.24" stroke-dashoffset="30.31"/>
-    <circle cx="12" cy="12" r="3.9" fill="none" stroke="url(#bands)" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="18.62 5.88" stroke-dashoffset="15.44"/>
-    <circle cx="12" cy="12" r="1.4" fill="#fff"/>
+    <defs><clipPath id="core"><circle cx="12" cy="12" r="2.6"/></clipPath><radialGradient id="red" gradientUnits="userSpaceOnUse" cx="10.18" cy="10.18" r="4.68"><stop offset="0" stop-color="#FF4545"/><stop offset="0.35" stop-color="#FF4545" stop-opacity="0.9"/><stop offset="1" stop-color="#FF4545" stop-opacity="0"/></radialGradient><radialGradient id="amber" gradientUnits="userSpaceOnUse" cx="9.53" cy="13.17" r="4.16"><stop offset="0" stop-color="#FFB020"/><stop offset="0.35" stop-color="#FFB020" stop-opacity="0.9"/><stop offset="1" stop-color="#FFB020" stop-opacity="0"/></radialGradient><radialGradient id="green" gradientUnits="userSpaceOnUse" cx="11.87" cy="14.6" r="4.16"><stop offset="0" stop-color="#3DDC6A"/><stop offset="0.35" stop-color="#3DDC6A" stop-opacity="0.9"/><stop offset="1" stop-color="#3DDC6A" stop-opacity="0"/></radialGradient><radialGradient id="blue" gradientUnits="userSpaceOnUse" cx="14.47" cy="12.91" r="3.9"><stop offset="0" stop-color="#3B8BFF"/><stop offset="0.35" stop-color="#3B8BFF" stop-opacity="0.9"/><stop offset="1" stop-color="#3B8BFF" stop-opacity="0"/></radialGradient><radialGradient id="violet" gradientUnits="userSpaceOnUse" cx="13.43" cy="9.92" r="3.9"><stop offset="0" stop-color="#9A6BFF"/><stop offset="0.35" stop-color="#9A6BFF" stop-opacity="0.9"/><stop offset="1" stop-color="#9A6BFF" stop-opacity="0"/></radialGradient></defs>
+    <circle cx="12" cy="12" r="10.25" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="56.67 7.73" stroke-dashoffset="44.44"/>
+    <circle cx="12" cy="12" r="7.25" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="38.26 7.29" stroke-dashoffset="30.52"/>
+    <circle cx="12" cy="12" r="4.25" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="20.29 6.41" stroke-dashoffset="16.82"/>
+    <g clip-path="url(#core)"><circle cx="12" cy="12" r="2.6" fill="#3B8BFF"/><circle cx="12" cy="12" r="6.24" fill="url(#red)"/><circle cx="12" cy="12" r="6.24" fill="url(#amber)"/><circle cx="12" cy="12" r="6.24" fill="url(#green)"/><circle cx="12" cy="12" r="6.24" fill="url(#blue)"/><circle cx="12" cy="12" r="6.24" fill="url(#violet)"/></g>
     </g>
   </g>
 </svg>

@@ -206,7 +206,7 @@ export function Wizard() {
     <div className="wizard">
       <aside className="rail" aria-label={t("rail.label")}>
         <div className="row-inline">
-          <GateMark size={30} />
+          <GateMark size={36} />
           <span className="word">Cerberus</span>
         </div>
         <Rings step={step} />

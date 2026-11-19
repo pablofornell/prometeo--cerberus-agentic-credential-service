@@ -1,34 +1,34 @@
 /* Leases screen. Tokens and base classes come from styles/app.css. */
-.leases { display: grid; gap: 20px; }
+.leases { display: grid; gap: var(--s-5); }
 
 /* Stop band: the one place danger is loud, kept flat: a tinted fill, a hairline, a leading rule and one solid button. */
-.stop { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; padding: 16px 20px 16px 24px; border-radius: var(--r-md); overflow: hidden;
+.stop { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-5); align-items: center; padding: var(--s-4) var(--s-5) var(--s-4) var(--s-6); border-radius: var(--r-md); overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--c-danger-fg) 35%, transparent); background: var(--c-danger-tint); color: var(--c-danger-on-tint); }
-.stop::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c-danger-fg); }
-.stop h2 { font-size: var(--t-title-sm-size); line-height: var(--t-title-sm-line); font-weight: 600; letter-spacing: var(--t-title-sm-track); margin-bottom: 2px; }
+.stop::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c-danger-fg); }
+.stop h2 { font-size: var(--t-title-sm-size); line-height: var(--t-title-sm-line); font-weight: 600; letter-spacing: var(--t-title-sm-track); margin-bottom: var(--s-0_5); }
 .stop p { max-width: 62ch; }
-.stop .acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.stop .acts { display: flex; gap: var(--s-2); flex-wrap: wrap; justify-content: flex-end; }
 .stop .btn:not(.danger) { background: transparent; color: var(--c-danger-on-tint); border-color: color-mix(in srgb, var(--c-danger-on-tint) 45%, transparent); }
 .stop .btn:not(.danger):hover { background: color-mix(in srgb, var(--c-danger-fg) 14%, transparent); border-color: var(--c-danger-on-tint); }
 
 /* Lease rows: quiet by default; the revoke action turns danger only on intent. */
 .leases table.grid td:first-child { font-weight: 500; }
-.leases table.grid td.mono { color: var(--c-text-secondary); font-size: 12.5px; }
+.leases table.grid td.mono { color: var(--c-text-secondary); font-size: var(--t-mono-size); }
 .leases table.grid td.num { font-variant-numeric: tabular-nums; color: var(--c-text-secondary); }
 .leases table.grid .btn { background: transparent; border-color: var(--hair-ctl); color: var(--c-text-secondary); }
 .leases table.grid .btn:hover { background: var(--c-danger-tint); border-color: var(--c-danger-fg); color: var(--c-danger-on-tint); }
 .leases .panel.flush { overflow-x: auto; }
-.leases table.grid th, .leases table.grid td { padding-inline: 12px; }
-.leases table.grid th:first-child, .leases table.grid td:first-child { padding-left: 16px; }
-.ends { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
-.src { white-space: nowrap; font-size: 12px; color: var(--c-text-muted); }
-.leases .filter { height: 28px; width: auto; }
-.leases .pad { padding: 14px 16px; }
-.leases .foot-note { padding: 10px 16px; border-top: 1px solid var(--hair); display: flex; gap: 6px; align-items: center; }
+.leases table.grid th, .leases table.grid td { padding-inline: var(--s-3); }
+.leases table.grid th:first-child, .leases table.grid td:first-child { padding-left: var(--s-4); }
+.ends { display: inline-flex; align-items: center; gap: var(--s-2); white-space: nowrap; }
+.src { white-space: nowrap; font-size: var(--t-caption-size); color: var(--c-text-muted); }
+.leases .filter { height: var(--ctl-md); width: auto; }
+.leases .pad { padding: var(--s-3_5) var(--s-4); }
+.leases .foot-note { padding: var(--s-2_5) var(--s-4); border-top: 1px solid var(--hair); display: flex; gap: var(--s-1_5); align-items: center; }
 .leases .center { text-align: center; }
 .leases .rows .title { font-weight: 500; }
 .leases .rows .btn.danger-ghost { flex: none; }
-@media (max-width: 1000px) { .stop { grid-template-columns: 1fr; } .stop .acts { justify-content: flex-start; } }
+@media (max-width: 1200px) { .stop { grid-template-columns: 1fr; } .stop .acts { justify-content: flex-start; } }
 @media (max-width: 760px) { .stop { grid-template-columns: 1fr; } .stop .acts { justify-content: flex-start; } }
 /* The ring is ink while there is time; it turns warning and danger as the time runs out (app.css). */
 .leases .ttl:not(.low):not(.critical) .val { stroke: var(--c-text-primary); }

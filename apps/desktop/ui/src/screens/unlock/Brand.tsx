@@ -10,11 +10,11 @@ interface BrandProps {
   children?: ReactNode;
 }
 
-/** The head of every unlock card: the mark at 40 px next to the title and one line of context (the Hermes login head). */
+/** The head of every unlock card, stacked and centered: the mark on top (60 px, sized in unlock.css), the title, then one line of context. */
 export function Brand({ mode, title, headingRef, children }: BrandProps) {
   return (
     <header className="unlock-brand">
-      <GateMark size={40} {...(mode ? { mode } : {})} />
+      <GateMark size={60} {...(mode ? { mode } : {})} />
       <div className="brand-text">
         <h1 {...(headingRef ? { tabIndex: -1, ref: headingRef } : {})}>{title}</h1>
         {children}

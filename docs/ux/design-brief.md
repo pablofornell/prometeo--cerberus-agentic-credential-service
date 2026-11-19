@@ -59,12 +59,12 @@ Where the motif appears (and nowhere else, so it keeps meaning):
 - **TTL ring**: the same ring geometry shows time left for leases, sessions, TOTP codes and the auto-lock timer.
 
 Color of the motif: the text color (`ring.gate`), so the rings are the one white shape in the dark theme and read as
-"the gate" at a glance. The brand mark itself is a dark glass tile with spectrum light and is drawn separately.
+"the gate" at a glance. The app icon is the same mark on a dark tile (`public/cerberus-mark.svg`); in the app the mark has no tile.
 
 ## 5. Look and feel
 
 - **Direction: a monochrome Geist console.** Cerberus shares its look with Hermes and IRIS: near-black or white
-  surfaces, 1 px hairlines, dense 13 to 14 px type, no decoration. It replaces the earlier "Obsidian & Brass" look
+  surfaces, 1 px hairlines, Geist type on a 16 px base (14 px in compact density), no decoration. It replaces the earlier "Obsidian & Brass" look
   (warm ink, brass accent, serif display, guilloche, engraved labels), which read as costume and not as a tool.
 - **Palette (dark first).** Canvas `#0A0A0A`, rail `#000000`, raised `#1A1A1A`, hairlines `#FFFFFF24` and `#FFFFFF3D`,
   text `#EDEDED` / `#A1A1A1` / `#8F8F8F`. Light theme: `#FFFFFF`, rail `#FAFAFA`, text `#171717`. The primary button
@@ -77,18 +77,23 @@ Color of the motif: the text color (`ring.gate`), so the rings are the one white
   ring shadow (`shadow.overlay`). Quiet nav: the current item is a faint fill and a brighter label, never an
   accent. A selected row is a faint fill plus a 2 px inset rule in the text color. Hover and selection never move
   layout. No gradients, no patterns, no uppercase labels.
-- **Signature (kept small).** The five spectrum colors (`spectrum.*`, the light of the brand mark) appear in two
-  places only: the signal band, a 1 px hairline along the top of the main area with a slow spectrum light (static
-  with reduced motion), and a faint 64 px blueprint grid behind the standalone gate screens (unlock, create),
-  faded by a radial mask. Nothing else uses them.
+- **Signature (kept small).** The five spectrum colors (`spectrum.*`) appear in four small places only, always as
+  thin, sharp accents and never as a glow or a gradient fill: the signal band, a 1 px hairline along the top of the
+  main area with a slow spectrum light (static with reduced motion); the 1 px line on the top edge of the unlock
+  card; the current ring of the create wizard; and the core of the logo. The logo is the three flat rings in the
+  current ink (white on dark, black on light) around a solid core disc, and that core is the one coloured shape: an
+  aurora of the five colors, crisp at the edge with no halo (flat grey when the vault is locked). The logo is large
+  on the unlock card (60 px, 52 and 44 px in short windows), 32 px in the rail (24 px compact). The unlock card is
+  drawn as a hairline frame: lines run out from its edges across the window and a small "+" marks each corner. The
+  card is centered on its real height. Nothing else uses the spectrum.
 - **Type.** Geist Variable for UI text and Geist Mono Variable for secret values, IDs, hashes, fingerprints,
   scopes and code (local woff2, SIL OFL, no CDN). Tabular numbers everywhere. Headings are 600 with negative
-  tracking (-0.02em, page title -0.04em); no serif, no italic display, no engraved labels. Scale 12 / 13 / 14 /
-  16 / 20 / 24 / 32 px, base 14.
-- **Layout.** A 240 px rail (brand lockup with a 24 px mark, navigation with `G` hints that show on hover and
-  focus, and the "collar": who unlocked, auto-lock ring, Lock and panic buttons). A 56 px top bar with the page
+  tracking (-0.02em, page title -0.04em); no serif, no italic display, no engraved labels. Scale 12 / 13 / 15 /
+  16 / 18 / 22 / 28 / 40 px, base 16 (compact density: the old 11 / 12 / 13 / 14 / 16 / 20 / 24 / 32 px, base 14).
+- **Layout.** A 272 px rail (240 px compact; brand lockup with a 32 px mark and an 18 px wordmark, 40 px navigation rows with 20 px icons and `G` hints that show on hover and
+  focus, and the "collar": who unlocked, auto-lock ring, Lock and panic buttons). A 64 px top bar with the page
   title and the palette trigger. Content is left aligned. Panels have a header rule and a quiet body; they are not
-  a grid of identical cards. Controls are 32 px tall (28 px compact, 40 px large).
+  a grid of identical cards. Controls are 38 px tall (28 px compact; 32 px small, 46 px large).
 - **Radius by hierarchy.** 4 px chips and keys, 6 px controls, 8 px panels, 12 px dialogs and the approval window,
   full for pills and rings.
 - **Untrusted text** has its own surface: dashed amber border (a meaning color: it came from outside), mono face,
@@ -131,7 +136,7 @@ Copy samples:
 ## 7. What this brief rules out
 
 - No mascot illustration, no dog head drawing. The rings are the dog.
-- No gradients or patterns as decoration. The spectrum signal band and the gate-screen grid are the only signatures.
+- No gradients or patterns as decoration. The spectrum accents above and the unlock hairline frame are the only signatures.
 - No all-caps labels or eyebrows, no "→" on buttons, no emoji, no stock "security shield" hero.
 - No secret value in any toast, title, notification, tray badge or event payload.
 

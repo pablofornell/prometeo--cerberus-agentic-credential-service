@@ -5,7 +5,7 @@
 | Window label | Size | Routes | Notes |
 |---|---|---|---|
 | `main` | min 960 × 640, default 1280 × 820 | all screens below | Router guard reads `vault_status` first |
-| `approval` | 400 × 560, always on top, not resizable | `/approval` only | Only `request_list_pending`, `request_approve`, `request_deny`, `vault_status`, `vault_lock`, `vault_panic`, `ui_activity` (ADR-0018, E-12) |
+| `approval` | 440 × 640, always on top, not resizable | `/approval` only | Only `request_list_pending`, `request_approve`, `request_deny`, `vault_status`, `vault_lock`, `vault_panic`, `ui_activity` (ADR-0018, E-12) |
 
 Router guard on `main`:
 

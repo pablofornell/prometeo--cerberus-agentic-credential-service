@@ -63,4 +63,15 @@ describe("theme and density", () => {
     applyPrefs({ ...DEFAULT_PREFS, theme: "system" });
     expect(document.documentElement).not.toHaveAttribute("data-theme");
   });
+  it("the approval window is compact on <html> whatever the pref is, so its toasts are too", () => {
+    window.location.hash = "#approval";
+    try {
+      applyPrefs({ ...DEFAULT_PREFS, density: "comfortable" });
+      expect(document.documentElement).toHaveAttribute("data-density", "compact");
+    } finally {
+      window.location.hash = "";
+    }
+    applyPrefs({ ...DEFAULT_PREFS, density: "comfortable" });
+    expect(document.documentElement).toHaveAttribute("data-density", "comfortable");
+  });
 });
