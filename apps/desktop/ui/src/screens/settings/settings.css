@@ -29,6 +29,20 @@
 .settings .setting .ctl .chip.mono { font-size: var(--t-micro-size); }
 .settings .owner-only { font-size: var(--t-caption-size); color: var(--c-text-muted); display: inline-flex; gap: var(--s-1); align-items: center; }
 
+/* UI scale: - value + slider Reset. The slider is a flat hairline track with a filled part and a round ink thumb. */
+.settings .scale-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); }
+.settings .scale-value { min-width: 4ch; text-align: center; font-weight: 500; font-variant-numeric: tabular-nums; }
+.settings .scale-range { -webkit-appearance: none; appearance: none; flex: 1 1 120px; min-width: 120px; max-width: 220px; height: var(--ctl-sm); margin: 0 var(--s-2); background: transparent; cursor: pointer; --fill: 0%; }
+.settings .scale-range::-webkit-slider-runnable-track { height: 4px; border-radius: var(--r-full); background: linear-gradient(to right, var(--c-text-secondary) var(--fill), var(--c-line-mid) var(--fill)); }
+.settings .scale-range::-moz-range-track { height: 4px; border-radius: var(--r-full); background: var(--c-line-mid); }
+.settings .scale-range::-moz-range-progress { height: 4px; border-radius: var(--r-full); background: var(--c-text-secondary); }
+.settings .scale-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: var(--r-full); border: 0; background: var(--c-text-primary); box-shadow: 0 0 0 3px var(--c-bg-surface); }
+.settings .scale-range::-moz-range-thumb { width: 14px; height: 14px; border-radius: var(--r-full); border: 0; background: var(--c-text-primary); box-shadow: 0 0 0 3px var(--c-bg-surface); }
+.settings .scale-range:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; border-radius: var(--r-xs); }
+.settings .scale-range:disabled { opacity: 0.5; cursor: not-allowed; }
+/* The - + Reset buttons are aria-disabled, not disabled, so they keep the keyboard focus. */
+.settings .scale-ctl .btn[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; filter: none; }
+
 /* Fingerprints and pins: mono, sunken, selectable. */
 .settings .fp { font-family: var(--font-mono); font-feature-settings: "zero"; font-size: var(--t-caption-size); line-height: 26px; overflow-wrap: anywhere; color: var(--c-text-secondary); display: block; margin-top: var(--s-1); padding: var(--s-1) var(--s-2); border-radius: var(--r-xs); background: var(--c-bg-sunken); border: 1px solid var(--hair); user-select: all; }
 .settings .reason { font-size: var(--t-caption-size); color: var(--c-text-muted); max-width: 30ch; text-align: right; }

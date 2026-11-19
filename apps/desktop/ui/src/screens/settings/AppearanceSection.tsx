@@ -1,10 +1,12 @@
 import { useScreenT } from "../../i18n";
 import { SegmentedControl } from "../../ui";
 import { usePrefs } from "../../state/prefs";
+import { modLabel } from "../../state/uiScale";
 import { Setting } from "./Setting";
+import { UiScaleControl } from "./UiScaleControl";
 import { messages } from "./messages";
 
-/** Theme, density and language are per person on this device (usePrefs). They are not vault settings. */
+/** Theme, density, UI scale and language are per person on this device (usePrefs). They are not vault settings. */
 export function AppearanceSection() {
   const t = useScreenT(messages);
   const prefs = usePrefs();
@@ -35,6 +37,9 @@ export function AppearanceSection() {
             { value: "compact", label: t("density.compact") },
           ]}
         />
+      </Setting>
+      <Setting wide label={t("scale.label")} description={t("scale.desc", { mod: modLabel() })}>
+        <UiScaleControl />
       </Setting>
       <Setting label={t("lang.label")} description={t("lang.desc")}>
         <SegmentedControl label={t("lang.label")} value={prefs.language} onChange={prefs.setLanguage} options={[{ value: "en", label: t("lang.en") }]} />

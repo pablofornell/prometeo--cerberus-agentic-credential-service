@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import { describe, expect, it } from "vitest";
 import { renderApp } from "../test/renderApp";
+import { watchZoom } from "../test/zoom";
 import { handlers as auditHandlers } from "../screens/audit/mock";
 import { createFlowStore } from "./createFlow";
 import { buildCommands, filterCommands } from "./commands";
@@ -245,6 +246,26 @@ describe("command palette", () => {
     await user.keyboard("{Enter}");
     expect(await screen.findByRole("dialog", { name: "Lock and revoke all?" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hold to lock and revoke" })).toBeInTheDocument();
+  });
+
+  it("the shortcut list shows the zoom keys, and the zoom keys leave Ctrl+K and Ctrl+L alone", async () => {
+    const user = userEvent.setup();
+    const zoom = watchZoom();
+    try {
+      renderApp({ state: "unlocked" });
+      await screen.findByRole("heading", { level: 1, name: "Dashboard" });
+      await user.keyboard("?");
+      const dialog = await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+      for (const label of ["Zoom in", "Zoom out", "Reset zoom to 100%"]) expect(within(dialog).getByText(label)).toBeInTheDocument();
+      expect(within(dialog).getAllByText("+")).toHaveLength(1);
+      await user.keyboard("{Escape}");
+      await user.keyboard("{Control>}={/Control}");
+      expect(zoom.value).toBe("1.1");
+      await user.keyboard("{Control>}k{/Control}");
+      expect(await screen.findByRole("combobox")).toBeInTheDocument();
+    } finally {
+      zoom.stop();
+    }
   });
 
   it("command list helpers", () => {

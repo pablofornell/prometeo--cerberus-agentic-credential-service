@@ -158,6 +158,9 @@ export const en = {
   "shortcuts.help": "Show this list",
   "shortcuts.close": "Close a dialog, drawer or palette",
   "shortcuts.hold": "Hold to reveal a secret",
+  "shortcuts.zoomIn": "Zoom in",
+  "shortcuts.zoomOut": "Zoom out",
+  "shortcuts.zoomReset": "Reset zoom to 100%",
   "shortcuts.then": "then",
 
   "theme.dark": "Dark",

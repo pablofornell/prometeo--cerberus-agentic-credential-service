@@ -233,6 +233,9 @@ fn capabilities_list_exact_core_permissions() {
     // `file_pick_open`, so the backend knows which path the person chose (AUD-11).
     let main = used("capabilities/main.json");
     assert!(main.contains("dialog:allow-save") && main.contains("dialog:allow-open"));
+    // The UI scale setting zooms the main webview. The approval window is a fixed popup and has no such permission
+    // (the exact-set check above).
+    assert!(main.contains("core:webview:allow-set-webview-zoom"));
 }
 
 /// AUD-15: the approval window gets the content protection setting when it is made. The Tauri

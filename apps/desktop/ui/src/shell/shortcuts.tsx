@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { t } from "../i18n";
+import { modLabel } from "../state/uiScale";
 import { Dialog, Kbd } from "../ui";
 import { useShellActions } from "./actions";
 import { SCREENS } from "./screens";
@@ -14,7 +15,8 @@ const isEditable = (el: EventTarget | null): boolean =>
 /**
  * Keyboard map (IA section 5). Ctrl/Cmd+K and Ctrl/Cmd+L work everywhere in the main window. Single keys
  * (`G` then a letter, `N`, `/`, `?`) do nothing while focus is in a field or a dialog is open.
- * No key approves or revokes anything.
+ * No key approves or revokes anything. The zoom keys (Ctrl/Cmd with `=` `+` `-` `0`) are not here: they work on every
+ * screen of the main window, also the unlock screen, so `PrefsProvider` handles them.
  */
 export function useGlobalShortcuts(): void {
   const actions = useShellActions();
@@ -92,6 +94,9 @@ const ROWS: readonly { label: Parameters<typeof t>[0]; keys: readonly string[] }
   { label: "shortcuts.help", keys: ["?"] },
   { label: "shortcuts.close", keys: ["Esc"] },
   { label: "shortcuts.hold", keys: ["Space"] },
+  { label: "shortcuts.zoomIn", keys: ["Ctrl", "+"] },
+  { label: "shortcuts.zoomOut", keys: ["Ctrl", "-"] },
+  { label: "shortcuts.zoomReset", keys: ["Ctrl", "0"] },
 ];
 
 export function ShortcutsDialog() {
@@ -104,7 +109,7 @@ export function ShortcutsDialog() {
             <dt>{t(row.label)}</dt>
             <dd>
               {row.keys.map((k) => (
-                <Kbd key={k}>{k}</Kbd>
+                <Kbd key={k}>{k === "Ctrl" ? modLabel() : k}</Kbd>
               ))}
             </dd>
           </div>

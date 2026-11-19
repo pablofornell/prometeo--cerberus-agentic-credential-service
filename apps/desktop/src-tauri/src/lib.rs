@@ -206,6 +206,9 @@ fn on_window_event(window: &tauri::Window<Wry>, event: &WindowEvent) {
             .is_some_and(|tray| tray.0);
         if has_tray && !QUITTING.load(Ordering::SeqCst) {
             api.prevent_close();
+            // A close request is the only code path that hides the main window. Log it so a window
+            // that "never appeared" can be told apart from one that was closed to the tray.
+            tracing::info!("close requested; hiding the main window to the tray");
             if let Err(error) = window.hide() {
                 tracing::warn!(%error, "could not hide the main window");
             }

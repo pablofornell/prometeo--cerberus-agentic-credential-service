@@ -1,10 +1,11 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { OperatorRole } from "../../bindings";
 import { mockError, type MockHandlers } from "../../ipc/mock/core";
 import { renderApp } from "../../test/renderApp";
+import { watchZoom } from "../../test/zoom";
 import { handlers as createHandlers, MOCK_RECOVERY_KEY } from "../create/mock";
 import { handlers, resetSettingsMock } from "./mock";
 
@@ -366,6 +367,120 @@ describe("settings", () => {
     expect(document.documentElement.getAttribute("data-density")).toBe("compact");
     expect(appearance.getAllByRole("radio", { name: "English" })).toHaveLength(1);
     expect(appearance.queryByRole("radio", { name: /Espa/ })).toBeNull();
+  });
+
+  describe("UI scale", () => {
+    const stored = () => (JSON.parse(window.localStorage.getItem("cerberus-prefs") ?? "{}") as { uiScale?: number }).uiScale;
+    const open = async () => {
+      renderSettings();
+      await ready();
+      return within(section("Appearance"));
+    };
+    let zoom: ReturnType<typeof watchZoom>;
+    beforeEach(() => {
+      zoom = watchZoom();
+    });
+    afterEach(() => zoom.stop());
+
+    it("shows 100% and Reset is off", async () => {
+      const appearance = await open();
+      expect(appearance.getByRole("slider", { name: "UI scale" })).toHaveValue("100");
+      expect(appearance.getByText("100%")).toBeInTheDocument();
+      expect(appearance.getByRole("button", { name: "Reset to 100%" })).toHaveAttribute("aria-disabled", "true");
+      expect(appearance.getByText(/Zooms the whole window/)).toHaveTextContent(/(Ctrl|Cmd) \+ \(zoom in\)/);
+    });
+
+    it("the - and + buttons step by 10, show it at once, apply once, and stop at the limits", async () => {
+      const user = userEvent.setup();
+      const appearance = await open();
+      await user.click(appearance.getByRole("button", { name: "Increase UI scale" }));
+      expect(appearance.getByText("110%")).toBeInTheDocument();
+      expect(zoom.value).toBe("");
+      expect(stored()).toBe(100);
+      await waitFor(() => expect(zoom.value).toBe("1.1")); // no further click: applied after the wait
+      expect(stored()).toBe(110);
+      await user.click(appearance.getByRole("button", { name: "Decrease UI scale" }));
+      await user.click(appearance.getByRole("button", { name: "Decrease UI scale" }));
+      expect(appearance.getByText("90%")).toBeInTheDocument();
+      for (let i = 0; i < 3; i++) await user.click(appearance.getByRole("button", { name: "Decrease UI scale" }));
+      expect(appearance.getByText("80%")).toBeInTheDocument();
+      expect(appearance.getByRole("button", { name: "Decrease UI scale" })).toHaveAttribute("aria-disabled", "true");
+      expect(stored()).toBe(110);
+      fireEvent.pointerLeave(appearance.getByRole("slider", { name: "UI scale" }).closest(".scale-ctl")!, { pointerType: "mouse" });
+      expect(stored()).toBe(80);
+      expect(zoom.value).toBe("0.8");
+    });
+
+    it("a button that goes off at a limit keeps the keyboard focus and does nothing", async () => {
+      const user = userEvent.setup();
+      const appearance = await open();
+      const reset = appearance.getByRole("button", { name: "Reset to 100%" });
+      reset.focus();
+      expect(reset).toHaveFocus();
+      await user.keyboard("{Enter}");
+      expect(reset).toHaveFocus();
+      expect(appearance.getByText("100%")).toBeInTheDocument();
+      // at the limit: the button that was just used goes off while it has the focus
+      const inc = appearance.getByRole("button", { name: "Increase UI scale" });
+      inc.focus();
+      for (let i = 0; i < 10; i++) await user.keyboard("{Enter}");
+      expect(appearance.getByText("200%")).toBeInTheDocument();
+      expect(inc).toHaveAttribute("aria-disabled", "true");
+      expect(inc).toHaveFocus();
+      await user.keyboard("{Enter}");
+      expect(appearance.getByText("200%")).toBeInTheDocument();
+      expect(inc).toHaveFocus();
+    });
+
+    it("a slider drag only previews; the scale applies once, on release", async () => {
+      const appearance = await open();
+      const slider = appearance.getByRole("slider", { name: "UI scale" });
+      fireEvent.pointerDown(slider, { button: 0, clientX: 10, clientY: 10 });
+      fireEvent.change(slider, { target: { value: "130" } });
+      fireEvent.change(slider, { target: { value: "150" } });
+      expect(appearance.getByText("150%")).toBeInTheDocument();
+      expect(slider).toHaveAttribute("aria-valuetext", "150%");
+      expect(zoom.value).toBe("");
+      expect(stored()).toBe(100);
+      fireEvent.pointerUp(slider);
+      await waitFor(() => expect(zoom.value).toBe("1.5"));
+      expect(stored()).toBe(150);
+    });
+
+    it("a lost drag goes back to the stored value", async () => {
+      const appearance = await open();
+      const slider = appearance.getByRole("slider", { name: "UI scale" });
+      fireEvent.pointerDown(slider, { button: 0 });
+      fireEvent.change(slider, { target: { value: "170" } });
+      expect(appearance.getByText("170%")).toBeInTheDocument();
+      fireEvent.pointerCancel(slider);
+      expect(appearance.getByText("100%")).toBeInTheDocument();
+      expect(zoom.value).toBe("");
+    });
+
+    it("an arrow key on the slider applies at once", async () => {
+      const appearance = await open();
+      fireEvent.change(appearance.getByRole("slider", { name: "UI scale" }), { target: { value: "110" } });
+      expect(zoom.value).toBe("1.1");
+      expect(appearance.getByText("110%")).toBeInTheDocument();
+    });
+
+    it("Reset goes back to 100% and the keys work on this screen too", async () => {
+      const user = userEvent.setup();
+      const appearance = await open();
+      await user.keyboard("{Control>}={/Control}");
+      await user.keyboard("{Control>}={/Control}");
+      expect(appearance.getByText("120%")).toBeInTheDocument();
+      await user.click(appearance.getByRole("button", { name: "Reset to 100%" }));
+      expect(appearance.getByText("100%")).toBeInTheDocument();
+      expect(zoom.value).toBe("");
+      expect(stored()).toBe(100);
+    });
+
+    it("has no axe violations", async () => {
+      await open();
+      expect(await axe(section("Appearance"))).toHaveNoViolations();
+    });
   });
 
   it("creates a backup in the chosen file", async () => {

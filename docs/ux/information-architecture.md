@@ -90,6 +90,7 @@ weak phrase (1), recovery / idle / panic / failed tries (2).
 | `/` | screens with search | Focus the search field |
 | `N` | app screens | New item |
 | `?` | everywhere | Shortcut list |
+| `Ctrl/Cmd` + `=` or `+` / `-` / `0` | every screen of `main`, also in a text field | Zoom the window in / out / back to 100% (UI scale, 80% to 200%, steps of 10). Not in the approval window |
 | `Esc` | dialog, drawer, palette | Close (never confirms) |
 | `↑ ↓` | lists, palette | Move selection; `Enter` opens |
 | `← →` | tabs, segmented controls, mode picker | Move and select |
@@ -115,6 +116,8 @@ Groups and items (filter matches English and the current language):
 | Vault | Export CA certificate | `tls_export_ca` via native save dialog |
 | Vault | Create backup | `backup_create` via native save dialog |
 | View | Switch theme, Switch language, Keyboard shortcuts | Local UI state |
+
+The UI scale has no palette action: it is a row in Settings > Appearance (`-` / `+`, slider, Reset to 100%) and the keys above. Pointer clicks on `-` / `+` are collected and applied once, 700 ms after the last click (or when the pointer leaves the control, the window loses the focus or the screen closes), because a zoom moves the button; Enter / Space on a button, Reset, the slider keys and the end of a slider drag apply at once.
 
 T16 adds item and agent search results below the actions (from `item_list { q }` and `agent_list`), metadata only.
 

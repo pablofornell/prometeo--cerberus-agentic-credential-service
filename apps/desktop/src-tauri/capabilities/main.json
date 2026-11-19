@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-window",
-  "description": "The main window: every IPC command, the dialogs for choosing a place to write (save, folder), and the few core permissions the UI uses (listen to events, read the version). No shell, no file system plugin. Files to read are chosen with `file_pick_open` (AUD-11).",
+  "description": "The main window: every IPC command, the dialogs for choosing a place to write (save, folder), and the few core permissions the UI uses (listen to events, read the version, zoom its own webview for the UI scale setting). The approval window has no zoom permission: it stays at 100%. No shell, no file system plugin. Files to read are chosen with `file_pick_open` (AUD-11).",
   "windows": [
     "main"
   ],
@@ -9,6 +9,7 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:app:allow-version",
+    "core:webview:allow-set-webview-zoom",
     "dialog:allow-open",
     "dialog:allow-save",
     "allow-vault-status",

@@ -112,3 +112,14 @@ main.content:focus-visible { outline: none; }
   .input:focus-visible { outline-color: Highlight; }
   .tablist [role="tab"][aria-selected="true"] { border-bottom-color: Highlight; }
 }
+
+/* UI scale in a plain browser (dev server, LAN). There the zoom is the CSS `zoom` of <html> (state/uiScale.ts), and a
+   viewport unit is zoomed with everything else: `100vh` grows to `100vh * zoom` and a full-height box overflows the
+   window. These give the zoom back, so full-height boxes still fit the window. The desktop app zooms the webview, where
+   `vh` stays right, and never sets `data-css-zoom`. */
+:root[data-css-zoom] { --vh-full: calc(100vh / var(--ui-zoom)); min-height: var(--vh-full); }
+:root[data-css-zoom] body, :root[data-css-zoom] #root, :root[data-css-zoom] .shell, :root[data-css-zoom] .solo { min-height: var(--vh-full); }
+:root[data-css-zoom] .sidebar { height: var(--vh-full); }
+:root[data-css-zoom] .vb-browser { height: calc(var(--vh-full) - var(--topbar-h)); }
+:root[data-css-zoom] .dlg { max-height: calc(var(--vh-full) - 40px); }
+:root[data-css-zoom] .palette ul { max-height: calc(var(--vh-full) / 2); }

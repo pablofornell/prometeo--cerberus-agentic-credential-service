@@ -8,6 +8,10 @@ Reference rendering: `prototypes/assets/app.css` and `app.js` (same names as bel
 - CSS variables come from `tokens.json` (`node docs/ux/build-tokens.mjs` writes the prototype copy). T16 puts the
   same variables in `ui/src/styles/tokens.css` and maps them in `@theme` with the `tailwind` block.
 - Theme: `html[data-theme="dark" | "light"]`; no attribute = follow the OS. Dark is the default setting.
+- UI scale (Settings > Appearance, `usePrefs().uiScale`, percent 80 to 200, default 100): the desktop app zooms the main
+  webview (`setZoom`, capability `core:webview:allow-set-webview-zoom` on `main` only; the approval popup stays at 100%).
+  In a plain browser it is the CSS `zoom` of `<html>`, with `data-css-zoom` and `--ui-zoom` (see the end of `extras.css`).
+  It is kept in `localStorage` with the other display prefs and applied before the first screen is drawn.
 - Use semantic names only (`bg-surface`, `text-fg-muted`, `border-line`). No raw hex in components.
 
 ## 2. Component list

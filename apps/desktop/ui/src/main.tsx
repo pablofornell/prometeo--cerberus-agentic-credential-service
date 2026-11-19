@@ -1,6 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { applyUiScaleEarly } from "./state/uiScale";
+import { effectiveUiScale, readPrefs } from "./state/prefs";
 import "./styles/index.css";
 
 const container = document.getElementById("root");
@@ -11,6 +13,8 @@ if (container === null) {
 // In a plain browser during development there is no Tauri runtime. The dev mock answers the commands so a
 // screen can be built and photographed without the Rust side (`pnpm dev`, then open the URL; see DEC-T16-6).
 async function boot(): Promise<void> {
+  // The saved zoom goes on before the first screen is drawn, so the window does not jump at start.
+  await applyUiScaleEarly(effectiveUiScale(readPrefs()));
   if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) {
     const { installDevMock } = await import("./ipc/mock/dev");
     installDevMock();
