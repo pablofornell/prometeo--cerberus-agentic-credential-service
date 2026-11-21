@@ -1,10 +1,12 @@
-//! Command line of `cerberusd`: `serve`, `unlock` and `status` (ADR-0002). See `docs/guides/cerberusd.md`.
+//! Command line of `cerberusd`: `serve`, `unlock`, `status` (ADR-0002) and `admin` (ADR-0034). See
+//! `docs/guides/cerberusd.md`.
 
 use std::io;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use cerberus_crypto::memlock::{self, HardeningReport};
+use cerberusd::admin::{self, EnrollRequest, Source};
 use cerberusd::config::{self, Config};
 use cerberusd::{daemon, status, unlock};
 use clap::{Parser, Subcommand};
@@ -36,8 +38,44 @@ enum Command {
         #[arg(long, value_name = "LABEL")]
         operator: Option<String>,
     },
-    /// Check a running daemon over HTTPS.
+    /// Check a running daemon over HTTPS. Also shows the CA pin and whether the admin API is on.
     Status,
+    /// Enrol, list and revoke desktops for the admin API (`[admin] enabled = true`).
+    Admin {
+        #[command(subcommand)]
+        command: AdminCommand,
+    },
+}
+
+/// The `admin` commands (ADR-0034 point 3).
+#[derive(Subcommand)]
+enum AdminCommand {
+    /// Enrol a desktop: asks for an owner passphrase here, with echo off, and writes a bundle file.
+    /// The vault must be unlocked.
+    Enroll {
+        /// A name for the desktop, 1 to 64 characters.
+        #[arg(long, value_name = "TEXT")]
+        label: String,
+        /// The URL the desktop reaches this daemon at (an SSH tunnel end, for example).
+        #[arg(long, value_name = "https://HOST:PORT")]
+        url: String,
+        /// The owner who types the passphrase. Needed when the vault has more than one owner.
+        #[arg(long, value_name = "LABEL")]
+        owner: Option<String>,
+        /// The operator whose passphrase opens a session with this bundle. Default: the owner.
+        #[arg(long, value_name = "LABEL")]
+        operator: Option<String>,
+        /// The bundle file to write (mode 0600). It must not exist.
+        #[arg(long, value_name = "FILE")]
+        out: PathBuf,
+    },
+    /// List the enrolments.
+    List,
+    /// Revoke an enrolment. Its sessions end at once when the daemon runs.
+    Revoke {
+        /// The enrolment ID (from `cerberusd admin list`).
+        id: String,
+    },
 }
 
 fn main() -> ExitCode {
@@ -85,6 +123,108 @@ async fn run(cli: Cli, report: HardeningReport) -> Result<(), String> {
                 "cerberusd {} at {}: vault {}",
                 health.version, health.address, health.vault
             );
+            if let Ok(ca) = status::ca_fingerprints(&config) {
+                println!("CA pin: {}", ca.pin);
+                println!("CA SHA-256: {}", ca.cert_sha256_hex);
+            }
+            println!("{}", status::admin_summary(&config));
+            Ok(())
+        }
+        Command::Admin { command } => run_admin(&config, command).await,
+    }
+}
+
+async fn run_admin(config: &Config, command: AdminCommand) -> Result<(), String> {
+    let socket = unlock::socket_path(&config.data_dir);
+    match command {
+        AdminCommand::Enroll {
+            label,
+            url,
+            owner,
+            operator,
+            out,
+        } => {
+            // Fail before the phrase is asked, not after the enrolment is made.
+            if out.exists() {
+                return Err(format!(
+                    "{} exists; choose a new file name for the bundle",
+                    out.display()
+                ));
+            }
+            let request = EnrollRequest {
+                owner,
+                operator,
+                label,
+                url,
+            };
+            let bundle = admin::enroll_with(&socket, &request, |prompt| {
+                rpassword::prompt_password(prompt)
+            })
+            .await
+            .map_err(|error| error.to_string())?;
+            if let Err(error) = bundle.write_new(&out) {
+                return Err(format!(
+                    "enrolment {} was made but the bundle was not written: {error}. Revoke it with \
+                     `cerberusd admin revoke {}` and enrol again.",
+                    bundle.id, bundle.id
+                ));
+            }
+            println!(
+                "enrolled {:?} ({}) for operator {}, valid until {}",
+                bundle.label, bundle.id, bundle.operator_id, bundle.not_after
+            );
+            println!("bundle written to {} (mode 0600)", out.display());
+            println!("CA pin: {}", bundle.ca_pin);
+            if let Ok(sha) = bundle.ca_sha256_hex() {
+                println!("CA SHA-256: {sha}");
+            }
+            println!(
+                "Move the bundle to the desktop over a trusted channel (for example scp), import it there, \
+                 compare the pin and fingerprint with the desktop, then delete the file."
+            );
+            Ok(())
+        }
+        AdminCommand::List => {
+            let (clients, source) = admin::list_with(&socket, &config.data_dir)
+                .await
+                .map_err(|error| error.to_string())?;
+            if source == Source::File {
+                println!("(no daemon answered; read from the registry file)");
+            }
+            if clients.is_empty() {
+                println!("no enrolled clients");
+            }
+            let now = cerberus_types::Clock::now(&cerberus_types::SystemClock);
+            for client in clients {
+                let state = if client.revoked_at.is_some() {
+                    "revoked"
+                } else if client.is_live(now) {
+                    "live"
+                } else {
+                    "expired"
+                };
+                println!(
+                    "{}  {:<8} {:?} operator {} enrolled {} until {}",
+                    client.id,
+                    state,
+                    client.label,
+                    client.operator_id,
+                    client.created_at,
+                    client.not_after
+                );
+            }
+            Ok(())
+        }
+        AdminCommand::Revoke { id } => {
+            let source = admin::revoke_with(&socket, &config.data_dir, &id)
+                .await
+                .map_err(|error| error.to_string())?;
+            match source {
+                Source::Daemon => println!("revoked {id}; its sessions are closed"),
+                Source::File => println!(
+                    "no daemon answered: revoked {id} in the registry file; it takes effect at the next start"
+                ),
+            }
             Ok(())
         }
     }

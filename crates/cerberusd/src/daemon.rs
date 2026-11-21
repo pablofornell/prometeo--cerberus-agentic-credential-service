@@ -3,6 +3,9 @@
 //!
 //! The daemon starts sealed. If the vault has no TLS leaf yet (a backup copied from the desktop has none, ADR-0031
 //! point 2), the listener starts after the first unlock, because the CA key is sealed until then.
+//!
+//! With `[admin] enabled = true` (ADR-0034) the listener also serves `/admin/v1` for enrolled desktops, it asks every
+//! client for a certificate, and approvals (`ask_once`, `ask_always`) are on.
 
 use std::future::Future;
 use std::io;
@@ -10,18 +13,21 @@ use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use cerberus_admin::clients::{AdminClients, ClientsError};
 use cerberus_api::tls::{
     CaExport, LocalCa, LocalCaIssuer, TlsPaths, leaf_names, renew_leaf_if_needed,
 };
-use cerberus_api::{ApiConfig, AppState, RunningServer, ServerError, start};
+use cerberus_api::{
+    AdminConfig, AdminState, ApiConfig, AppState, RunningServer, ServerError, start,
+};
 use cerberus_core::vault::KeyCustody;
-use cerberus_core::{CoreConfig, CoreError, VaultService};
+use cerberus_core::{AdminAudit, AdminEventKind, CoreConfig, CoreError, VaultService};
 use cerberus_store::{OpenOptions, Store, StoreError};
 use cerberus_types::{Clock, LockReason, SystemClock, VaultStateKind};
 use tokio::task::JoinHandle;
 
 use crate::config::Config;
-use crate::unlock;
+use crate::unlock::{self, SocketContext, registry_path};
 
 /// The vault file in the data directory.
 pub const VAULT_FILE: &str = "vault.cerberus";
@@ -73,6 +79,31 @@ pub enum DaemonError {
     /// Another daemon listens on the unlock socket.
     #[error("cerberusd is already running for this data directory (socket {0})")]
     AlreadyRunning(PathBuf),
+    /// The admin client registry cannot be read (ADR-0034 point 3.5).
+    #[error("{path}: {source}", path = .path.display())]
+    Admin {
+        /// The registry file.
+        path: PathBuf,
+        /// The cause.
+        source: ClientsError,
+    },
+}
+
+/// Loads the admin client registry. A wider mode than `0600` stops the start (ADR-0034 point 3.5).
+fn load_admin(data_dir: &Path, config: &Config) -> Result<AdminState, DaemonError> {
+    let path = registry_path(data_dir);
+    let clients = AdminClients::load(&path).map_err(|source| match source {
+        ClientsError::Mode { mode } => DaemonError::Mode {
+            path: path.clone(),
+            mode,
+            fix: "0600",
+        },
+        source => DaemonError::Admin {
+            path: path.clone(),
+            source,
+        },
+    })?;
+    Ok(AdminState::new(clients, config.admin.limits()).with_registry_file(path))
 }
 
 /// Refuses a path that group or others can use. systemd sets the modes, but a manual run does not
@@ -116,6 +147,11 @@ where
     }
     check_private(&config.data_dir, "0700")?;
     check_private(&vault_path, "0600")?;
+    let admin = if config.admin.enabled {
+        Some(Arc::new(load_admin(&config.data_dir, config)?))
+    } else {
+        None
+    };
     let clock: Arc<dyn Clock> = Arc::new(SystemClock);
     let tls = TlsPaths::in_data_dir(&config.data_dir);
     let store = Store::open(
@@ -130,7 +166,9 @@ where
         store,
         clock,
         CoreConfig {
-            approvals_available: false,
+            // With the admin API an enrolled desktop can decide requests (ADR-0034 point 2.3,
+            // DEC-RM-7); without it ask grants answer `403 approval_unavailable`.
+            approvals_available: config.admin.enabled,
             idle_lock_default: config.idle_lock(),
             data_dir: config.data_dir.clone(),
             ca_issuer: Arc::new(LocalCaIssuer::new(tls.clone(), config.host_names.clone())),
@@ -138,13 +176,23 @@ where
     )
     .await?;
     write_ca_pem(&core, &config.data_dir).await?;
+    if let Some(admin) = &admin {
+        announce_admin(&core, admin).await;
+    }
     let tasks = core.spawn_background();
     let listener = unlock::bind(&config.data_dir).await?;
-    let socket_task = tokio::spawn(unlock::accept_loop(listener, core.clone()));
+    let socket_task = tokio::spawn(unlock::accept_loop(
+        listener,
+        SocketContext {
+            core: core.clone(),
+            admin: admin.clone(),
+            data_dir: config.data_dir.clone(),
+        },
+    ));
     let socket = unlock::socket_path(&config.data_dir);
 
     let mut http = if leaf_present(&tls) {
-        Some(start_http(&core, config, &tls).await?)
+        Some(start_http(&core, config, &tls, admin.as_ref()).await?)
     } else {
         None
     };
@@ -164,7 +212,7 @@ where
             () = &mut stop => {}
             () = wait_unlocked(&core) => {
                 renew_leaf_now(&core, config, &tls).await?;
-                http = Some(start_http(&core, config, &tls).await?);
+                http = Some(start_http(&core, config, &tls, admin.as_ref()).await?);
             }
         }
     }
@@ -199,6 +247,22 @@ async fn shutdown(
         tracing::warn!(%error, "could not remove the unlock socket");
     }
     tracing::info!("cerberusd stopped; the vault is locked");
+}
+
+/// The admin API is on: a `warn` line with the enrolment count and `admin.api_start` in the audit
+/// log (through `audit_pending`, since the vault starts sealed) (ADR-0034 point 2.4).
+async fn announce_admin(core: &VaultService, admin: &AdminState) {
+    let live = admin.clients().live_count(core.clock().now());
+    tracing::warn!(
+        enrolled = live,
+        "admin API enabled, {live} enrolled clients; approvals are on"
+    );
+    if let Err(error) = core
+        .record_admin_event(None, AdminAudit::new(AdminEventKind::ApiStart))
+        .await
+    {
+        tracing::warn!(%error, "admin.api_start was not audited");
+    }
 }
 
 fn leaf_present(tls: &TlsPaths) -> bool {
@@ -239,14 +303,21 @@ async fn start_http(
     core: &VaultService,
     config: &Config,
     tls: &TlsPaths,
+    admin: Option<&Arc<AdminState>>,
 ) -> Result<Http, DaemonError> {
     let mut api = ApiConfig::loopback(tls.clone());
     api.bind = config.listen_addrs();
     api.allowed_hosts = leaf_names(&config.host_names);
-    if config.require_mtls {
+    if config.require_mtls || admin.is_some() {
+        // The admin API needs client certificates verified against the vault CA. On a loopback bind
+        // without `require_mtls` a client without one still passes the handshake, so agents keep
+        // working; the admin routes refuse it (ADR-0034 point 2.2).
         api.client_ca_der = Some(core.tls_ca_cert().await?);
-        api.require_client_cert = true;
+        api.require_client_cert = config.require_mtls;
     }
+    api.admin = admin.map(|state| AdminConfig {
+        state: Arc::clone(state),
+    });
     let state = AppState::new(core.clone(), &api);
     // `/mcp` is mounted next to `/v1`. Its router already has the token check (ADR-0029).
     let app = cerberus_api::app(&state, cerberus_mcp::mcp_router(&state));

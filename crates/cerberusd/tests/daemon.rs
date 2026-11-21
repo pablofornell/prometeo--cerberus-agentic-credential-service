@@ -13,6 +13,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use cerberus_admin::bundle::AdminBundle;
+use cerberus_admin::clients::AdminClients;
 use cerberus_api::tls::{LocalCaIssuer, TlsPaths};
 use cerberus_core::admin::WorkspaceInput;
 use cerberus_core::agents::{AgentInput, AgentKeyInput};
@@ -26,13 +28,15 @@ use cerberus_types::{
     Clock, Environment, GrantMode, ItemId, OperatorRole, Permission, RequestId, Scope, SystemClock,
     VaultStateKind, WorkspaceId,
 };
+use cerberusd::admin::{self, AdminCliError, EnrollRequest, Source};
 use cerberusd::config::{self, Config, ConfigError};
 use cerberusd::daemon::{self, DaemonError, Ready};
 use cerberusd::https;
 use cerberusd::status;
 use cerberusd::unlock::{self, UnlockError};
-use rustls::pki_types::CertificateDer;
 use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
@@ -71,8 +75,13 @@ struct Seed {
     item: ItemId,
 }
 
-/// Makes a vault in `data_dir` with the core API, then closes it. The daemon opens it next.
+/// Makes a vault in `data_dir` with the core API, then closes it. The daemon opens it next. The agent's
+/// grant on the item has `mode` (an approval mode: cerberusd has no approver unless the admin API is on).
 async fn make_vault(data_dir: &Path) -> Seed {
+    make_vault_with(data_dir, GrantMode::AskAlways).await
+}
+
+async fn make_vault_with(data_dir: &Path, mode: GrantMode) -> Seed {
     let clock: Arc<dyn Clock> = Arc::new(SystemClock);
     let tls = TlsPaths::in_data_dir(data_dir);
     let store = Store::open(
@@ -157,7 +166,7 @@ async fn make_vault(data_dir: &Path) -> Seed {
                 item_ids: vec![],
             },
             permissions,
-            mode: GrantMode::AskAlways,
+            mode,
             conditions: Conditions::default(),
             allow_prod_auto: false,
         },
@@ -282,6 +291,26 @@ async fn daemon_unlocks_serves_ask_grants_as_403_and_stops_locked() {
         .await
         .expect("mcp");
     assert_eq!(mcp.status, 401);
+
+    // The admin API is off by default: no admin route, and no enrolment (ADR-0034 invariant 8).
+    let hello = https::request(addr, &ca, "GET", "/admin/v1/hello", None, None)
+        .await
+        .expect("hello");
+    assert_eq!(hello.status, 404);
+    let body: serde_json::Value = serde_json::from_slice(&hello.body).expect("json");
+    assert_eq!(body["error"]["code"], "route_not_found");
+    let enroll = admin::enroll_with(&ready.socket, &enroll_request(addr.port()), |_| {
+        Ok(PHRASE.to_owned())
+    })
+    .await;
+    assert!(
+        matches!(&enroll, Err(AdminCliError::Socket(UnlockError::Refused { code, .. })) if code == "unavailable"),
+        "{enroll:?}"
+    );
+    assert_eq!(
+        status::admin_summary(&config).to_string(),
+        "admin API: off, 0 enrolled clients"
+    );
 
     // Stop through the same channel a signal uses. The vault must be locked and the listener closed.
     stop.send(()).expect("stop");
@@ -430,4 +459,324 @@ async fn aud30_a_vault_file_or_data_dir_open_to_others_stops_the_start() {
     std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o700)).expect("chmod");
     let result = daemon::serve(&config, std::future::ready(()), |_| {}).await;
     assert!(result.is_ok(), "private modes start: {result:?}");
+}
+
+fn enroll_request(port: u16) -> EnrollRequest {
+    EnrollRequest {
+        owner: None,
+        operator: None,
+        label: "laptop".to_owned(),
+        url: format!("https://localhost:{port}"),
+    }
+}
+
+/// The client certificate and key of a bundle, DER.
+fn identity(bundle: &AdminBundle) -> (Vec<u8>, Vec<u8>) {
+    let cert = CertificateDer::from_pem_slice(bundle.client_cert_pem.as_bytes()).expect("cert");
+    let key =
+        PrivatePkcs8KeyDer::from_pem_slice(bundle.client_key_pem.expose().as_bytes()).expect("key");
+    (cert.as_ref().to_vec(), key.secret_pkcs8_der().to_vec())
+}
+
+/// Sends one raw line to the unlock socket and returns the reply line.
+async fn raw_socket_line(socket: &Path, line: &str) -> serde_json::Value {
+    let mut stream = tokio::net::UnixStream::connect(socket)
+        .await
+        .expect("connect");
+    stream.write_all(line.as_bytes()).await.expect("write");
+    let mut reply = Vec::new();
+    stream.read_to_end(&mut reply).await.expect("read");
+    serde_json::from_slice(&reply).expect("reply json")
+}
+
+/// ADR-0034 points 2 and 3 end to end on the real daemon: config on, enrolment over the socket (sealed,
+/// wrong phrase, good), the bundle the desktop will read, the device and session gates, approvals on,
+/// online and offline revoke, and the old unlock line.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn admin_api_enrolment_approvals_and_revoke() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let data = dir.path().join("data");
+    let seed = make_vault_with(&data, GrantMode::AskOnce).await;
+    let port = free_port();
+    let path = dir.path().join("cerberusd.toml");
+    write_config(
+        &path,
+        &data,
+        &format!("bind = [\"127.0.0.1\"]\nport = {port}\n[admin]\nenabled = true\n"),
+        0o600,
+    );
+    let config = config::load(Some(&path), &no_env).expect("config");
+    assert!(config.admin.enabled);
+    let (stop, run, ready_rx) = start_daemon(config.clone());
+    let ready = ready_rx.await.expect("ready");
+    let addr = ready.addrs[0];
+    let ca = ca_der(&data);
+    assert_eq!(
+        status::admin_summary(&config).to_string(),
+        "admin API: on, 0 enrolled clients"
+    );
+
+    // Sealed: the CA key is sealed, so no enrolment.
+    let sealed = admin::enroll_with(&ready.socket, &enroll_request(port), |prompt| {
+        assert_eq!(prompt, "Owner passphrase: ");
+        Ok(PHRASE.to_owned())
+    })
+    .await;
+    assert!(
+        matches!(&sealed, Err(AdminCliError::Socket(UnlockError::Refused { code, .. })) if code == "vault_locked"),
+        "{sealed:?}"
+    );
+    // An old unlock line, without `op`, still unlocks.
+    let reply = raw_socket_line(
+        &ready.socket,
+        &format!("{{\"operator\":null,\"phrase\":\"{PHRASE}\"}}\n"),
+    )
+    .await;
+    assert_eq!(reply["ok"], true, "{reply}");
+    assert_eq!(reply["operator"], "owner");
+
+    // A wrong owner phrase, then the right one.
+    let wrong = admin::enroll_with(&ready.socket, &enroll_request(port), |_| {
+        Ok("wrong words for this test".to_owned())
+    })
+    .await;
+    assert!(
+        matches!(&wrong, Err(AdminCliError::Socket(UnlockError::Refused { code, .. })) if code == "bad_credentials"),
+        "{wrong:?}"
+    );
+    let bundle = admin::enroll_with(&ready.socket, &enroll_request(port), |_| {
+        Ok(PHRASE.to_owned())
+    })
+    .await
+    .expect("enroll");
+    let bad_url = EnrollRequest {
+        url: "http://localhost:1".to_owned(),
+        ..enroll_request(port)
+    };
+    let refused = admin::enroll_with(&ready.socket, &bad_url, |_| Ok(PHRASE.to_owned())).await;
+    assert!(
+        matches!(&refused, Err(AdminCliError::Socket(UnlockError::Refused { code, .. })) if code == "invalid_request"),
+        "{refused:?}"
+    );
+    // The bundle is what the desktop accepts, and its CA matches `cerberusd status`.
+    let bundle_path = dir.path().join("laptop.cerberus-admin");
+    bundle.write_new(&bundle_path).expect("write bundle");
+    let mode = std::fs::metadata(&bundle_path)
+        .expect("meta")
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o600);
+    assert!(bundle.write_new(&bundle_path).is_err(), "never over a file");
+    let read = AdminBundle::read(&bundle_path, SystemClock.now()).expect("the desktop reads it");
+    assert_eq!(read.id, bundle.id);
+    assert_eq!(read.url, format!("https://localhost:{port}"));
+    assert_eq!(
+        status::ca_fingerprints(&config).expect("ca").pin,
+        bundle.ca_pin
+    );
+    // The registry has the entry, mode 0600; `list` shows it.
+    let registry = data.join("admin-clients.json");
+    let mode = std::fs::metadata(&registry)
+        .expect("meta")
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o600);
+    let clients = AdminClients::load(&registry).expect("registry");
+    assert_eq!(clients.list().len(), 1);
+    assert_eq!(clients.list()[0].id, bundle.id);
+    let (listed, source) = admin::list_with(&ready.socket, &data).await.expect("list");
+    assert_eq!(source, Source::Daemon);
+    assert_eq!(listed.len(), 1);
+    assert_eq!(
+        status::admin_summary(&config).to_string(),
+        "admin API: on, 1 enrolled clients"
+    );
+
+    // The device gate: with the new certificate `hello` answers; without one it is refused.
+    let (cert, key) = identity(&bundle);
+    let id = Some((cert.as_slice(), key.as_slice()));
+    let hello = https::request_as(addr, &ca, id, "GET", "/admin/v1/hello", None, None)
+        .await
+        .expect("hello");
+    assert_eq!(hello.status, 200);
+    let body: serde_json::Value = serde_json::from_slice(&hello.body).expect("json");
+    assert_eq!(body["admin_protocol"], 1);
+    assert_eq!(body["vault_state"], "unlocked");
+    let bare = https::request(addr, &ca, "GET", "/admin/v1/hello", None, None)
+        .await
+        .expect("bare");
+    assert_eq!(bare.status, 403);
+    // Agents without a client certificate still work on the loopback bind.
+    let status_reply = https::request(addr, &ca, "GET", "/v1/status", Some(&seed.token), None)
+        .await
+        .expect("status");
+    assert_eq!(status_reply.status, 200);
+
+    // A session, and approvals: an `ask_once` read is a pending request, not `403 approval_unavailable`.
+    let open =
+        serde_json::json!({ "operator_id": bundle.operator_id.to_string(), "phrase": PHRASE });
+    let session = https::request_as(
+        addr,
+        &ca,
+        id,
+        "POST",
+        "/admin/v1/session",
+        None,
+        Some(&open.to_string()),
+    )
+    .await
+    .expect("session");
+    assert_eq!(
+        session.status,
+        200,
+        "{}",
+        String::from_utf8_lossy(&session.body)
+    );
+    let token = serde_json::from_slice::<serde_json::Value>(&session.body).expect("json")["token"]
+        .as_str()
+        .expect("token")
+        .to_owned();
+    let reveal_path = format!("/v1/credentials/{}/reveal", seed.item);
+    let purpose = r#"{"purpose":"integration test read"}"#;
+    let pending = https::request(
+        addr,
+        &ca,
+        "POST",
+        &reveal_path,
+        Some(&seed.token),
+        Some(purpose),
+    )
+    .await
+    .expect("reveal");
+    assert_eq!(
+        pending.status,
+        202,
+        "{}",
+        String::from_utf8_lossy(&pending.body)
+    );
+    let request_id =
+        serde_json::from_slice::<serde_json::Value>(&pending.body).expect("json")["access_request"]
+            ["id"]
+            .as_str()
+            .expect("id")
+            .to_owned();
+    let approve = serde_json::json!({ "request": request_id, "option": "once" }).to_string();
+    let approved = https::request_as(
+        addr,
+        &ca,
+        id,
+        "POST",
+        "/admin/v1/rpc/request_approve",
+        Some(&token),
+        Some(&approve),
+    )
+    .await
+    .expect("approve");
+    assert_eq!(
+        approved.status,
+        200,
+        "{}",
+        String::from_utf8_lossy(&approved.body)
+    );
+    let revealed = https::request(
+        addr,
+        &ca,
+        "POST",
+        &reveal_path,
+        Some(&seed.token),
+        Some(purpose),
+    )
+    .await
+    .expect("reveal");
+    assert_eq!(revealed.status, 200);
+    assert!(String::from_utf8_lossy(&revealed.body).contains(PASSWORD));
+
+    // A second enrolment for the offline revoke below.
+    let second = admin::enroll_with(
+        &ready.socket,
+        &EnrollRequest {
+            label: "second".to_owned(),
+            ..enroll_request(port)
+        },
+        |_| Ok(PHRASE.to_owned()),
+    )
+    .await
+    .expect("second enrolment");
+
+    // Online revoke: the device is refused at once, its session with it.
+    let source = admin::revoke_with(&ready.socket, &data, &bundle.id.to_string())
+        .await
+        .expect("revoke");
+    assert_eq!(source, Source::Daemon);
+    let after = https::request_as(
+        addr,
+        &ca,
+        id,
+        "POST",
+        "/admin/v1/rpc/item_list",
+        Some(&token),
+        Some(r#"{"filter":{}}"#),
+    )
+    .await
+    .expect("after revoke");
+    assert_eq!(after.status, 403);
+    let again = admin::revoke_with(&ready.socket, &data, &bundle.id.to_string()).await;
+    assert!(
+        matches!(again, Err(AdminCliError::NotFound(_))),
+        "{again:?}"
+    );
+    // The revoke removed power only: the vault is still unlocked for agents.
+    let status_reply = https::request(addr, &ca, "GET", "/v1/status", Some(&seed.token), None)
+        .await
+        .expect("status");
+    assert_eq!(status_reply.status, 200);
+
+    stop.send(()).expect("stop");
+    let core = run.await.expect("join").expect("serve");
+    assert_eq!(core.state(), VaultStateKind::Sealed);
+
+    // Offline revoke: no daemon answers, so the file is edited.
+    let source = admin::revoke_with(&ready.socket, &data, &second.id.to_string())
+        .await
+        .expect("offline revoke");
+    assert_eq!(source, Source::File);
+    let clients = AdminClients::load(&registry).expect("registry");
+    assert!(clients.list().iter().all(|c| c.revoked_at.is_some()));
+    let (listed, source) = admin::list_with(&ready.socket, &data).await.expect("list");
+    assert_eq!(source, Source::File);
+    assert_eq!(listed.len(), 2);
+}
+
+/// ADR-0034 point 3.5: with the admin API on, a registry open to others stops the start.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn admin_registry_with_a_wide_mode_stops_the_start() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let data = dir.path().join("data");
+    make_vault(&data).await;
+    let path = dir.path().join("cerberusd.toml");
+    write_config(
+        &path,
+        &data,
+        &format!(
+            "bind = [\"127.0.0.1\"]\nport = {}\n[admin]\nenabled = true\n",
+            free_port()
+        ),
+        0o600,
+    );
+    let config = config::load(Some(&path), &no_env).expect("config");
+    let registry = data.join("admin-clients.json");
+    AdminClients::default().save(&registry).expect("save");
+    std::fs::set_permissions(&registry, std::fs::Permissions::from_mode(0o644)).expect("chmod");
+    let result = daemon::serve(&config, std::future::ready(()), |_| {}).await;
+    assert!(
+        matches!(&result, Err(DaemonError::Mode { mode: 0o644, .. })),
+        "{result:?}"
+    );
+    // With the admin API off the file is not read.
+    let mut off = config.clone();
+    off.admin.enabled = false;
+    let result = daemon::serve(&off, std::future::ready(()), |_| {}).await;
+    assert!(result.is_ok(), "{result:?}");
 }

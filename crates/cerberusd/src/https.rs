@@ -1,5 +1,6 @@
-//! A small HTTPS client for the daemon's own checks: `cerberusd status` and the tests. It trusts only the vault CA,
-//! speaks TLS 1.3 only and sends no client certificate. Agents use their own clients.
+//! A small HTTPS client for the daemon's own checks: `cerberusd status` and the tests. It trusts only the vault CA
+//! and speaks TLS 1.3 only. [`request`] sends no client certificate; [`request_as`] sends one (the tests use it for
+//! admin client certificates). Agents use their own clients.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -10,7 +11,7 @@ use hyper::Request;
 use hyper::client::conn::http1;
 use hyper_util::rt::TokioIo;
 use rustls::RootCertStore;
-use rustls::pki_types::{CertificateDer, ServerName};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 
@@ -58,14 +59,40 @@ pub async fn request(
     token: Option<&str>,
     body: Option<&str>,
 ) -> Result<Reply, HttpsError> {
+    request_as(addr, ca_der, None, method, path, token, body).await
+}
+
+/// A client certificate and its PKCS#8 key, both DER.
+pub type Identity<'a> = (&'a [u8], &'a [u8]);
+
+/// As [`request`], with a client certificate when `identity` is given. The key is copied into rustls, which
+/// does not zeroize it: use it for tests and checks, not for a long-lived client.
+///
+/// # Errors
+/// [`HttpsError`] for a connection, TLS or HTTP failure.
+pub async fn request_as(
+    addr: SocketAddr,
+    ca_der: &[u8],
+    identity: Option<Identity<'_>>,
+    method: &str,
+    path: &str,
+    token: Option<&str>,
+    body: Option<&str>,
+) -> Result<Reply, HttpsError> {
     let mut roots = RootCertStore::empty();
     roots.add(CertificateDer::from(ca_der.to_vec()))?;
-    let config = rustls::ClientConfig::builder_with_provider(Arc::new(
+    let builder = rustls::ClientConfig::builder_with_provider(Arc::new(
         rustls::crypto::ring::default_provider(),
     ))
     .with_protocol_versions(&[&rustls::version::TLS13])?
-    .with_root_certificates(roots)
-    .with_no_client_auth();
+    .with_root_certificates(roots);
+    let config = match identity {
+        None => builder.with_no_client_auth(),
+        Some((cert, key)) => builder.with_client_auth_cert(
+            vec![CertificateDer::from(cert.to_vec())],
+            PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.to_vec())),
+        )?,
+    };
     let name = ServerName::try_from(SERVER_NAME).map_err(|_| HttpsError::ServerName)?;
     let tcp = TcpStream::connect(addr).await?;
     let tls = TlsConnector::from(Arc::new(config))

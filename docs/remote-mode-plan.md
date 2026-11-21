@@ -346,6 +346,12 @@ pending request (not `403 approval_unavailable`) when the admin API is on, and s
 
 Done when: `cargo test -p cerberusd`; `just deps-check`; `systemd-analyze verify` unchanged (no unit change).
 
+As built (DEC-RM-20): the socket `Request` is a flat struct with `op` and optional fields (and now
+`deny_unknown_fields`); `accept_loop` takes a `SocketContext`. `admin::{enroll_with, list_with, revoke_with}` with
+`EnrollRequest` and `Source::{Daemon, File}`; list also falls back to the file. An offline revoke is not audited (no open
+vault). `Reply.bundle` is boxed. `status` also prints the CA pin and fingerprint. `https::request_as` sends a client
+certificate. `packaging/systemd/cerberusd.toml.example` documents `[admin]`.
+
 ---
 
 ## Step 7 — `cerberus-client`: per-request bearer, generic SSE

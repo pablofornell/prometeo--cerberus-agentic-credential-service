@@ -1,6 +1,7 @@
 # Copy to /etc/cerberus/cerberusd.toml. The file must be mode 0600 and owned by the cerberus user.
 # Every key is optional. Environment variables CERBERUSD_DATA_DIR, CERBERUSD_BIND, CERBERUSD_PORT,
-# CERBERUSD_HOST_NAMES, CERBERUSD_REQUIRE_MTLS and CERBERUSD_IDLE_LOCK_SECONDS override these values.
+# CERBERUSD_HOST_NAMES, CERBERUSD_REQUIRE_MTLS, CERBERUSD_IDLE_LOCK_SECONDS, CERBERUSD_ADMIN_ENABLED,
+# CERBERUSD_ADMIN_SESSION_IDLE_SECONDS and CERBERUSD_ADMIN_SESSION_MAX_SECONDS override these values.
 
 # Absolute path. Holds vault.cerberus, tls/ and the unlock socket.
 data_dir = "/var/lib/cerberus"
@@ -19,3 +20,10 @@ port = 7373
 
 # Lock after this many idle seconds: 0 is off (the default), or 60 to 86400.
 # idle_lock_seconds = 0
+
+# The admin API for an enrolled desktop app (ADR-0034, docs/guides/cerberusd.md "Remote admin from the
+# desktop"). Off by default: then no /admin route exists. On also turns on approvals for ask grants.
+# [admin]
+# enabled = false
+# session_idle_seconds = 900    # 60 to 3600
+# session_max_seconds = 43200   # 900 to 86400

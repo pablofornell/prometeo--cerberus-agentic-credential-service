@@ -8,7 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use cerberus_api::DEFAULT_PORT;
+use cerberus_api::{AdminLimits, DEFAULT_PORT};
 use cerberus_core::vault::IDLE_LOCK_RANGE;
 use serde::Deserialize;
 
@@ -20,6 +20,43 @@ pub const DATA_DIR_NAME: &str = "cerberusd";
 pub const CONFIG_MODE: u32 = 0o600;
 /// Longest host name the daemon accepts in `host_names`.
 const MAX_HOST_NAME: usize = 253;
+/// Allowed admin session idle limits, in seconds (ADR-0034 point 2.1).
+pub const ADMIN_IDLE_RANGE: std::ops::RangeInclusive<u32> = 60..=3600;
+/// Allowed admin session absolute limits, in seconds (ADR-0034 point 2.1).
+pub const ADMIN_MAX_RANGE: std::ops::RangeInclusive<u32> = 900..=86_400;
+
+/// The `[admin]` table: the admin API for an enrolled desktop app (ADR-0034). Off by default.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdminSettings {
+    /// Mount `/admin/v1` on the HTTPS listener and allow approvals (`ask_once`, `ask_always`).
+    pub enabled: bool,
+    /// An admin session ends after this many seconds without a call: 60 to 3600, default 900.
+    pub session_idle_seconds: u32,
+    /// An admin session ends this many seconds after it opened: 900 to 86400, default 43200.
+    pub session_max_seconds: u32,
+}
+
+impl Default for AdminSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            session_idle_seconds: 900,
+            session_max_seconds: 43_200,
+        }
+    }
+}
+
+impl AdminSettings {
+    /// The limits of the admin API: these session limits, the fixed ADR-0034 values otherwise.
+    #[must_use]
+    pub fn limits(&self) -> AdminLimits {
+        AdminLimits {
+            session_idle_seconds: self.session_idle_seconds,
+            session_max_seconds: self.session_max_seconds,
+            ..AdminLimits::default()
+        }
+    }
+}
 
 /// The settings the daemon runs with.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -36,6 +73,8 @@ pub struct Config {
     pub require_mtls: bool,
     /// Idle lock in seconds. `0` is off, the daemon default (ADR-0002 point 7).
     pub idle_lock_seconds: u32,
+    /// The admin API (ADR-0034). Off by default.
+    pub admin: AdminSettings,
 }
 
 impl Config {
@@ -105,6 +144,16 @@ struct FileConfig {
     host_names: Option<Vec<String>>,
     require_mtls: Option<bool>,
     idle_lock_seconds: Option<i64>,
+    admin: Option<FileAdmin>,
+}
+
+/// The `[admin]` table of the file.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileAdmin {
+    enabled: Option<bool>,
+    session_idle_seconds: Option<i64>,
+    session_max_seconds: Option<i64>,
 }
 
 /// Looks up an environment variable. `None` when it is unset.
@@ -219,6 +268,7 @@ fn resolve(file: FileConfig, env: EnvFn<'_>) -> Result<Config, ConfigError> {
         key: "idle_lock_seconds",
         reason: format!("{idle} is not a number of seconds"),
     })?;
+    let admin = resolve_admin(file.admin.unwrap_or_default(), env)?;
     let config = Config {
         data_dir,
         bind,
@@ -226,12 +276,73 @@ fn resolve(file: FileConfig, env: EnvFn<'_>) -> Result<Config, ConfigError> {
         host_names,
         require_mtls,
         idle_lock_seconds,
+        admin,
     };
     validate(&config)?;
     Ok(config)
 }
 
+fn resolve_admin(file: FileAdmin, env: EnvFn<'_>) -> Result<AdminSettings, ConfigError> {
+    let defaults = AdminSettings::default();
+    let enabled = match env("CERBERUSD_ADMIN_ENABLED") {
+        Some(value) => bool_from_env(&value, "CERBERUSD_ADMIN_ENABLED")?,
+        None => file.enabled.unwrap_or(defaults.enabled),
+    };
+    let seconds = |env_key: &'static str,
+                   key: &'static str,
+                   from_file: Option<i64>,
+                   default: u32|
+     -> Result<u32, ConfigError> {
+        let value = match env(env_key) {
+            Some(value) => int_from_env(&value, env_key)?,
+            None => from_file.unwrap_or(i64::from(default)),
+        };
+        u32::try_from(value).map_err(|_| ConfigError::Invalid {
+            key,
+            reason: format!("{value} is not a number of seconds"),
+        })
+    };
+    Ok(AdminSettings {
+        enabled,
+        session_idle_seconds: seconds(
+            "CERBERUSD_ADMIN_SESSION_IDLE_SECONDS",
+            "admin.session_idle_seconds",
+            file.session_idle_seconds,
+            defaults.session_idle_seconds,
+        )?,
+        session_max_seconds: seconds(
+            "CERBERUSD_ADMIN_SESSION_MAX_SECONDS",
+            "admin.session_max_seconds",
+            file.session_max_seconds,
+            defaults.session_max_seconds,
+        )?,
+    })
+}
+
+fn validate_admin(admin: &AdminSettings) -> Result<(), ConfigError> {
+    if !ADMIN_IDLE_RANGE.contains(&admin.session_idle_seconds) {
+        return Err(ConfigError::Invalid {
+            key: "admin.session_idle_seconds",
+            reason: "must be 60 to 3600".into(),
+        });
+    }
+    if !ADMIN_MAX_RANGE.contains(&admin.session_max_seconds) {
+        return Err(ConfigError::Invalid {
+            key: "admin.session_max_seconds",
+            reason: "must be 900 to 86400".into(),
+        });
+    }
+    if admin.session_idle_seconds > admin.session_max_seconds {
+        return Err(ConfigError::Invalid {
+            key: "admin.session_idle_seconds",
+            reason: "must not be longer than admin.session_max_seconds".into(),
+        });
+    }
+    Ok(())
+}
+
 fn validate(config: &Config) -> Result<(), ConfigError> {
+    validate_admin(&config.admin)?;
     if !config.data_dir.is_absolute() {
         return Err(ConfigError::Invalid {
             key: "data_dir",
@@ -393,6 +504,86 @@ mod tests {
         };
         let error = resolve(file, &no_env).expect_err("refused");
         assert!(error.to_string().starts_with("data_dir:"), "{error}");
+    }
+
+    fn data_dir_env(key: &str) -> Option<String> {
+        (key == "CERBERUSD_DATA_DIR").then(|| "/srv/cerberus".to_owned())
+    }
+
+    #[test]
+    fn the_admin_api_is_off_by_default() {
+        let config = resolve(FileConfig::default(), &data_dir_env).expect("defaults");
+        assert_eq!(config.admin, AdminSettings::default());
+        assert!(!config.admin.enabled);
+        assert_eq!(config.admin.limits(), AdminLimits::default());
+        let file: FileConfig = toml::from_str("[admin]\n").expect("empty table");
+        let config = resolve(file, &data_dir_env).expect("empty table");
+        assert!(!config.admin.enabled);
+    }
+
+    #[test]
+    fn the_admin_table_is_read_and_the_environment_wins() {
+        let file: FileConfig = toml::from_str(
+            "[admin]\nenabled = true\nsession_idle_seconds = 300\nsession_max_seconds = 3600\n",
+        )
+        .expect("toml");
+        let config = resolve(file, &data_dir_env).expect("config");
+        assert!(config.admin.enabled);
+        assert_eq!(config.admin.limits().session_idle_seconds, 300);
+        assert_eq!(config.admin.limits().session_max_seconds, 3600);
+        let file: FileConfig =
+            toml::from_str("[admin]\nenabled = true\nsession_idle_seconds = 300\n").expect("toml");
+        let env = |key: &str| match key {
+            "CERBERUSD_ADMIN_ENABLED" => Some("false".to_owned()),
+            "CERBERUSD_ADMIN_SESSION_IDLE_SECONDS" => Some("120".to_owned()),
+            "CERBERUSD_ADMIN_SESSION_MAX_SECONDS" => Some("1800".to_owned()),
+            other => data_dir_env(other),
+        };
+        let config = resolve(file, &env).expect("config");
+        assert!(!config.admin.enabled);
+        assert_eq!(config.admin.session_idle_seconds, 120);
+        assert_eq!(config.admin.session_max_seconds, 1800);
+        let env = |key: &str| match key {
+            "CERBERUSD_ADMIN_ENABLED" => Some("yes".to_owned()),
+            other => data_dir_env(other),
+        };
+        let error = resolve(FileConfig::default(), &env).expect_err("refused");
+        assert!(
+            error.to_string().starts_with("CERBERUSD_ADMIN_ENABLED:"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn admin_session_ranges_are_checked() {
+        for (text, key) in [
+            ("session_idle_seconds = 59", "admin.session_idle_seconds:"),
+            ("session_idle_seconds = 3601", "admin.session_idle_seconds:"),
+            ("session_max_seconds = 899", "admin.session_max_seconds:"),
+            ("session_max_seconds = 86401", "admin.session_max_seconds:"),
+            (
+                "session_idle_seconds = 3600\nsession_max_seconds = 900",
+                "admin.session_idle_seconds:",
+            ),
+            ("session_idle_seconds = -1", "admin.session_idle_seconds:"),
+        ] {
+            let file: FileConfig = toml::from_str(&format!("[admin]\n{text}\n")).expect("toml");
+            let error = resolve(file, &data_dir_env).expect_err(text);
+            assert!(error.to_string().starts_with(key), "{text}: {error}");
+        }
+        for text in [
+            "session_idle_seconds = 60\nsession_max_seconds = 900",
+            "session_idle_seconds = 3600\nsession_max_seconds = 86400",
+        ] {
+            let file: FileConfig = toml::from_str(&format!("[admin]\n{text}\n")).expect("toml");
+            assert!(resolve(file, &data_dir_env).is_ok(), "{text}");
+        }
+    }
+
+    #[test]
+    fn an_unknown_admin_key_is_refused_with_its_name() {
+        let error = toml::from_str::<FileConfig>("[admin]\nenable = true\n").expect_err("refused");
+        assert!(error.message().contains("enable"), "{}", error.message());
     }
 
     #[test]

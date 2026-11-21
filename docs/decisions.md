@@ -1432,6 +1432,29 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   rate_limited`. (j) `admin.session_close` rows written while sealed (reason `lock`) keep no details (DEC-RM-17 d).
   (`crates/cerberus-api/src/admin/`, `tests/admin.rs`, `tests/admin_logging.rs`)
 
+- **DEC-RM-20** — RM — `cerberusd` admin config, enrolment and approvals, as built (plan step 6). (a) The socket
+  request is one flat struct: `op` (`unlock` by default, `admin_enroll`, `admin_list`, `admin_revoke`) and optional
+  `operator`, `phrase`, `owner`, `label`, `url`, `id`; it now refuses unknown fields. An old
+  `{"operator","phrase"}` line is still an unlock. `accept_loop` takes a `SocketContext { core, admin, data_dir }`.
+  (b) `admin_enroll` order: admin API on (else `unavailable`) → label → vault unlocked (else `vault_locked`) → the
+  owner (by `select_operator`) must have the owner role (`forbidden`) → `verify_operator_phrase` (`bad_credentials`;
+  `conflict` when another operator unlocked the vault) → bound operator by label → sign, build the bundle and run
+  `AdminBundle::check` (so a bad URL is `invalid_request` before anything is stored) → registry saved, then the
+  memory → `admin.client_enroll`. (c) `admin_list` and `admin_revoke` also work over the socket with the admin API
+  off (they use the file; the revoke is audited through the running core). With no daemon, `cerberusd admin list`
+  reads the file and `revoke` edits it; that offline revoke writes **no** `admin.client_revoke`, because the vault is
+  not open (ADR-0034 point 3.6 names the event; the guide says so). (d) `Reply` gets `bundle: Option<Box<AdminBundle>>`
+  and `clients`; the server writes every reply from a zeroizing buffer (`rpc::to_body`, newline written apart) and the
+  client reads it into a fixed 64 KiB zeroizing buffer. (e) `start_http` sets `client_ca_der` when the admin API or
+  `require_mtls` is on, `require_client_cert = require_mtls`, and `admin = Some(AdminConfig)`. When the vault has no
+  leaf yet, the admin API comes up with the listener at the first terminal unlock (ADR-0034 point 8). (f) `cerberusd
+  status` also prints the CA pin and SHA-256 fingerprint (what the desktop shows at import) and "admin API: on/off, N
+  enrolled clients" from the config and the registry file. (g) New `https::request_as` with an optional client
+  identity (tests and checks; the key copy is not zeroized). (h) The unlock log line for ask grants says an enrolled
+  desktop decides them when approvals are on. (i) Residual: `IssuedCert::key_pem` builds the PEM in a plain `String`
+  that moves into the bundle's `WireSecret`; the base64 encoder's scratch is not zeroized (as DEC-RM-18 f).
+  (`crates/cerberusd/src/{config,daemon,unlock,admin,status,https,main}.rs`, `tests/daemon.rs`)
+
 ## RD — RustDesk connections (2026-11-21)
 
 - **DEC-RD-1** — New item kind `rustdesk` (Rust `ItemKind::Rustdesk`, wire value `rustdesk`) for a machine reached with

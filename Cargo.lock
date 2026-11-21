@@ -1101,6 +1101,7 @@ name = "cerberusd"
 version = "0.3.0"
 dependencies = [
  "bytes",
+ "cerberus-admin",
  "cerberus-api",
  "cerberus-core",
  "cerberus-crypto",
@@ -1111,6 +1112,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "jiff 1.0.0",
  "rpassword",
  "rustix",
  "rustls",
