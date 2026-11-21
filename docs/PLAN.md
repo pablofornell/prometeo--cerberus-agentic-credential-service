@@ -38,9 +38,9 @@ Default patterns:
 ### 1.2 Decisions made by the planner
 | # | Decision | Reason |
 |---|----------|--------|
-| D1 | The app is one Tauri v2 process. It holds the vault in memory and runs the HTTPS server. | One process keeps the keys in one place. |
+| D1 | The app is one Tauri v2 process. It holds the vault in memory and runs the HTTPS server. *Amended by ADR-0034: in remote mode the app holds no vault and runs no server; it is a client of `cerberusd`.* | One process keeps the keys in one place. |
 | D2 | A headless daemon `cerberusd` uses the same library. | Servers without a screen need it. |
-| D3 | Admin actions (create item, grant, approve) use Tauri IPC only. They are NOT on the network. | A smaller attack surface. |
+| D3 | Admin actions (create item, grant, approve) use Tauri IPC only. They are NOT on the network. *Amended by ADR-0034: a `cerberusd` whose owner turns on the opt-in admin API serves an allowlist of admin commands under `/admin/v1`, behind an enrolled client certificate and an operator session (DEC-RM-1 to DEC-RM-14, `docs/remote-mode-plan.md`).* | A smaller attack surface. |
 | D4 | Agents use only the Agent API (HTTPS REST and MCP). | Agents must not manage the vault. |
 | D5 | Item content AND item metadata are encrypted. Only ID, kind, expiry and timestamps are plain text. | A stolen DB file shows nothing. The sweeper can delete expired rows while the vault is locked. |
 | D6 | Search runs on an in-memory index. It is built at unlock and erased at lock. | Search works on encrypted metadata. |

@@ -1,6 +1,6 @@
 # ADR-0031: Backup and restore
 
-- Status: Accepted
+- Status: Accepted. Note (DEC-RM-13): the `cerberusd restore <file>` command in point 3 was never built; on a server the restore is a file copy (`docs/guides/cerberusd.md`).
 - Date: 2026-11-16
 - Plan reference: 4.5, 7 screen 11
 - Related: ADR-0002, ADR-0013, ADR-0023, ADR-0025

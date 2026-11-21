@@ -1,6 +1,6 @@
 # ADR-0001: One Tauri process holds the vault and runs the HTTPS server
 
-- Status: Accepted
+- Status: Accepted. Amended by ADR-0034: in remote mode the desktop holds no vault and runs no HTTPS server; it is a client of `cerberusd`.
 - Date: 2026-11-16
 - Plan reference: D1
 - Related: ADR-0002, ADR-0003, ADR-0023, ADR-0024, ADR-0026

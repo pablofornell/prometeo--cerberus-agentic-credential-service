@@ -1,6 +1,6 @@
 # ADR-0023: Network boundary — TLS, bind, local CA, browser and webview rules
 
-- Status: Accepted
+- Status: Accepted. Amended by ADR-0034: the Agent API is no longer the only network surface when the `cerberusd` admin API is on; that API shares this listener and its HTTP rules, and the listener then asks every client for a CA-signed certificate.
 - Date: 2026-11-16
 - Plan reference: 4.3, 4.7, A8
 - Related: ADR-0001, ADR-0003, ADR-0016, ADR-0030

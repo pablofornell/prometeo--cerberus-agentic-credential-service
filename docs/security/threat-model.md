@@ -1,7 +1,8 @@
 # Cerberus threat model (T01)
 
 - Status: Accepted (design baseline). T26 (audit) reviews it against the code.
-- Date: 2026-11-16
+- Date: 2026-11-16. Updated 2026-11-21 for remote backend mode (ADR-0034): TB-10, AS-11, AS-12, ATK-11, S-9 to S-11,
+  T-12, R-6, I-20 to I-22, D-9, E-1 (changed), E-14 to E-16, invariants 8 to 10, AR-19 and AR-20.
 - Method: assets → attackers → trust boundaries → STRIDE per boundary. Each threat has a **control** (with the task and
   crate that build it) or an **accepted risk** (AR-n, section 7). Plan section 14 and scenarios A1–A12 are mapped in
   sections 8 and 9.
@@ -10,7 +11,8 @@
 
 One process (desktop app or `cerberusd`) holds the unlocked vault in memory (ADR-0001, ADR-0002). Agents call the
 Agent API over HTTPS (REST `/v1`, MCP `/mcp`) with bearer tokens (ADR-0004, ADR-0016). People manage the vault only
-through Tauri IPC (ADR-0003). The vault is one SQLite file: items and metadata are encrypted; a few plain columns
+through Tauri IPC (ADR-0003), or, on a `cerberusd` whose owner turned on the opt-in admin API, from an enrolled desktop
+app in remote mode over `/admin/v1` (ADR-0034, TB-10). The vault is one SQLite file: items and metadata are encrypted; a few plain columns
 support work while locked (ADR-0005, ADR-0033).
 
 ```
@@ -23,6 +25,11 @@ support work while locked (ADR-0005, ADR-0033).
                                     (TB-3) cerberus-store ──► vault.cerberus (SQLite) ──► backups
                                                                     (TB-6) disk / backup media
  Child process ◄── env vars ── cerberus run (TB-7)        ssh-agent socket (TB-8, T22)
+
+ Remote mode (ADR-0034, only when cerberusd has [admin] enabled = true):
+            (TB-10) TLS 1.3, CA pin, enrolled client cert + operator session          (TB-4) Tauri IPC
+ cerberusd /admin/v1 ◄──────────────────────────────────────── desktop Rust proxy ◄────────────── Webview UI ◄── Person
+ (same listener as TB-2)                                        (no local vault)
 ```
 
 ## 2. Assets
@@ -39,6 +46,8 @@ support work while locked (ADR-0005, ADR-0033).
 | AS-8 | TLS CA key and leaf key | CA sealed in DB; leaf in `tls/leaf-key.der` | Server identity for agents |
 | AS-9 | Availability of the vault | Process, DB file, backups | Agents need credentials to work |
 | AS-10 | Approval decisions | Approval window, `access_requests`, `leases` | Gate for `prod` and `ask_*` items |
+| AS-11 | Admin client bundle and the enrolled client key (ADR-0034) | Bundle file in transit; `<app_data_dir>/remote/<id>/` (key 0600) on the desktop; hash in `admin-clients.json` on the server | First factor of the admin API |
+| AS-12 | Admin session tokens (`cas_...`) | Desktop Rust memory; SHA-256 in daemon memory | Live admin power until idle or absolute expiry |
 
 ## 3. Attackers
 
@@ -54,6 +63,7 @@ support work while locked (ADR-0005, ADR-0033).
 | ATK-8 | **Malicious or careless operator** (another person with a slot) | Act within their role; keep old file copies | Bypass audit |
 | ATK-9 | **Supply-chain attacker** | Ship a bad crate, npm package, or release binary | Change pinned `Cargo.lock` without review |
 | ATK-10 | **Shoulder surfer / screen recorder** | See the screen | Use the keyboard |
+| ATK-11 | **Thief of an admin bundle** (copied file, backup of the desktop data folder, lost laptop) | Present the enrolled client certificate to the daemon; try passphrases online | Know an operator passphrase; pass the per-enrolment limit and the unlock back-off |
 
 ## 4. Trust boundaries
 
@@ -68,6 +78,7 @@ support work while locked (ADR-0005, ADR-0033).
 | TB-7 | `cerberus run` ↔ child process | Env vars with secrets |
 | TB-8 | ssh-agent socket ↔ local clients (T22) | Sign requests |
 | TB-9 | Build and release pipeline ↔ users | Binaries, dependencies |
+| TB-10 | Desktop in remote mode ↔ `cerberusd` admin API (ADR-0034; exists only with `[admin] enabled = true`) | Client certificate, operator phrase (session open only), session token, admin DTOs, revealed secrets, live events |
 
 ## 5. STRIDE table
 
@@ -85,6 +96,9 @@ Legend: **Ctrl** = control and where it is built (task, crate). **AR** = accepte
 | S-6 | Script in the webview calls IPC (XSS, injected content) | TB-4 | Ctrl: strict CSP, no remote content, React escaping, reason text never as HTML, Tauri capabilities per window, window-label check and role check in every command (T15, T16; `cerberus-desktop`). |
 | S-7 | A person who learned a phrase (shoulder surfing ATK-10, reuse) unlocks | TB-1 | Ctrl: per-operator slots, audit `vault.unlock` with operator, back-off after 5 failures, phrase change, operator removal (T05; `cerberus-core`). Residual: a known phrase opens the vault: AR-18. |
 | S-8 | Token leaks from `ps` or shell history via a CLI argument | TB-7 | Ctrl: CLI and shim read the token only from `CERBERUS_TOKEN` or a token file, never from argv (T12, T11; `cerberus-client`). |
+| S-9 | Stolen admin bundle (ATK-11) used to reach the admin API | TB-10 | Ctrl: the certificate alone opens only `hello`, `vault_status` and `vault_list_operators`; every other call needs a session opened with the bound operator's passphrase; per-enrolment limit (5 failures / 15 min → 15 min refusal before the KDF) plus the vault-wide back-off of ADR-0026; certificate 90 days; `cerberusd admin revoke` drops sessions and connections within about 1 s; enrolment and session events audited with the enrolment ID; bundle file 0600, created new, the guide says to delete it after import (ADR-0034 points 3, 4, 6; RM steps 4–6). Residual: bundle + known phrase = that operator's full power: AR-18, AR-20. |
+| S-10 | Admin session hijack: a copied `cas_` token replayed | TB-10 | Ctrl: token only in desktop Rust memory (never in the webview, log or a file), header marked sensitive; server keeps SHA-256 only; bound to the client certificate of the connection that opened it (a token over another certificate is refused); idle 900 s, absolute 12 h; void at every lock or new unlock (epoch); at most 4 sessions, 2 per enrolment; `cas_` prefix for secret scanners; closed on desktop quit and OS lock (ADR-0034 point 6). |
+| S-11 | Fake admin server collects the operator phrase (DNS spoof, LAN MITM, wrong URL in a bundle) | TB-10 | Ctrl: the desktop trusts only the CA pin from the bundle (SPKI pin, survives leaf renewal), TLS 1.3 only; the person compares URL, pin and fingerprint with `cerberusd status` at import; the phrase is sent only after the pinned handshake and a matching `admin_protocol` in `hello` (ADR-0034 point 7.10; `cerberus-client` `PinnedHttps`). Residual: a stolen server leaf key: AR-12. |
 
 ### 5.2 Tampering
 
@@ -101,6 +115,7 @@ Legend: **Ctrl** = control and where it is built (task, crate). **AR** = accepte
 | T-9 | Agent poisons the vault: stores a fake "admin" item that another agent later uses | TB-2 | Ctrl: `write` only through grants on the proposed metadata; `created_by` shown in candidates and as a UI badge; agent-created items are audited with the agent ID (T06, T07, T18). Residual: AR-15. |
 | T-10 | Changed CA certificate (plain) in the DB to trick leaf renewal | TB-3 | Ctrl: CA public key must match the sealed CA key at unlock (ADR-0033; T10). |
 | T-11 | Bad dependency or release binary (ATK-9) | TB-9 | Ctrl: `Cargo.lock` and `package-lock` committed; `cargo deny`, `cargo audit`, npm audit in CI; SBOM (`cargo-cyclonedx`); signed release artifacts and checksums (T02, T29). Residual: AR-16. |
+| T-12 | Same-UID attacker on the server adds a certificate hash to `admin-clients.json` | TB-10 | AR-19. Ctrl: file mode 0600 checked at start, every enrolment and revoke audited in the chain, a session still needs an operator passphrase. |
 
 ### 5.3 Repudiation
 
@@ -111,6 +126,7 @@ Legend: **Ctrl** = control and where it is built (task, crate). **AR** = accepte
 | R-3 | Events while locked cannot be authenticated | TB-3 | Ctrl: `audit_pending` folded into the chain at unlock with `recorded_while_locked`; cap and overflow counter (T08; ADR-0025). Residual: AR-6. |
 | R-4 | Audit history lost to retention | TB-3 | Ctrl: retention setting (default 365 d), `audit.prune` event, anchor in the MACed head, export before prune is offered (T08). |
 | R-5 | Request IDs forged to confuse audit | TB-2 | Ctrl: server makes every request ID; incoming `X-Request-Id` ignored (T10; ADR-0015). |
+| R-6 | Remote operator denies an admin action | TB-10 | Ctrl: every admin call runs the same core function as the local IPC command and is audited with actor `operator:<id>`; `admin.session_open` / `admin.session_close` record the enrolment ID, so each action maps to a device and a phrase (ADR-0034 point 6.7). |
 
 ### 5.4 Information disclosure
 
@@ -135,6 +151,9 @@ Legend: **Ctrl** = control and where it is built (task, crate). **AR** = accepte
 | I-17 | Approval objects or SSE events carry secrets | TB-2 | Ctrl: secrets only on secret routes; request and lease views hold IDs and metadata only (T07, T10). |
 | I-18 | Child process of `cerberus run` gets the agent token | TB-7 | Ctrl: `CERBERUS_TOKEN` and `CERBERUS_TOKEN_FILE` removed from the child env unless `--pass-token`; `cerberus run` is not dumpable on Linux, so the child cannot read the token from `/proc/<ppid>/environ` (T12, AUD-19). A token file stays readable by the same user (AR-3). |
 | I-19 | Item titles leak through IPC events or tray badge | TB-5 | Ctrl: events carry IDs; the tray badge shows a count only (T15, T19). |
+| I-20 | Operator passphrase crosses the network at session open | TB-10 | Ctrl: sent only in the body of `POST /admin/v1/session`, never in a URL or header; only after a pinned TLS 1.3 handshake with an enrolled client certificate; read into a zeroizing buffer on both sides (as the unlock socket, AUD-20); request bodies are never logged (I-4, ADR-0032); the recovery key is never accepted over the network (ADR-0034 point 6.3). Residual: a compromised server process sees the phrase, as it sees the VMK: AR-8. |
+| I-21 | Live events (SSE) leak data to a listener | TB-10 | Ctrl: `/admin/v1/events` needs certificate + session; events hold IDs and counts only (same structs as I-19); `Cache-Control: no-store`; the stream ends with the session, at lock and at revoke; at most 2 streams per session (ADR-0034 point 6.8). |
+| I-22 | Revealed secrets and item metadata travel to a remote desktop | TB-10 | Ctrl: TLS 1.3 with CA pin and client certificate; same reveal audit (`item.reveal`) and role checks as local; the desktop keeps no copy outside component state (I-16); clipboard copy is not offered in remote mode in the MVP. |
 
 ### 5.5 Denial of service
 
@@ -148,12 +167,13 @@ Legend: **Ctrl** = control and where it is built (task, crate). **AR** = accepte
 | D-6 | Expensive queries (large catalog pages, long hints) | TB-2 | Ctrl: `limit` ≤ 500, input length limits, candidates ≤ 20 (T06, T10). |
 | D-7 | Someone at the keyboard triggers unlock back-off | TB-1 | Ctrl: max delay 900 s; recovery key typing errors do not count (T05). Residual: needs physical access; part of AR-18. |
 | D-8 | Plain-column change makes items expire early (sweeper) | TB-3 | Ctrl: only a loss of availability, never a gain (ADR-0033). Residual: AR-17. |
+| D-9 | ATK-11 drives the shared unlock back-off with wrong phrases, so the owner cannot unlock | TB-10 | Ctrl: per-enrolment limit before the KDF (5 failures / 15 min); revoke the enrolment; the back-off is capped at 900 s (ADR-0026); an unlocked vault keeps serving agents (back-off blocks new unlocks and session opens only) (ADR-0034 point 6.3). |
 
 ### 5.6 Elevation of privilege
 
 | ID | Threat | TB | Control / accepted risk |
 |---|---|---|---|
-| E-1 | Agent reaches admin functions | TB-2 | Ctrl: no admin route exists (D3); route-list test against this OpenAPI file; daemon has no admin path (T10, T13). |
+| E-1 | Agent reaches admin functions | TB-2, TB-10 | Ctrl: the Agent API router has no admin route, and the route-list test keeps it equal to the OpenAPI file, which has no `/admin` path (test). The desktop's own vault has no admin route in any mode. On `cerberusd`, `/admin` routes exist only with `[admin] enabled = true` (default off: `404 route_not_found`, ADR-0034). When they exist: agent tokens (`cvt_`) are not accepted there; an agent's CA-signed client certificate is refused because only enrolled certificate hashes pass (E-15); every call also needs an operator session opened with a passphrase; the admin route list is fixed by its own test (T10, T13; RM step 5). Changed by ADR-0034; before, "no admin route exists anywhere". |
 | E-2 | Same-UID malware or root (ATK-4) reads keys from process memory while unlocked | TB-5 | Ctrl: not dumpable (blocks same-UID ptrace on Linux), `PT_DENY_ATTACH` on macOS, `mlock`, idle lock 30 min, hard lock 12 h, lock on OS lock (Linux only, see I-8) (T03, T05). Residual: AR-8 (plan 14: "partly accepted"). |
 | E-3 | Viewer or operator extracts the VMK and reads beyond their role | TB-4 | AR-9. Ctrl for normal use: role checks in every IPC command (T15). |
 | E-4 | Removed operator keeps an old file copy and the VMK from it | TB-6 | AR-10. |
@@ -166,6 +186,9 @@ Legend: **Ctrl** = control and where it is built (task, crate). **AR** = accepte
 | E-11 | Other local user uses the ssh-agent socket | TB-8 | Ctrl: socket 0600 in a 0700 runtime dir; lifetime bound to lease and lock; one key per socket (T22). Residual: same UID: AR-8. |
 | E-12 | Approval window commands called from the main window by injected script, or the other way | TB-4 | Ctrl: per-command window allow list; approve/deny need role operator (T15). |
 | E-13 | Agent skips approval by reusing another agent's lease | TB-2 | Ctrl: leases and requests are bound to the agent ID; other agent's IDs give 404; row MAC (T07; ADR-0033). |
+| E-14 | Admin API turned on by mistake, or left on | TB-10 | Ctrl: off by default; on only through `[admin] enabled = true` in the 0600 config file or `CERBERUSD_ADMIN_ENABLED`; when on, still no access without an enrolment, and an enrolment needs a terminal on the server, the daemon user and an owner phrase; each start with it on logs a `warn` line and writes `admin.api_start` to the audit chain; `cerberusd status` shows it and the enrolment count (ADR-0034 point 2). |
+| E-15 | Agent uses its own CA-signed mTLS certificate, or a `cvt_` token, on `/admin` | TB-10 | Ctrl: the device check accepts only certificate hashes in `admin-clients.json` that are not revoked or expired, on every request; admin certificates have their own CN form; `cvt_` tokens never parse as `cas_` sessions and the reverse; tests for both (ADR-0034 point 4). |
+| E-16 | A remote caller runs a command beyond the allowlist, or more power than the same local command | TB-10 | Ctrl: one shared allowlist constant (25 commands); any other name gives `404 remote_unsupported`; every allowlisted command calls the same handler and core function as the local IPC command, so core role checks apply unchanged; unknown JSON fields refused; recovery-key unlock, operator and phrase management, backup, restore, TLS, network and CSV are not remote (ADR-0034 point 5). |
 
 ## 6. Security invariants (tests must prove these)
 
@@ -176,6 +199,9 @@ Legend: **Ctrl** = control and where it is built (task, crate). **AR** = accepte
 5. A revoked key fails on the next call (A10).
 6. A forged plain row (insert or change without `row_mac_key`) never grants access (T-5 test, T09/T07).
 7. TLS 1.2 and plain HTTP fail (A8).
+8. With `[admin] enabled = false` every `/admin` path gives `404 route_not_found`; the agent OpenAPI has no `/admin` path (ADR-0034).
+9. No admin call other than `hello`, `vault_status` and `vault_list_operators` succeeds without an enrolled, unrevoked client certificate **and** a live session opened with a passphrase; an agent certificate or token never passes (ADR-0034).
+10. Closing or losing an admin session never locks the server vault, and no session survives a lock, a new unlock or a revoke (ADR-0034).
 
 ## 7. Accepted risks
 
@@ -199,6 +225,8 @@ Legend: **Ctrl** = control and where it is built (task, crate). **AR** = accepte
 | AR-16 | Unsafe code and bugs in Tauri, the OS webview, SQLite and other dependencies | Not our code. Audit, deny, updates and SBOM reduce it. | Release (T29) |
 | AR-17 | Loss of availability by file deletion or early expiry through plain columns | Availability is lower priority than secrecy. Backups exist. | Person |
 | AR-18 | A person with a known phrase, or physical access, can unlock or cause back-off | A credential is a credential. Audit records it. | Person |
+| AR-19 | `admin-clients.json` is plain and has no MAC: a same-UID attacker on the server can add an enrolment (T-12) | It must be readable while sealed for a remote unlock. That attacker can already read daemon memory and the vault file (AR-8). A session still needs a passphrase; enrolments are audited. A sealed mirror checked at unlock is a follow-up. | Future change (RM follow-up) |
+| AR-20 | The desktop keeps the enrolled client key as a 0600 file, not in an OS keychain | Same-UID malware on the desktop can copy it (AR-8), but still needs an operator passphrase (S-9). OS keychain storage is a follow-up. | Future change (RM follow-up) |
 
 ## 8. Plan section 14 mapping
 
@@ -229,6 +257,7 @@ Legend: **Ctrl** = control and where it is built (task, crate). **AR** = accepte
 | A10 Revoked key → 401 at once | S-1 | AuthTable without cache (T09) |
 | A11 Agent without `write` stores → 403 | E-7 | Scope and grant checks (T07, T10) |
 | A12 `cerberus run` child sees var, output does not | I-5, I-18, S-8 | Env injection, masking (T12) |
+| A13 (planned, RM step 10) Remote admin through `cerberusd` | S-9, S-10, E-1, E-14, E-15, E-16, I-20, I-21 | Admin off gives 404; device + session gates; approvals over the admin channel; session never locks the server (ADR-0034) |
 
 ## 10. Review triggers
 

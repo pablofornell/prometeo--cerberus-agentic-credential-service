@@ -1,6 +1,6 @@
 # ADR-0003: Admin actions use Tauri IPC only
 
-- Status: Accepted
+- Status: Accepted. Amended by ADR-0034: points 1 and 2 hold for the desktop's own vault and for every daemon with the admin API off; a `cerberusd` with the admin API on serves allowlisted admin commands under `/admin/v1` behind an enrolled client certificate and an operator session.
 - Date: 2026-11-16
 - Plan reference: D3
 - Related: ADR-0001, ADR-0004, ADR-0009, ADR-0023, `docs/interfaces.md` (IPC command list)

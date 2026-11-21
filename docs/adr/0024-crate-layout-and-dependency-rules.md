@@ -1,6 +1,6 @@
 # ADR-0024: Workspace crate layout and dependency rules
 
-- Status: Accepted
+- Status: Accepted. Amended by ADR-0034: new crate `cerberus-admin` (IPC and admin DTOs, handlers, remote allowlist) and the edges admin → core, store, crypto, types; api → admin; cerberusd → admin; desktop → admin, client.
 - Date: 2026-11-16
 - Plan reference: 6 (repository layout)
 - Related: ADR-0001, ADR-0002, ADR-0011, ADR-0012, ADR-0022, `docs/interfaces.md`

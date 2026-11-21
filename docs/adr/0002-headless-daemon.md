@@ -1,6 +1,6 @@
 # ADR-0002: Headless daemon `cerberusd` uses the same library
 
-- Status: Accepted
+- Status: Accepted. Amended by ADR-0034: point 2 ("no admin interface") and point 4 (no approvals) no longer hold when the owner turns on the opt-in admin API (`[admin] enabled = true`); point 3 names a `cerberusd restore` command that was never built (DEC-RM-13).
 - Date: 2026-11-16
 - Plan reference: D2
 - Related: ADR-0001, ADR-0003, ADR-0018, ADR-0024, ADR-0031
