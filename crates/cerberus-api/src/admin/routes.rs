@@ -36,7 +36,7 @@ use super::layers::{
     Device, bind_connection, request_id, require_device, session_of, unbind_connection,
 };
 use super::session::NewSession;
-use super::{AdminState, SessionId, audit_closed};
+use super::{AdminState, AttemptRefusal, SessionId, audit_closed};
 use crate::config::AppState;
 use crate::idle::{ConnActivity, hold_until_sent};
 
@@ -198,15 +198,28 @@ async fn open_session(State(state): State<AppState>, req: Request) -> Result<Res
     let device = device_of(&req, id)?;
     let core = state.core().clone();
     let now = core.clock().now();
-    // A stolen bundle cannot drive the shared back-off far: refused before the KDF (D-9).
-    if let Err(retry) = admin.failure_check(device.client.id, now) {
-        let mut error = IpcError::new(
-            "too_many_failures",
-            "too many failed tries from this device; wait and try again",
-        );
-        error.retry_after_seconds = Some(retry);
-        return Err(AdminError::new(id, error));
-    }
+    // A stolen bundle cannot drive the shared back-off far: refused before the KDF (D-9), and one
+    // try of a device at a time, so parallel tries cannot all pass this check.
+    let _attempt = match admin.begin_attempt(device.client.id, now) {
+        Ok(attempt) => attempt,
+        Err(refusal) => {
+            let (code, message, retry) = match refusal {
+                AttemptRefusal::Blocked(retry) => (
+                    "too_many_failures",
+                    "too many failed tries from this device; wait and try again",
+                    retry,
+                ),
+                AttemptRefusal::Busy => (
+                    "rate_limited",
+                    "a session open of this device is running; wait for it",
+                    1,
+                ),
+            };
+            let mut error = IpcError::new(code, message);
+            error.retry_after_seconds = Some(retry);
+            return Err(AdminError::new(id, error));
+        }
+    };
     // The connection is marked authenticated only once the phrase passed (a failed try must not
     // lift the deadlines of an unauthenticated connection), so keep its activity for later.
     let activity = req
@@ -340,7 +353,8 @@ async fn rpc_call(
                 ),
             ));
         }
-        Some(Gate::PreSession) => (None, bind_connection(&state, &req, None)),
+        // Device-only calls keep the deadlines of an unauthenticated connection.
+        Some(Gate::PreSession) => (None, None),
         Some(Gate::Session) => {
             let session = session_of(&core, &admin, req.headers(), &device, id).await?;
             // Calls of the person count as activity; the pending count that the desktop reads in

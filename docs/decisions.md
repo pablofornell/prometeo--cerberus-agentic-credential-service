@@ -1420,7 +1420,9 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   except `request_list_pending` (the desktop reads it in the background) and the event stream, so an unattended
   desktop still reaches its idle limit. (f) Status table as the plan, plus `payload_too_large` 413 and
   `unsupported_media_type` 415, then the ADR-0021 status of an agent code with the same name, else 500. `rpc` and
-  `session` bodies must be `application/json`. (g) Session open order: device limit (429 before any body or KDF) →
+  `session` bodies must be `application/json`. (g) Session open order: device limit (429 before any body or KDF;
+  also one open in flight per enrolment, a parallel one is `429 rate_limited`, so parallel tries cannot all pass the
+  check before the first failure counts) →
   body (8 KiB, zeroizing buffer that never grows) → `operator_id` must be the enrolment's (`403 forbidden`) → sealed:
   `unlock_with_phrase`, unlocked: `verify_operator_phrase`, locking: `vault_locked`. Only `bad_credentials` counts in
   the device limit; a success clears it. A token over another certificate is refused but does not end the session.

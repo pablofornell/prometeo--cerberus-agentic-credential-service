@@ -82,6 +82,30 @@ impl Default for AdminLimits {
 #[derive(Debug, Default)]
 struct Failures {
     by_enrolment: std::collections::HashMap<EnrolmentId, FailureEntry>,
+    /// Enrolments with a session open running now. One at a time per enrolment, so parallel
+    /// tries cannot all pass the check before the first failure is counted.
+    in_flight: std::collections::HashSet<EnrolmentId>,
+}
+
+/// Why a session open is refused before its body is read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AttemptRefusal {
+    /// The enrolment had too many failures: wait this many seconds.
+    Blocked(u32),
+    /// Another session open of the enrolment runs now.
+    Busy,
+}
+
+/// A session open that runs. Dropping it lets the next one of the enrolment start.
+pub(crate) struct Attempt<'a> {
+    admin: &'a AdminState,
+    enrolment: EnrolmentId,
+}
+
+impl Drop for Attempt<'_> {
+    fn drop(&mut self) {
+        self.admin.failures().in_flight.remove(&self.enrolment);
+    }
 }
 
 #[derive(Debug, Default)]
@@ -348,8 +372,24 @@ impl AdminState {
         self.changed.subscribe()
     }
 
-    pub(crate) fn failure_check(&self, enrolment: EnrolmentId, now: Timestamp) -> Result<(), u32> {
-        self.failures().check(enrolment, now.as_millisecond())
+    /// Starts a session open of `enrolment`: refused while the enrolment is blocked or another
+    /// open of it runs.
+    pub(crate) fn begin_attempt(
+        &self,
+        enrolment: EnrolmentId,
+        now: Timestamp,
+    ) -> Result<Attempt<'_>, AttemptRefusal> {
+        let mut failures = self.failures();
+        failures
+            .check(enrolment, now.as_millisecond())
+            .map_err(AttemptRefusal::Blocked)?;
+        if !failures.in_flight.insert(enrolment) {
+            return Err(AttemptRefusal::Busy);
+        }
+        Ok(Attempt {
+            admin: self,
+            enrolment,
+        })
     }
 
     pub(crate) fn failure_record(&self, enrolment: EnrolmentId, now: Timestamp) {
@@ -475,6 +515,29 @@ mod tests {
         assert!(failures.check(EnrolmentId::generate(), base).is_ok());
         failures.succeeded(e);
         assert!(failures.check(e, base + 4000).is_ok());
+    }
+
+    #[test]
+    fn one_session_open_per_enrolment_runs_at_a_time() {
+        let admin = AdminState::new(AdminClients::default(), AdminLimits::default());
+        let (e, other) = (EnrolmentId::generate(), EnrolmentId::generate());
+        let first = admin.begin_attempt(e, t0()).expect("first");
+        assert_eq!(
+            admin.begin_attempt(e, t0()).err(),
+            Some(AttemptRefusal::Busy)
+        );
+        let parallel = admin.begin_attempt(other, t0()).expect("another enrolment");
+        drop(first);
+        drop(parallel);
+        let again = admin.begin_attempt(e, t0()).expect("after the first ended");
+        for _ in 0..5 {
+            admin.failure_record(e, t0());
+        }
+        drop(again);
+        assert_eq!(
+            admin.begin_attempt(e, t0()).err(),
+            Some(AttemptRefusal::Blocked(900))
+        );
     }
 
     #[test]
