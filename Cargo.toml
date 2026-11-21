@@ -17,7 +17,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.100.0"
 license = "MIT"
@@ -28,16 +28,16 @@ tauri = "2.12.5"
 tauri-build = "2.7.4"
 
 # Internal crates. They carry a version too: cargo-deny treats a bare path as a wildcard (DEC-059).
-cerberus-types = { path = "crates/cerberus-types", version = "0.3.0" }
-cerberus-crypto = { path = "crates/cerberus-crypto", version = "0.3.0" }
-cerberus-store = { path = "crates/cerberus-store", version = "0.3.0" }
-cerberus-core = { path = "crates/cerberus-core", version = "0.3.0" }
-cerberus-ssh-agent = { path = "crates/cerberus-ssh-agent", version = "0.3.0" }
-cerberus-admin = { path = "crates/cerberus-admin", version = "0.3.0" }
-cerberus-api = { path = "crates/cerberus-api", version = "0.3.0" }
-cerberus-client = { path = "crates/cerberus-client", version = "0.3.0" }
+cerberus-types = { path = "crates/cerberus-types", version = "0.4.0" }
+cerberus-crypto = { path = "crates/cerberus-crypto", version = "0.4.0" }
+cerberus-store = { path = "crates/cerberus-store", version = "0.4.0" }
+cerberus-core = { path = "crates/cerberus-core", version = "0.4.0" }
+cerberus-ssh-agent = { path = "crates/cerberus-ssh-agent", version = "0.4.0" }
+cerberus-admin = { path = "crates/cerberus-admin", version = "0.4.0" }
+cerberus-api = { path = "crates/cerberus-api", version = "0.4.0" }
+cerberus-client = { path = "crates/cerberus-client", version = "0.4.0" }
 # Hosts take the server only; the stdio shim (feature `shim`, on by default for the bin) pulls in the client SDK.
-cerberus-mcp = { path = "crates/cerberus-mcp", version = "0.3.0", default-features = false }
+cerberus-mcp = { path = "crates/cerberus-mcp", version = "0.4.0", default-features = false }
 
 # Shared types (cerberus-types). Versions checked on crates.io on 2026-11-16 (ADR-0011).
 jiff = "1.0.0"
