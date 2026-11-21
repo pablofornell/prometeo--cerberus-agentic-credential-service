@@ -43,6 +43,8 @@
   --hover: var(--c-bg-hover);            /* quiet hover fill */
   --press: var(--c-bg-selected);         /* pressed / current fill */
   --spectrum: linear-gradient(90deg, var(--c-spectrum-red), var(--c-spectrum-amber), var(--c-spectrum-green), var(--c-spectrum-blue), var(--c-spectrum-violet));
+  /* The same five colors closed back onto red, so a tile of it repeats without a seam (the signal band). */
+  --spectrum-loop: linear-gradient(90deg, var(--c-spectrum-red), var(--c-spectrum-amber), var(--c-spectrum-green), var(--c-spectrum-blue), var(--c-spectrum-violet), var(--c-spectrum-red));
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -146,13 +148,15 @@ svg.icon.lg { width: var(--icon-lg); height: var(--icon-lg); }
 .workarea { min-width: 0; display: flex; flex-direction: column; }
 .topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: var(--s-3); height: var(--topbar-h); padding: 0 var(--s-6); border-bottom: 1px solid var(--hair);
   background: var(--c-bg-canvas); }
-/* The signal band: a 1 px hairline along the top of the main area with a slow spectrum light. The only decoration in the shell. */
+/* The signal band: a 1 px line along the top of the main area, always filled edge to edge with the spectrum. The colors
+   flow along it like a rainbow wave: two seamless tiles of the closed gradient, slid by exactly one tile (50% size, so
+   `background-position` 0 to 100%) per loop. The only decoration in the shell. */
 .topbar::before {
   content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; pointer-events: none;
-  background: var(--spectrum) -40% 0 / 30% 100% no-repeat, var(--hair);
-  animation: signal-sweep 9s linear infinite;
+  background: var(--spectrum-loop) 0 0 / 50% 100% repeat-x;
+  animation: signal-flow 12s linear infinite;
 }
-@keyframes signal-sweep { from { background-position: -40% 0, 0 0; } to { background-position: 140% 0, 0 0; } }
+@keyframes signal-flow { from { background-position: 0 0; } to { background-position: 100% 0; } }
 .topbar h1 { font-size: var(--t-title-lg-size); line-height: var(--t-title-lg-line); letter-spacing: var(--t-display-track); font-weight: 600; }
 .topbar .crumb { color: var(--c-text-muted); font-size: var(--t-body-sm-size); }
 .topbar .actions { margin-left: auto; display: flex; gap: var(--s-2); align-items: center; }
@@ -452,8 +456,8 @@ table.grid tbody tr:hover td { background: var(--c-bg-hover); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
   .skel { animation: none; }
-  /* The signal band keeps its light, parked mid-way, instead of sweeping. */
-  .topbar::before { animation: none; background-position: 50% 0, 0 0; }
+  /* The signal band holds one still, full rainbow instead of flowing. */
+  .topbar::before { animation: none; background-size: 100% 100%; background-position: 0 0; }
 }
 @media (forced-colors: active) {
   .env.prod, .chip, .secret, .untrusted, .kind-ico, .btn.primary, .btn.danger { border: 1px solid CanvasText; }

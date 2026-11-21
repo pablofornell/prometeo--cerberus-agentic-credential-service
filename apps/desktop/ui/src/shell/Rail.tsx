@@ -3,7 +3,7 @@ import { t } from "../i18n";
 import { usePendingRequests, useVaultStatus } from "../ipc/queries";
 import { useAutolockSeconds, useSessionLabel } from "../state/session";
 import { formatLeft } from "../state/time";
-import { Button, GateMark, IconButton, Icon, Kbd, TtlRing } from "../ui";
+import { Button, GateMark, IconButton, Icon, Kbd, TtlRing, useRandomTurn } from "../ui";
 import { useShellActions } from "./actions";
 import { navOwner, SCREENS, type ScreenDef } from "./screens";
 import { openOverlay } from "./uiStore";
@@ -16,6 +16,7 @@ export function Rail({ current, inert }: { current: ScreenDef; inert?: boolean }
   const nav = SCREENS.filter((s) => s.nav);
   const main = nav.filter((s) => s.id !== "settings");
   const settings = nav.filter((s) => s.id === "settings");
+  const turning = useRandomTurn();
 
   const link = (s: ScreenDef) => (
     <Link key={s.id} href={s.path} aria-current={owner === s.id ? "page" : undefined}>
@@ -38,7 +39,7 @@ export function Rail({ current, inert }: { current: ScreenDef; inert?: boolean }
   return (
     <aside className="sidebar" inert={inert}>
       <Link className="brand" href="/dashboard">
-        <GateMark size={32} />
+        <GateMark size={32} className={turning ? "gate-mark--turn" : undefined} />
         <span className="brand-txt">
           <span className="word">{t("app.name")}</span>
           <span className="tagline" aria-hidden="true">

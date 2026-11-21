@@ -4,6 +4,7 @@ export { Button, HoldButton, IconButton, type ButtonProps, type ButtonSize, type
 export { ConfirmDialog, Dialog, Drawer } from "./Dialog";
 export { Checkbox, Field, Input, SegmentedControl, Select, Switch, Textarea, type SelectOption } from "./Form";
 export { GateMark, type GateMode } from "./GateMark";
+export { useRandomTurn } from "./useRandomTurn";
 export { Icon, ICONS, type IconName } from "./Icon";
 export { Notice, Panel, type NoticeTone } from "./Panel";
 export { CLIPBOARD_CLEAR_SECONDS, REVEAL_HOLD_MS, SECRET_AUTO_HIDE_MS, SecretField } from "./SecretField";

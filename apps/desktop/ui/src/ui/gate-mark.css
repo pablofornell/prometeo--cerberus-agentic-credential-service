@@ -24,6 +24,12 @@
 .gate-mark--spin .gate-mark__aurora { animation: gate-mark-turn 7s linear infinite; }
 @keyframes gate-mark-turn { to { transform: rotate(360deg); } }
 
+/* One turn on a whim (useRandomTurn): each ring makes a full, eased turn, alternating direction; transform only, so nothing shifts. */
+.gate-mark--turn .gate-mark__ring--r1 { animation: gate-mark-turn 1.8s var(--ease-standard) 1; }
+.gate-mark--turn .gate-mark__ring--r2 { animation: gate-mark-turn 1.8s var(--ease-standard) 1 reverse; }
+.gate-mark--turn .gate-mark__ring--r3 { animation: gate-mark-turn 1.8s var(--ease-standard) 1; }
+.gate-mark--turn .gate-mark__aurora { animation: gate-mark-turn 1.8s var(--ease-standard) 1; }
+
 @media (prefers-reduced-motion: reduce) {
-  .gate-mark--spin .gate-mark__ring, .gate-mark--spin .gate-mark__aurora { animation: none !important; }
+  .gate-mark--spin .gate-mark__ring, .gate-mark--spin .gate-mark__aurora, .gate-mark--turn .gate-mark__ring, .gate-mark--turn .gate-mark__aurora { animation: none !important; }
 }
