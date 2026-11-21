@@ -27,9 +27,22 @@ export function rustdeskConnection(custom: Record<string, string>): RustdeskConn
   return { id: custom[RUSTDESK_KEYS.id] ?? "", idServer: opt(RUSTDESK_KEYS.idServer), relayServer: opt(RUSTDESK_KEYS.relayServer), serverKey: opt(RUSTDESK_KEYS.serverKey) };
 }
 
-/** `rustdesk://<id>`, with `?key=<key>` when the server has one. Never the password. */
+/**
+ * True when the link and Connect carry the ID server: a host name or IPv4 address (DEC-RD-6). RustDesk passes
+ * `--connect` on as a link, and a link path cannot hold the brackets of an IPv6 address. The backend has the same rule
+ * (`peer_carries_server`).
+ */
+export const carriesServer = (c: RustdeskConnection): boolean => c.idServer !== null && !c.idServer.startsWith("[");
+
+/**
+ * The RustDesk link. Public servers: `rustdesk://<id>`. A self-hosted ID server: `rustdesk://connect/<id>@<server>`,
+ * with `?key=<key>` when there is a key: the link that RustDesk itself makes for `--connect` (`src/core_main.rs`) and
+ * reads back as a peer on that server (`flutter/lib/common.dart`, `src/client.rs`). RustDesk reads a key only with a
+ * server. Never the password.
+ */
 export function rustdeskLink(c: RustdeskConnection): string {
-  return `rustdesk://${c.id}${c.serverKey ? `?key=${encodeURIComponent(c.serverKey)}` : ""}`;
+  if (!carriesServer(c)) return `rustdesk://${c.id}`;
+  return `rustdesk://connect/${c.id}@${c.idServer}${c.serverKey ? `?key=${encodeURIComponent(c.serverKey)}` : ""}`;
 }
 
 /** Labels of the shared text, from the screen messages. */

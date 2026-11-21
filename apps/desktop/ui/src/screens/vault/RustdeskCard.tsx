@@ -6,7 +6,7 @@ import { ipc, isIpcFailure } from "../../ipc/client";
 import { Button, CLIPBOARD_CLEAR_SECONDS, errorText, IconButton, Notice, useToast } from "../../ui";
 import { messages } from "./messages";
 import { invalidateItems } from "./queries";
-import { rustdeskConnection, rustdeskLink, rustdeskShareText, useRustdeskStatus } from "./rustdesk";
+import { carriesServer, rustdeskConnection, rustdeskLink, rustdeskShareText, useRustdeskStatus } from "./rustdesk";
 
 interface Props {
   item: Item;
@@ -95,6 +95,9 @@ export function RustdeskCard({ item, canReveal }: Props) {
         <pre className="vb-rd-share">{share}</pre>
         <p className="small muted">{tr("rd.shareHint")}</p>
       </div>
+      {c.idServer !== null && !carriesServer(c) && <Notice tone="warn" title={tr("rd.ipv6.title")}>{tr("rd.ipv6.body")}</Notice>}
+      {c.relayServer !== null && <p className="small muted">{tr("rd.relayNote")}</p>}
+      {carriesServer(c) && c.serverKey?.includes("+") && <p className="small muted">{tr("rd.plusKeyNote")}</p>}
       {missing && (
         <Notice tone="warn" title={tr("rd.missing.title")}>
           {status.data?.custom_path ? tr("rd.missing.custom", { path: status.data.custom_path }) : tr("rd.missing.body")}

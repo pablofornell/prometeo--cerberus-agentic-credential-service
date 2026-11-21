@@ -185,7 +185,7 @@ describe("vault browser", () => {
   });
 
   describe("RustDesk item", () => {
-    const LINK = "rustdesk://123456789?key=FAKE%2BKEY%2FFAKE%3D";
+    const LINK = "rustdesk://connect/123456789@rd.example.test?key=FAKE%2BKEY%2FFAKE%3D";
     const openLaptop = async (options: VaultMockOptions & { role?: OperatorRole } = {}) => {
       const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
       Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
@@ -202,6 +202,8 @@ describe("vault browser", () => {
       expect(within(card).getByText("123456789")).toBeInTheDocument();
       expect(within(card).getByText("rd.example.test:21117")).toBeInTheDocument();
       expect(within(card).getByText(LINK)).toBeInTheDocument();
+      expect(within(card).getByText(/RustDesk gets the relay from the ID server/)).toBeInTheDocument();
+      expect(within(card).getByText(/it can misread a key that has a \+/)).toBeInTheDocument();
       await userEvent.click(within(card).getByRole("button", { name: "Copy the RustDesk link" }));
       await userEvent.click(within(card).getByRole("button", { name: "Copy all" }));
       expect(writeText.mock.calls.map(([text]) => text)).toEqual([
@@ -230,6 +232,13 @@ describe("vault browser", () => {
       await userEvent.click(screen.getByRole("button", { name: "Connect" }));
       await waitFor(() => expect(fake.calls.connected).toEqual([{ item: "it-laptop", copyPassword: false }]));
       expect(await screen.findByText("RustDesk is opening 123456789.")).toBeInTheDocument();
+    });
+
+    it("asks to set an IPv6 ID server in the client, and links the ID alone", async () => {
+      await openLaptop({ laptopCustom: { rustdesk_id: "123456789", id_server: "[2001:db8::1]:21116", server_key: "FAKE=" } });
+      const card = screen.getByRole("region", { name: "Connection" });
+      expect(within(card).getByText("Set this ID server in the RustDesk client")).toBeInTheDocument();
+      expect(within(card).getByText("rustdesk://123456789")).toBeInTheDocument();
     });
 
     it("says how to get RustDesk when it is not installed", async () => {

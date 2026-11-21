@@ -1,14 +1,18 @@
 //! The RustDesk commands (DEC-RD-3): find the local RustDesk client and start it on the ID of a
 //! `rustdesk` item.
 //!
-//! The client is started with an argument list and no shell (`Shell::launch`), and only with an ID
-//! that is 9 to 20 digits, checked again here. The password never goes on the command line: it is
-//! copied to the clipboard, which is cleared after 30 seconds, and the person pastes it.
+//! The client is started with an argument list and no shell (`Shell::launch`), and only with a peer
+//! built by `cerberus_core::items::rustdesk_peer`: an ID of 9 to 20 digits, with `@<id server>` and
+//! `?key=<key>` for a self-hosted server (DEC-RD-6), each part checked again here. The password
+//! never goes on the command line: it is copied to the clipboard, which is cleared after 30
+//! seconds, and the person pastes it.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use cerberus_core::items::{KEY_RUSTDESK_ID, Payload, is_rustdesk_id};
+use cerberus_core::items::{
+    KEY_ID_SERVER, KEY_RUSTDESK_ID, KEY_SERVER_KEY, Payload, rustdesk_peer,
+};
 use cerberus_types::{ItemKind, OperatorRole as CoreRole};
 use serde_json::Value;
 
@@ -76,10 +80,10 @@ pub(crate) struct Client {
 }
 
 impl Client {
-    /// The program and the arguments that open a connection to `rustdesk_id`. The ID must have
-    /// passed [`is_rustdesk_id`].
-    fn command(&self, rustdesk_id: &str) -> (PathBuf, Vec<String>) {
-        let connect = ["--connect".to_owned(), rustdesk_id.to_owned()];
+    /// The program and the arguments that open a connection to `peer`, a value of
+    /// [`rustdesk_peer`] (it starts with a digit, so it can never read as an option).
+    fn command(&self, peer: &str) -> (PathBuf, Vec<String>) {
+        let connect = ["--connect".to_owned(), peer.to_owned()];
         let args = if self.kind == RustdeskClientKind::Flatpak {
             ["run", "--command=rustdesk", FLATPAK_APP]
                 .into_iter()
@@ -272,22 +276,25 @@ pub async fn rustdesk_connect(
     if summary.kind != ItemKind::Rustdesk {
         return Err(IpcError::invalid("item_id", "is not a RustDesk item"));
     }
-    let rustdesk_id = summary
-        .custom
-        .get(KEY_RUSTDESK_ID)
-        .filter(|text| is_rustdesk_id(text))
-        .ok_or_else(|| {
-            IpcError::invalid(
-                "custom.rustdesk_id",
-                "must be a RustDesk ID of 9 to 20 digits",
-            )
-        })?;
+    let custom = &summary.custom;
+    let text = |key: &str| custom.get(key).map(String::as_str);
+    let peer = rustdesk_peer(
+        text(KEY_RUSTDESK_ID).unwrap_or_default(),
+        text(KEY_ID_SERVER),
+        text(KEY_SERVER_KEY),
+    )
+    .ok_or_else(|| {
+        IpcError::invalid(
+            "custom.rustdesk_id",
+            "the RustDesk ID, ID server or key of the item is not valid",
+        )
+    })?;
     let client = find_client(state).ok_or_else(|| {
         IpcError::unavailable(
             "RustDesk was not found on this computer: install it from rustdesk.com, or choose its program in Settings",
         )
     })?;
-    let (program, args) = client.command(rustdesk_id);
+    let (program, args) = client.command(&peer);
     state.inner.shell.launch(&program, &args)?;
     tracing::info!(client = ?client.kind, "RustDesk client started");
     let password = if copy_password {
@@ -426,6 +433,16 @@ mod tests {
             client(RustdeskClientKind::Custom, "/apps/RustDesk.AppImage")
         );
         assert_eq!(fake.find(Some("/apps/gone/rustdesk")), None);
+    }
+
+    #[test]
+    fn a_self_hosted_server_and_its_key_go_into_the_one_peer_argument() {
+        let direct = client(RustdeskClientKind::Path, "/usr/bin/rustdesk").unwrap();
+        let peer = rustdesk_peer("123456789", Some("rd.example.com:21116"), Some("k+y=")).unwrap();
+        assert_eq!(
+            direct.command(&peer).1,
+            ["--connect", "123456789@rd.example.com:21116?key=k+y="]
+        );
     }
 
     #[test]

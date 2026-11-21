@@ -94,9 +94,15 @@ In the item details, the **Connection** card has:
 
 - **Connect.** Opens the RustDesk client of this computer on the ID, and copies the password to the clipboard. Paste
   it in RustDesk when it asks. The clipboard is cleared after 30 seconds. The password is never put on a command line.
-  A viewer can connect, but the password is not copied.
-- **Link.** `rustdesk://<ID>`, with `?key=<server key>` when there is a key. Copy it and open it on another computer
-  with RustDesk installed.
+  A viewer can connect, but the password is not copied. With an ID server, Connect asks RustDesk for
+  `<ID>@<ID server>` (and the key), so it reaches the machine through your server even when the client is set to
+  the public servers. If the key has a `+`, close RustDesk before Connect: RustDesk hands the request to an open
+  window as a link and can misread the `+`.
+- **Link.** `rustdesk://<ID>` for the public servers. With an ID server it is
+  `rustdesk://connect/<ID>@<ID server>?key=<server key>` (the key is encoded). Copy it and open it on another computer
+  with RustDesk installed. RustDesk gets the relay from the ID server, so the relay is not in the link. An ID server
+  given as an IPv6 address cannot go into the link or Connect: the card then asks you to set it in the RustDesk
+  client (Settings, Network).
 - **To share** and **Copy all.** The ID, the servers, the key and the link as text, to send to someone who adds the
   connection to their own RustDesk client. The link and the text never hold the password. Send the password another
   way.

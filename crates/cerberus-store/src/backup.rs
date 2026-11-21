@@ -262,10 +262,11 @@ fn swap_files(tmp: &Path, vault: &Path, stamp: &str) -> Result<Option<PathBuf>, 
     Err(error.into())
 }
 
-/// `<vault><kind><stamp>` (`kind` is [`PRE_RESTORE`] or [`REPLACED`]), or with `-2`, `-3` ... added
-/// when a file of that name exists (two restores in the same second must not overwrite the first
-/// old vault).
-fn free_name(vault: &Path, kind: &str, stamp: &str) -> PathBuf {
+/// `<vault><kind><stamp>` (`kind` is [`PRE_RESTORE`], [`REPLACED`] or the pre-migrate prefix of
+/// `Store::migrate`), or with `-2`, `-3` ... added when a file of that name exists (two restores in
+/// the same second must not overwrite the first old vault; a second migration from the same
+/// version must not overwrite the first copy, DEC-RD-5).
+pub(crate) fn free_name(vault: &Path, kind: &str, stamp: &str) -> PathBuf {
     let taken = |path: &Path| {
         VAULT_FILES
             .iter()

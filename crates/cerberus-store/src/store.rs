@@ -28,6 +28,9 @@ pub const APPLICATION_ID: i64 = 0x4342_5256;
 /// Migrations, embedded in the binary. Each file sets `PRAGMA user_version` to its own number.
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
+/// File name part of the copy written before a migration: `<vault>.pre-migrate-v<N>`.
+const PRE_MIGRATE: &str = ".pre-migrate-v";
+
 /// How long a writer waits for the database lock.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -130,7 +133,9 @@ impl Store {
     /// - A `-wal` file whose header does not fit the file (another page size, a bad checksum) is
     ///   refused with `Corrupt` before SQLite reads it (AUD-10).
     /// - A schema newer than this build is refused (`TooNew`).
-    /// - An older schema is migrated. A copy `<file>.pre-migrate-v<N>` is written first (ADR-0013).
+    /// - An older schema is migrated. A copy `<file>.pre-migrate-v<N>` is written first (ADR-0013);
+    ///   when that name is taken (an earlier copy from the same version), the copy gets `-2`, `-3` ...
+    ///   added, so an existing copy is never replaced and never blocks the open (DEC-RD-5).
     ///
     /// Migrations only change structure, so no key is needed.
     ///
@@ -205,9 +210,10 @@ impl Store {
         migrator: &Migrator,
     ) -> Result<(), StoreError> {
         if let Some(version) = from_version.filter(|version| *version < latest) {
-            let mut name = path.as_os_str().to_owned();
-            name.push(format!(".pre-migrate-v{version}"));
-            self.backup_to(Path::new(&name)).await?;
+            // A copy of the same version may exist: an earlier migration that failed, or a restore
+            // of an older backup after an upgrade. It is kept, and this copy gets a free name.
+            let copy = crate::backup::free_name(path, PRE_MIGRATE, &version.to_string());
+            self.backup_to(&copy).await?;
         }
         migrator.run(&self.pool).await?;
         let after: i64 = sqlx::query_scalar("PRAGMA user_version")
@@ -792,9 +798,26 @@ mod tests {
         sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()
     }
 
+    /// Inserts rows that point at `item` from every table that references items (item_versions is
+    /// filled by the caller): an agent, an access request and a lease.
+    async fn rows_on_item(pool: &SqlitePool, item: &str) {
+        for sql in [
+            "INSERT OR IGNORE INTO agents (id, status, created_at, updated_at, meta_ct, row_mac) \
+             VALUES ('agent-a', 'active', 1, 1, x'00', zeroblob(32))",
+            "INSERT INTO access_requests (id, agent_id, item_id, permission, status, created_at, \
+             expires_at, request_id, row_mac) VALUES ('req-' || ?1, 'agent-a', ?1, 'read', \
+             'pending', 1, 2, 'r', zeroblob(32))",
+            "INSERT INTO leases (id, agent_id, item_id, permission, source, created_at, expires_at, \
+             row_mac) VALUES ('lease-' || ?1, 'agent-a', ?1, 'read', 'auto', 1, 2, zeroblob(32))",
+        ] {
+            sqlx::query(sql).bind(item).execute(pool).await.unwrap();
+        }
+    }
+
     /// DEC-RD-2: migration 0002 rebuilds `items` to allow the kind `rustdesk`. Every item row (with
-    /// its rowid) and every row that points at one stays, foreign keys work again afterwards, and a
-    /// second run of the file changes nothing.
+    /// its rowid) and every row that points at one (versions, access requests, leases) stays, foreign
+    /// keys work again afterwards, and a second run of the file changes nothing. An older broken
+    /// reference that has nothing to do with items does not block it (DEC-RD-5).
     #[tokio::test]
     async fn migration_0002_allows_rustdesk_and_keeps_every_row() {
         let dir = tempfile::tempdir().unwrap();
@@ -828,7 +851,19 @@ mod tests {
             .execute(&store.pool)
             .await
             .unwrap();
+            rows_on_item(&store.pool, id).await;
         }
+        // A grant of an agent that is gone: an orphan from before, unrelated to items.
+        let mut conn = store.pool.acquire().await.unwrap();
+        for sql in [
+            "PRAGMA foreign_keys = OFF",
+            "INSERT INTO grants (id, agent_id, created_at, updated_at, body_ct) \
+             VALUES ('grant-orphan', 'agent-gone', 1, 1, x'00')",
+            "PRAGMA foreign_keys = ON",
+        ] {
+            sqlx::query(sql).execute(&mut *conn).await.unwrap();
+        }
+        drop(conn);
         let refused = sqlx::query(
             "INSERT INTO items (id, kind, created_at, updated_at, current_version, meta_ct) \
              VALUES ('item-c', 'rustdesk', 1, 1, 1, x'00')",
@@ -843,6 +878,9 @@ mod tests {
         assert_eq!(count(pool, "PRAGMA user_version").await, 2);
         assert_eq!(count(pool, "PRAGMA foreign_keys").await, 1);
         assert_eq!(count(pool, "SELECT count(*) FROM item_versions").await, 2);
+        assert_eq!(count(pool, "SELECT count(*) FROM access_requests").await, 2);
+        assert_eq!(count(pool, "SELECT count(*) FROM leases").await, 2);
+        assert_eq!(count(pool, "SELECT count(*) FROM grants").await, 1);
         assert_eq!(
             count(
                 pool,
@@ -905,6 +943,8 @@ mod tests {
             1,
             "the cascade points at the new table"
         );
+        assert_eq!(count(pool, "SELECT count(*) FROM access_requests").await, 1);
+        assert_eq!(count(pool, "SELECT count(*) FROM leases").await, 1);
 
         // A second run (a crash before the bookkeeping row) keeps the data as it is.
         let again = MIGRATOR.iter().find(|m| m.version == 2).unwrap();
@@ -917,6 +957,106 @@ mod tests {
         assert_eq!(count(pool, "SELECT count(*) FROM items").await, 2);
         assert_eq!(count(pool, "SELECT count(*) FROM item_versions").await, 1);
         store.close().await;
+    }
+
+    /// A version 1 vault file with a header (a backup needs one) and one item.
+    async fn v1_vault(path: &Path, clock: Arc<ManualClock>) {
+        let first = migrations_dir(1, None);
+        let v1 = Migrator::new(first.path()).await.unwrap();
+        let store = Store::open_with(options(path, true), clock, &v1)
+            .await
+            .unwrap();
+        let mut tx = store.begin().await.unwrap();
+        tx.insert_header(&HeaderRow {
+            format_version: crate::FORMAT_VERSION,
+            vault_id: cerberus_types::VaultId::generate(),
+            created_at: t0(),
+            failed_unlocks: 0,
+            last_failed_unlock_at: None,
+            header_mac: [0; 32],
+        })
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        sqlx::query(
+            "INSERT INTO items (id, kind, created_at, updated_at, current_version, meta_ct) \
+             VALUES ('item-a', 'note', 1, 1, 1, x'00')",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        store.close().await;
+    }
+
+    /// DEC-RD-5: a migration that failed after its pre-migrate copy can run again. The first copy
+    /// is kept as it is and the second one gets a free name (before: the open failed for good with
+    /// `AlreadyExists`).
+    #[tokio::test]
+    async fn a_failed_migration_can_run_again_and_keeps_the_first_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault.cerberus");
+        let clock = Arc::new(ManualClock::new(t0()));
+        v1_vault(&path, clock.clone()).await;
+
+        let broken = migrations_dir(
+            1,
+            Some("SELECT * FROM no_such_table;\nPRAGMA user_version = 2;"),
+        );
+        let broken = Migrator::new(broken.path()).await.unwrap();
+        let error = Store::open_with(options(&path, false), clock.clone(), &broken)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, StoreError::Migrate(_)), "{error:?}");
+        let first = path.with_file_name("vault.cerberus.pre-migrate-v1");
+        let first_bytes = std::fs::read(&first).unwrap();
+
+        let store = Store::open(options(&path, false), clock).await.unwrap();
+        assert_eq!(count(&store.pool, "PRAGMA user_version").await, 2);
+        assert_eq!(count(&store.pool, "SELECT count(*) FROM items").await, 1);
+        store.close().await;
+        assert_eq!(
+            std::fs::read(&first).unwrap(),
+            first_bytes,
+            "the first copy is untouched"
+        );
+        let second = path.with_file_name("vault.cerberus.pre-migrate-v1-2");
+        assert_eq!(probe(&second).await.unwrap().user_version, 1);
+    }
+
+    /// DEC-RD-5: after an upgrade (a `.pre-migrate-v1` exists), restoring a version 1 backup puts a
+    /// version 1 file in place, and its open migrates it again with a second copy (before: the
+    /// restore always failed at the reopen).
+    #[tokio::test]
+    async fn an_older_backup_restored_after_an_upgrade_opens_and_migrates() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault.cerberus");
+        let backup = dir.path().join("backup-v1.cerberus");
+        let clock = Arc::new(ManualClock::new(t0()));
+        v1_vault(&backup, clock.clone()).await;
+        std::fs::copy(&backup, &path).unwrap();
+        Store::open(options(&path, false), clock.clone())
+            .await
+            .unwrap()
+            .close()
+            .await;
+        assert!(
+            path.with_file_name("vault.cerberus.pre-migrate-v1")
+                .exists()
+        );
+
+        let moved = crate::restore_backup(&backup, &path, clock.as_ref())
+            .await
+            .unwrap();
+        assert!(moved.is_some(), "the migrated vault was moved aside");
+        assert_eq!(probe(&path).await.unwrap().user_version, 1);
+        let store = Store::open(options(&path, false), clock).await.unwrap();
+        assert_eq!(count(&store.pool, "PRAGMA user_version").await, 2);
+        assert_eq!(count(&store.pool, "SELECT count(*) FROM items").await, 1);
+        store.close().await;
+        assert!(
+            path.with_file_name("vault.cerberus.pre-migrate-v1-2")
+                .exists()
+        );
     }
 
     /// AUD-10: the check of a backup reads only the main file. A `-wal` file that appears next to

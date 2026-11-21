@@ -116,7 +116,7 @@ Taken from the final state of the audit report (sections 6 to 9) and the guides'
 | AUD-19 | Low, partial | On macOS and Windows the child of `cerberus run` can still read the parent's first environment, which holds `CERBERUS_TOKEN` when the token was given that way. Use a token file there. Linux is not dumpable |
 | AUD-25 / NEW-9 | Low, accepted | CSV import `target` keeps scheme, host and port only. A dotted user name before a `/` (`https://abc.def/ghi@host/`) can still show `abc.def` |
 | AUD-26 | Info, accepted | Operator role is not in the key-slot wrap AAD (AR-9): roles do not limit a person who can read the vault file |
-| AUD-30 | Info | `.pre-migrate-vN` still blocks open (dormant, no migration after v1); audit prune is never called |
+| AUD-30 | Info | Audit prune is never called. The `.pre-migrate-vN` part is closed (DEC-RD-5): migration 0002 made it live, and an existing copy now gets a `-2`, `-3` ... sibling instead of blocking the open, so a failed migration can run again and an older backup restored after an upgrade opens |
 | AUD-3 residual | Info | Each `ssh` sign of an encrypted key can use up to 1024 bcrypt rounds (about 6 s CPU) on the blocking pool. It does not stall the lock. No test drives a stored over-limit key through `ssh_prepare` |
 | NEW-1 | Low, accepted | A local flood of plain TCP connects can evict unauthenticated connections of an agent during its handshake window |
 | NEW-2 rest | Info | A second tail cut after an earlier break mark is not shown again by `verify_chain` (first mark returned); the writer's alert shows it |

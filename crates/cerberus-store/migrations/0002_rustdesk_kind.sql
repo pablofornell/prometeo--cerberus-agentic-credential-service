@@ -36,9 +36,12 @@ DROP TABLE items;
 ALTER TABLE items_new RENAME TO items;
 CREATE INDEX items_expires_at ON items (expires_at) WHERE expires_at IS NOT NULL;
 
--- Every row that points at an item must still find it. The CHECK fails the migration otherwise.
+-- Every row that points at an item (item_versions, access_requests, leases) must still find it. The CHECK fails the
+-- migration otherwise. Only references to items count: an older broken reference elsewhere (for example to an agent)
+-- has nothing to do with this rebuild and must not block the upgrade (DEC-RD-5).
 CREATE TEMP TABLE migration_0002_fk_check (violations INTEGER NOT NULL CHECK (violations = 0)) STRICT;
-INSERT INTO migration_0002_fk_check SELECT count(*) FROM pragma_foreign_key_check;
+INSERT INTO migration_0002_fk_check
+    SELECT count(*) FROM pragma_foreign_key_check WHERE "parent" = 'items';
 DROP TABLE migration_0002_fk_check;
 
 PRAGMA user_version = 2;

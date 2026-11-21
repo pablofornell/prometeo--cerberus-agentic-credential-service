@@ -1437,3 +1437,47 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   Tests: vault (share text and link without password, axe, connect and toast, viewer, not installed), editor (create,
   local ID check, edit with keep, remove the password), settings (found, choose, back to automatic, not found,
   viewer), helpers (`rustdesk.test.ts`).
+- **DEC-RD-5** — Review fix (High). Migration 0002 made the pre-migrate copy live (AUD-30), and `backup_to`
+  creates its file with `create_new`, so an existing `<vault>.pre-migrate-v1` failed every later migration from
+  version 1 with `AlreadyExists`: (a) after an upgrade, a restore of any version 1 backup failed at the reopen
+  (`ops/restore.rs`), and (b) a migration that failed or was killed after its copy could never run again. Now
+  `Store::migrate` writes the copy at `backup::free_name(vault, ".pre-migrate-v", N)`: `<vault>.pre-migrate-vN`, or
+  `-2`, `-3` ... added when a vault file of that name (or its `-wal`/`-shm`) exists. An existing copy is never
+  replaced (it may be the only copy of an older vault) and never blocks the open. Old copies are kept; nothing
+  prunes them. Also, the foreign key check of 0002 now counts only references to `items`
+  (`pragma_foreign_key_check WHERE parent = 'items'`, which covers `item_versions`, `access_requests` and `leases`
+  and any later table that points at items), so an older broken reference elsewhere (for example a grant of a
+  deleted agent) does not block the upgrade. This edits 0002 after commit 95c58d4: a vault that was already opened
+  by that build has the old checksum recorded and sqlx refuses it (`VersionMismatch`); nothing was released with
+  it. Tests: store `a_failed_migration_can_run_again_and_keeps_the_first_copy` (the first copy is byte for byte
+  unchanged, the second is `-v1-2`), `an_older_backup_restored_after_an_upgrade_opens_and_migrates` (through
+  `restore_backup`), and `migration_0002_allows_rustdesk_and_keeps_every_row` now also keeps access requests and
+  leases (and they still cascade) and passes with an orphan grant. All three fail on the code before the fix.
+  `docs/acceptance-report.md` and `guides/security-model.md` (AUD-30) say so.
+- **DEC-RD-6** — Review fix (Medium): Connect and the share link use the stored ID server and key. Verified in the
+  RustDesk source (read only): `src/client.rs:2921-2948` (`LoginConfigHandler::initialize`) reads a peer
+  `<id>@<server>?key=<key>`, keeps `(id, server, key)` as `other_server`, and `src/client.rs:470-489` uses that
+  server as the rendezvous server of this one connection instead of the configured one. The relay comes from the
+  rendezvous answer (`src/client.rs:1028`, `:1057`), so there is no relay syntax and the relay is not passed.
+  `--connect <peer>` is forwarded to a running client as `rustdesk://connect/<peer>` by plain concatenation
+  (`src/core_main.rs:766-806`), and the Flutter side maps that link back to `--connect <id>` with `?key=` added from
+  the query (`flutter/lib/common.dart:2469-2473`, `:2494-2499`). A key without `@server` stays in the ID
+  (`src/client.rs:2949-2955`), so the old link `rustdesk://<id>?key=...` was broken; a key now goes only with a
+  server. One builder, `cerberus_core::items::rustdesk_peer(id, id_server, server_key)`: `<id>`, `<id>@<server>` or
+  `<id>@<server>?key=<key>`, or `None` when a part is not valid. Connect passes it as the one argument after
+  `--connect`; it starts with a digit, so it cannot read as an option. The UI link is `rustdesk://<id>` for the
+  public servers and `rustdesk://connect/<id>@<server>?key=<encodeURIComponent(key)>` with an ID server (the form
+  RustDesk makes itself). Server addresses are now checked strictly (`is_server_address`): host name labels of
+  letters, digits and `-` (no leading or trailing `-`, so no leading `-` at all), IPv4, or `[IPv6]`, with an
+  optional port 1..65535; no `@ ? & /`, space, scheme or user part. An IPv6 ID server is stored but not carried (a
+  link path cannot hold the brackets, and the running-client path goes through a link): Connect and the link use the
+  ID alone and the card asks the person to set that ID server in the client. Residual: RustDesk's link parser turns
+  `+` in a query into a space, so when a client is already running, a key with `+` reaches it wrong; the key is
+  passed raw because the first-start path reads the argument without decoding. The card says to close RustDesk
+  first for such a key; the copied link encodes it and is not affected. Not verified and not used: `/r@server`
+  (it forces the relay, `src/ui_interface.rs:1676`) and a `relay` query. Tests: core
+  `a_server_is_a_host_or_address_with_an_optional_port`, `the_peer_carries_a_named_server_and_its_key`; desktop
+  `a_self_hosted_server_and_its_key_go_into_the_one_peer_argument`,
+  `the_key_goes_with_a_named_server_and_an_ipv6_server_stays_out`, `a_server_that_could_read_as_an_option_is_refused_at_save`,
+  and the connect test now expects `<id>@rd.example.test`; UI helpers (link forms) and vault card (link with
+  server, relay note, `+` note, IPv6 notice). This replaces the Connect arguments of DEC-RD-3 and the link of DEC-RD-4.

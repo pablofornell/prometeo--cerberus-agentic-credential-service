@@ -75,21 +75,112 @@ pub fn is_rustdesk_id(text: &str) -> bool {
         && text.bytes().all(|b| b.is_ascii_digit())
 }
 
+/// What a valid server address names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ServerKind {
+    /// A host name or an IPv4 address.
+    Name,
+    /// A bracketed IPv6 address.
+    Ipv6,
+}
+
+fn is_port(text: &str) -> bool {
+    (1..=5).contains(&text.len())
+        && text.bytes().all(|b| b.is_ascii_digit())
+        && text.parse::<u32>().is_ok_and(|n| (1..=65_535).contains(&n))
+}
+
+/// Labels of letters, digits and `-`, 1 to 63 each, not starting or ending with `-`. Covers IPv4.
+fn is_host_name(text: &str) -> bool {
+    (1..=253).contains(&text.len())
+        && text.split('.').all(|label| {
+            (1..=63).contains(&label.len())
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+        })
+}
+
+/// `host`, `host:port`, `[ipv6]` or `[ipv6]:port`, else `None`. No scheme, path, user part,
+/// query, space or control character, and never a leading `-` (DEC-RD-6).
+fn server_kind(text: &str) -> Option<ServerKind> {
+    if text.len() > MAX_SERVER_CHARS {
+        return None;
+    }
+    let (host, port, kind) = if let Some(rest) = text.strip_prefix('[') {
+        let (inside, after) = rest.split_once(']')?;
+        let port = if after.is_empty() {
+            None
+        } else {
+            Some(after.strip_prefix(':')?)
+        };
+        (inside, port, ServerKind::Ipv6)
+    } else {
+        match text.split_once(':') {
+            Some((host, port)) => (host, Some(port), ServerKind::Name),
+            None => (text, None, ServerKind::Name),
+        }
+    };
+    if port.is_some_and(|p| !is_port(p)) {
+        return None;
+    }
+    let host_ok = match kind {
+        ServerKind::Ipv6 => host.parse::<std::net::Ipv6Addr>().is_ok(),
+        ServerKind::Name => is_host_name(host),
+    };
+    host_ok.then_some(kind)
+}
+
 /// True for a server address: a host name, an IPv4 address or a bracketed IPv6 address, with an
-/// optional port. No scheme, path, space or control character.
-fn is_server(text: &str) -> bool {
-    (1..=MAX_SERVER_CHARS).contains(&text.len())
-        && text
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':' | '[' | ']'))
+/// optional port 1..65535.
+#[must_use]
+pub fn is_server_address(text: &str) -> bool {
+    server_kind(text).is_some()
 }
 
 /// True for a server public key: Base64 (standard or URL-safe) with optional padding.
-fn is_server_key(text: &str) -> bool {
+#[must_use]
+pub fn is_server_key(text: &str) -> bool {
     (1..=MAX_KEY_CHARS).contains(&text.len())
         && text
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '/' | '=' | '-' | '_'))
+}
+
+/// True when [`rustdesk_peer`] puts this ID server into the peer: a host name or an IPv4
+/// address. An IPv6 address cannot be carried (RustDesk forwards `--connect` as a link, and a
+/// link path cannot hold brackets), so the client must be set to that server itself.
+#[must_use]
+pub fn peer_carries_server(id_server: &str) -> bool {
+    server_kind(id_server) == Some(ServerKind::Name)
+}
+
+/// The peer that the RustDesk client is asked to connect to (DEC-RD-6): `<id>`, or
+/// `<id>@<id_server>` and `?key=<server_key>` for a self-hosted server. That is the form RustDesk
+/// reads in `LoginConfigHandler::initialize` (`src/client.rs`): the server after `@` is the
+/// rendezvous server for this one connection, and `key` is its public key. The relay comes from
+/// that server, so it is not part of the peer. A key is only read together with a server, so a
+/// key without a carried server is left out. `None` when the ID, the server or the key is not
+/// valid, so nothing else can reach the command line.
+#[must_use]
+pub fn rustdesk_peer(
+    id: &str,
+    id_server: Option<&str>,
+    server_key: Option<&str>,
+) -> Option<String> {
+    if !is_rustdesk_id(id) || server_key.is_some_and(|k| !is_server_key(k)) {
+        return None;
+    }
+    let Some(server) = id_server else {
+        return Some(id.to_owned());
+    };
+    match (server_kind(server)?, server_key) {
+        (ServerKind::Ipv6, _) => Some(id.to_owned()),
+        (ServerKind::Name, None) => Some(format!("{id}@{server}")),
+        (ServerKind::Name, Some(key)) => Some(format!("{id}@{server}?key={key}")),
+    }
 }
 
 fn push(problems: &mut Vec<FieldProblem>, key: &str, text: &str) {
@@ -113,7 +204,7 @@ pub(crate) fn check_custom(custom: &BTreeMap<String, String>, problems: &mut Vec
         Some(_) => {}
     }
     for key in [KEY_ID_SERVER, KEY_RELAY_SERVER] {
-        if custom.get(key).is_some_and(|s| !is_server(s)) {
+        if custom.get(key).is_some_and(|s| !is_server_address(s)) {
             push(
                 problems,
                 key,
@@ -192,6 +283,71 @@ mod tests {
                 "custom.relay_server",
                 "custom.server_key"
             ]
+        );
+    }
+
+    #[test]
+    fn a_server_is_a_host_or_address_with_an_optional_port() {
+        for good in [
+            "rd.example.com",
+            "rd.example.com:21116",
+            "10.0.0.7",
+            "10.0.0.7:21116",
+            "[2001:db8::1]",
+            "[2001:db8::1]:21116",
+            "localhost",
+        ] {
+            assert!(is_server_address(good), "{good:?}");
+        }
+        for bad in [
+            "",
+            "-rd.example.com",
+            "rd.example.com:0",
+            "rd.example.com:65536",
+            "rd.example.com:",
+            "rd.example.com/path",
+            "https://rd.example.com",
+            "user@rd.example.com",
+            "rd.example.com?key=x",
+            "rd example.com",
+            "rd.-x.com",
+            "a:b:c",
+            "[not-v6]:21116",
+            "[2001:db8::1]x",
+        ] {
+            assert!(!is_server_address(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn the_peer_carries_a_named_server_and_its_key() {
+        assert_eq!(
+            rustdesk_peer("123456789", None, None).as_deref(),
+            Some("123456789")
+        );
+        assert_eq!(
+            rustdesk_peer("123456789", None, Some("k+e/y=")).as_deref(),
+            Some("123456789"),
+            "a key without a server is not read by RustDesk"
+        );
+        assert_eq!(
+            rustdesk_peer("123456789", Some("rd.example.com:21116"), Some("k+e/y=")).as_deref(),
+            Some("123456789@rd.example.com:21116?key=k+e/y=")
+        );
+        assert_eq!(
+            rustdesk_peer("123456789", Some("rd.example.com"), None).as_deref(),
+            Some("123456789@rd.example.com")
+        );
+        assert_eq!(
+            rustdesk_peer("123456789", Some("[2001:db8::1]"), Some("key")).as_deref(),
+            Some("123456789")
+        );
+        assert!(peer_carries_server("rd.example.com") && !peer_carries_server("[2001:db8::1]"));
+        assert_eq!(rustdesk_peer("12345", None, None), None);
+        assert_eq!(rustdesk_peer("123456789", Some("-oProxy"), None), None);
+        assert_eq!(
+            rustdesk_peer("123456789", Some("rd.example.com"), Some("a&b")),
+            None
         );
     }
 

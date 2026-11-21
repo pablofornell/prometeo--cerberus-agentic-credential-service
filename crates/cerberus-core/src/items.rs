@@ -21,6 +21,7 @@ pub(crate) mod tests;
 pub use payload::{Payload, TotpAlgorithm, TotpSeed};
 pub use rustdesk::{
     KEY_ID_SERVER, KEY_RELAY_SERVER, KEY_RUSTDESK_ID, KEY_SERVER_KEY, RustdeskMeta, is_rustdesk_id,
+    is_server_address, is_server_key, peer_carries_server, rustdesk_peer,
 };
 pub use service::{
     ItemDetail, ItemFilter, ItemInput, ItemUpdate, ItemVersionInfo, PayloadChange, RevealedItem,

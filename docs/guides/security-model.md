@@ -128,7 +128,7 @@ Open or partly closed items (the verdicts are from the audit report, sections 6 
 | AUD-19 | Partly closed, Low | On macOS and Windows, a `cerberus run` child can read the parent's first environment. Give the token as a file |
 | AUD-25 and NEW-9 | Accepted in part, Low | The CSV import target keeps only scheme, host and port. The path, query and fragment stay in the sealed login only. A path that a person types into a target by hand is visible to agents that read the catalog |
 | AUD-16 | Accepted, Low | No OS lock hook on macOS and Windows (ADR-0026 amendment) |
-| AUD-30 | Partly closed, Info | The audit log is never pruned. A leftover `.pre-migrate` file would block the open (no migration exists yet) |
+| AUD-30 | Partly closed, Info | The audit log is never pruned. A leftover `.pre-migrate` file no longer blocks the open: the next copy gets a free name (DEC-RD-5) |
 | NEW-8 | Partly closed, Low | A local user without a token can write `auth.failed` audit rows, at most 20 a minute (all of loopback counts as one source). This can still grow the vault file slowly. The true reason is kept in the row during a lockout while the vault is unlocked |
 | NEW-1 | Accepted, Low | A local user who floods new connections can push out an agent's connection before it authenticates. It costs the attacker CPU. A token holder can still use up the authenticated slots, but the per-agent cap of 32 limits that |
 | AUD-26 | Accepted, Info | The role is not bound in the slot wrap. This is AR-9 |

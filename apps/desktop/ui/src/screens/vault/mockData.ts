@@ -30,6 +30,8 @@ export interface VaultMockOptions {
   now?: () => number;
   /** `missing`: `rustdesk_status` finds no RustDesk client and `rustdesk_connect` fails. */
   rustdesk?: "found" | "missing";
+  /** Replaces the `custom` values of the RustDesk fixture item `it-laptop`. */
+  laptopCustom?: Record<string, string>;
 }
 
 export interface VaultMock {
@@ -105,7 +107,8 @@ export function createVaultMock(options: VaultMockOptions = {}): VaultMock {
   const store = new Map<string, StoredItem>();
   if (mode !== "empty") {
     const start = now();
-    for (const summary of fixtureItems(start)) {
+    for (const fixture of fixtureItems(start)) {
+      const summary = fixture.id === "it-laptop" && options.laptopCustom ? { ...fixture, custom: options.laptopCustom } : fixture;
       const { id, kind, title } = summary;
       store.set(id, {
         summary,

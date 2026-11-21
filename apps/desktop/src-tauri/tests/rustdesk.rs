@@ -85,8 +85,12 @@ impl Fixture {
     }
 
     async fn item(&self, kind_payload: Value, custom: Value) -> String {
+        self.titled("My laptop", kind_payload, custom).await
+    }
+
+    async fn titled(&self, title: &str, kind_payload: Value, custom: Value) -> String {
         let input: ItemInputView = serde_json::from_value(json!({
-            "workspace_id": self.workspace, "title": "My laptop", "description": "",
+            "workspace_id": self.workspace, "title": title, "description": "",
             "role_label": null, "category": "Remote desktop", "tags": [], "environment": "other",
             "target": null, "custom": custom, "expires_at": null, "max_uses": null,
             "payload": kind_payload
@@ -184,7 +188,11 @@ async fn connect_starts_the_chosen_client_with_the_id_and_copies_the_password() 
     assert_eq!(done.password, RustdeskPasswordCopy::Copied);
     assert_eq!(
         f.launched(),
-        [(program.clone(), vec!["--connect".to_owned(), ID.to_owned()])]
+        [(
+            program.clone(),
+            vec!["--connect".to_owned(), format!("{ID}@rd.example.test")]
+        )],
+        "the ID server of the item goes with the ID (DEC-RD-6)"
     );
     assert!(
         f.launched()
@@ -210,6 +218,73 @@ async fn connect_starts_the_chosen_client_with_the_id_and_copies_the_password() 
         before
     );
     assert_eq!(f.launched().len(), 2);
+}
+
+#[tokio::test]
+async fn the_key_goes_with_a_named_server_and_an_ipv6_server_stays_out() {
+    let f = fixture().await;
+    let program = f.program("rustdesk");
+    f.choose(Value::String(program.display().to_string()))
+        .await
+        .unwrap();
+    let keyed = f
+        .titled(
+            "Keyed",
+            json!({ "kind": "rustdesk", "password": null }),
+            json!({ "rustdesk_id": ID, "id_server": "rd.example.test:21116",
+                    "relay_server": "relay.example.test", "server_key": "FAKE+KEY/FAKE=" }),
+        )
+        .await;
+    let ipv6 = f
+        .titled(
+            "IPv6",
+            json!({ "kind": "rustdesk", "password": null }),
+            json!({ "rustdesk_id": ID, "id_server": "[2001:db8::1]:21116", "server_key": "FAKE=" }),
+        )
+        .await;
+    let keyless = f
+        .titled(
+            "Keyless",
+            json!({ "kind": "rustdesk", "password": null }),
+            json!({ "rustdesk_id": ID, "server_key": "FAKE=" }),
+        )
+        .await;
+    for item in [keyed, ipv6, keyless] {
+        ops::rustdesk_connect(&f.state, MAIN, item, false)
+            .await
+            .unwrap();
+    }
+    let peers: Vec<String> = f
+        .launched()
+        .into_iter()
+        .map(|(_, args)| args[1].clone())
+        .collect();
+    assert_eq!(
+        peers,
+        [
+            format!("{ID}@rd.example.test:21116?key=FAKE+KEY/FAKE="),
+            ID.to_owned(),
+            ID.to_owned()
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_server_that_could_read_as_an_option_is_refused_at_save() {
+    let f = fixture().await;
+    let input: ItemInputView = serde_json::from_value(json!({
+        "workspace_id": f.workspace, "title": "Laptop", "description": "", "role_label": null,
+        "category": "Remote desktop", "tags": [], "environment": "other", "target": null,
+        "custom": { "rustdesk_id": ID, "id_server": "-oProxyCommand=x" }, "expires_at": null,
+        "max_uses": null, "payload": { "kind": "rustdesk", "password": null }
+    }))
+    .unwrap();
+    let error = ops::item_create(&f.state, MAIN, input).await.unwrap_err();
+    assert!(
+        error.fields.iter().any(|p| p.field == "custom.id_server"),
+        "{:?}",
+        error.fields
+    );
 }
 
 #[tokio::test]
