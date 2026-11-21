@@ -451,6 +451,108 @@ impl VaultService {
         })
     }
 
+    /// Checks the passphrase of the operator of the live session, without changing the vault
+    /// state (ADR-0034 point 6.3). The admin API of `cerberusd` uses it to open a session on a
+    /// vault that is already unlocked: the KDF runs on that operator's slot, and the key it opens
+    /// must be the live VMK (constant-time compare).
+    ///
+    /// A wrong phrase, an unknown operator and the recovery slot are failed unlock tries: they
+    /// count in the back-off of ADR-0026 and write `vault.unlock_failed` (to the chain, because
+    /// the vault is unlocked). The recovery key is never checked here. No guard is held while the
+    /// KDF runs, so a lock is not delayed by it.
+    ///
+    /// # Errors
+    /// - [`CoreError::Locked`] (or [`CoreError::NoVault`]) when the vault is not unlocked, also
+    ///   when it was locked or unlocked again while the KDF ran;
+    /// - [`CoreError::UnlockBackoff`] during the back-off, before the KDF runs;
+    /// - [`CoreError::Conflict`] when `operator` is another operator than the session's;
+    /// - [`CoreError::BadCredentials`] for a failed try;
+    /// - [`CoreError::UnsupportedKdfCost`] or a storage or crypto error.
+    pub async fn verify_operator_phrase(
+        &self,
+        operator: OperatorId,
+        phrase: SecretString,
+    ) -> Result<OperatorContext, CoreError> {
+        let _gate = self.inner.gate.lock().await;
+        let epoch = self.inner.epoch.load(Ordering::SeqCst);
+        let (session, live_vmk) = {
+            let guard = self.unlocked().await?;
+            (guard.session, Arc::clone(&guard.vmk))
+        };
+        let now = self.inner.clock.now();
+        let store = &self.inner.store;
+        let header = store.header().await?;
+        backoff::check(&header, now)?;
+        let rows = store.key_slots().await?;
+        let set = slot_set(header.vault_id, &rows)?;
+        if set.get(&operator).is_none_or(|slot| slot.is_recovery()) {
+            // Unknown or removed operator, or the recovery slot: a failed try, without the KDF.
+            return Err(self.phrase_check_failed(operator, now).await);
+        }
+        if operator != session.operator_id {
+            return Err(CoreError::Conflict);
+        }
+        let opened =
+            blocking_raw(move || set.unlock_passphrase(&operator, &phrase).map(|(v, _)| v)).await?;
+        let vmk = match opened {
+            Ok(vmk) => vmk,
+            Err(CryptoError::Integrity | CryptoError::SlotRule) => {
+                return Err(self.phrase_check_failed(operator, now).await);
+            }
+            Err(CryptoError::InvalidKdfParams) => return Err(CoreError::UnsupportedKdfCost),
+            Err(other) => return Err(CoreError::Crypto(other)),
+        };
+        if !vmk.same_key(&live_vmk) {
+            // The slot opens another key than the live one: the file changed under the process.
+            tracing::warn!("a key slot opened a key that is not the live VMK");
+            self.emit(CoreEvent::IntegrityAlert {
+                table: "key_slots",
+                row_id: operator.to_string(),
+            });
+            return Err(self.phrase_check_failed(operator, now).await);
+        }
+        store.reset_unlock_failures().await?;
+        // The session must still be the one whose key was compared.
+        let guard = self.unlocked().await?;
+        if self.inner.epoch.load(Ordering::SeqCst) != epoch || guard.session != session {
+            return Err(CoreError::Locked);
+        }
+        // The session role, not the stored one: it keeps the header MAC rule (DEC-FIX5-4).
+        Ok(OperatorContext {
+            operator_id: session.operator_id,
+            role: guard.session.role,
+            request_id: RequestId::generate(),
+        })
+    }
+
+    /// A failed phrase check of [`Self::verify_operator_phrase`]: counts in the back-off and
+    /// writes `vault.unlock_failed`. Returns the error to give back.
+    async fn phrase_check_failed(&self, operator: OperatorId, now: Timestamp) -> CoreError {
+        if let Err(error) = self.inner.store.record_unlock_failure(now).await {
+            return error.into();
+        }
+        match self.unlocked().await {
+            Ok(guard) => {
+                let event = AuditEvent::new(EventType::VaultUnlockFailed, Actor::system())
+                    .target("vault", guard.vault_id.to_string())
+                    .result(ErrorCode::Unauthenticated.as_str())
+                    .detail("operator", operator.to_string());
+                self.audit(&guard, event).await;
+            }
+            Err(_) => {
+                self.audit_pending(
+                    EventType::VaultUnlockFailed,
+                    None,
+                    Some(operator.to_string()),
+                    ErrorCode::Unauthenticated,
+                    None,
+                )
+                .await;
+            }
+        }
+        CoreError::BadCredentials
+    }
+
     /// Work right after an unlock, with no guard held: the approval timeouts and the
     /// `lease.expire` events for leases that ended while the vault was sealed or the process was
     /// down (DEC-WIRE6-6). A failure is logged; the expiry loop tries again.

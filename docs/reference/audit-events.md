@@ -77,6 +77,11 @@ Events written while the vault is locked wait in `audit_pending` and join the ch
 | `integrity.row_mac_mismatch` | none | A row failed its MAC check at unlock and was disabled. target.kind is the table, target.id the row. |
 | `ssh.prepare` | `item` | An SSH key was prepared for the agent bridge. A second event with an error result and `decision: key_open` means the passphrase did not open the key (DEC-T27-A2-3). |
 | `ssh.sign` | `item` | The ssh-agent bridge signed one request with an SSH key of the vault. For an `SSHSIG` blob, `details.namespace` names its namespace; only namespaces in the item setting `sshsig_namespaces` are signed (DEC-T27-A2-6). |
+| `admin.api_start` | none | `cerberusd` started with the admin API on (ADR-0034). Written while sealed, so details.recorded_while_locked is true. |
+| `admin.session_open` | `admin_client` | An enrolled desktop opened an admin session. The actor is the operator; details.unlocked says whether it unlocked the vault, details.operator names the bound operator. |
+| `admin.session_close` | `admin_client` | An admin session ended. details.reason says why: `closed`, `idle`, `max`, `lock` or `revoked`. While sealed (reason `lock`) the event waits in `audit_pending` and keeps only its target. |
+| `admin.client_enroll` | `admin_client` | A desktop was enrolled for the admin API. details hold the label and the bound operator; never the certificate or the key. |
+| `admin.client_revoke` | `admin_client` | An admin enrolment was revoked. It needs no phrase, so it may be written while sealed. |
 
 ## Names used in the plan
 

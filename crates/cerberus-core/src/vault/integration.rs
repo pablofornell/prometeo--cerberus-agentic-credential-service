@@ -6,7 +6,7 @@
 //! with MAC checks at unlock (ADR-0033 point 5).
 
 use cerberus_store::{AUDIT_PENDING_CAP, AuditPendingRow};
-use cerberus_types::ErrorCode;
+use cerberus_types::{ErrorCode, OperatorId};
 use jiff::Timestamp;
 
 use super::VaultService;
@@ -15,6 +15,131 @@ use super::state::Unlocked;
 use crate::audit::{Actor, AuditEvent, EventType};
 use crate::context::{AgentContext, OperatorContext};
 use crate::error::CoreError;
+
+/// The kind of an admin API event of `cerberusd` (ADR-0034).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AdminEventKind {
+    /// The daemon started with the admin API on (`admin.api_start`).
+    ApiStart,
+    /// An enrolled desktop opened a session (`admin.session_open`).
+    SessionOpen,
+    /// A session ended (`admin.session_close`).
+    SessionClose,
+    /// A desktop was enrolled (`admin.client_enroll`).
+    ClientEnroll,
+    /// An enrolment was revoked (`admin.client_revoke`).
+    ClientRevoke,
+}
+
+impl AdminEventKind {
+    /// The audit event type.
+    #[must_use]
+    pub const fn event_type(self) -> EventType {
+        match self {
+            Self::ApiStart => EventType::AdminApiStart,
+            Self::SessionOpen => EventType::AdminSessionOpen,
+            Self::SessionClose => EventType::AdminSessionClose,
+            Self::ClientEnroll => EventType::AdminClientEnroll,
+            Self::ClientRevoke => EventType::AdminClientRevoke,
+        }
+    }
+
+    /// True for the kinds that can happen while the vault is sealed. They go to `audit_pending`
+    /// then and join the chain at the next unlock.
+    #[must_use]
+    pub const fn written_while_sealed(self) -> bool {
+        matches!(
+            self,
+            Self::ApiStart | Self::SessionClose | Self::ClientRevoke
+        )
+    }
+}
+
+/// Why an admin session ended (ADR-0034 point 6.7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SessionCloseReason {
+    /// The desktop closed it.
+    Closed,
+    /// Past its idle limit.
+    Idle,
+    /// Past its absolute limit.
+    Max,
+    /// The vault was locked or unlocked again.
+    Lock,
+    /// Its enrolment was revoked.
+    Revoked,
+}
+
+impl SessionCloseReason {
+    /// The text in `details.reason`.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Closed => "closed",
+            Self::Idle => "idle",
+            Self::Max => "max",
+            Self::Lock => "lock",
+            Self::Revoked => "revoked",
+        }
+    }
+}
+
+/// One admin API event for the audit log. It holds IDs and labels only: never a phrase, a token,
+/// a certificate or a key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdminAudit {
+    /// What happened.
+    pub kind: AdminEventKind,
+    /// The enrolment ID (the target, kind `admin_client`).
+    pub enrolment: Option<String>,
+    /// The enrolment label.
+    pub label: Option<String>,
+    /// The operator the enrolment is bound to.
+    pub operator: Option<OperatorId>,
+    /// Why a session ended.
+    pub reason: Option<SessionCloseReason>,
+    /// For a session open: true when it unlocked a sealed vault.
+    pub unlocked: Option<bool>,
+}
+
+impl AdminAudit {
+    /// An event of `kind` with no target and no details.
+    #[must_use]
+    pub const fn new(kind: AdminEventKind) -> Self {
+        Self {
+            kind,
+            enrolment: None,
+            label: None,
+            operator: None,
+            reason: None,
+            unlocked: None,
+        }
+    }
+
+    fn into_event(self, ctx: Option<&OperatorContext>) -> AuditEvent {
+        let kind = self.kind.event_type();
+        let mut event = match ctx {
+            Some(ctx) => by_operator(kind, ctx),
+            None => AuditEvent::new(kind, Actor::system()),
+        };
+        if let Some(enrolment) = self.enrolment {
+            event = event.target("admin_client", enrolment);
+        }
+        if let Some(label) = self.label {
+            event = event.detail("label", label);
+        }
+        if let Some(operator) = self.operator {
+            event = event.detail("operator", operator.to_string());
+        }
+        if let Some(reason) = self.reason {
+            event = event.detail("reason", reason.as_str());
+        }
+        if let Some(unlocked) = self.unlocked {
+            event = event.detail("unlocked", unlocked);
+        }
+        event
+    }
+}
 
 /// An event by the operator of `ctx`.
 pub(crate) fn by_operator(event: EventType, ctx: &OperatorContext) -> AuditEvent {
@@ -107,6 +232,42 @@ impl VaultService {
             request_id: None,
         };
         self.inner.store.push_audit_pending(&row, u32::MAX).await?;
+        Ok(())
+    }
+
+    /// Records an admin API event (ADR-0034): in the chain while unlocked, with the operator of
+    /// `ctx` as the actor (else `system`). While sealed, the kinds of
+    /// [`AdminEventKind::written_while_sealed`] go to `audit_pending` with the enrolment as the
+    /// target; their details are not kept there (the pending row has no room for them).
+    ///
+    /// # Errors
+    /// [`CoreError::Locked`] for another kind while sealed, or the storage error of the pending
+    /// write. A failed chain write is logged and not returned, as for other operator actions.
+    pub async fn record_admin_event(
+        &self,
+        ctx: Option<&OperatorContext>,
+        event: AdminAudit,
+    ) -> Result<(), CoreError> {
+        if let Ok(guard) = self.unlocked().await {
+            self.audit(&guard, event.into_event(ctx)).await;
+            return Ok(());
+        }
+        if !event.kind.written_while_sealed() {
+            return Err(CoreError::Locked);
+        }
+        let row = AuditPendingRow {
+            occurred_at: self.inner.clock.now(),
+            event_type: event.kind.event_type().as_str().to_owned(),
+            agent_id: None,
+            target_id: event.enrolment,
+            result_code: "ok".to_owned(),
+            route: None,
+            request_id: ctx.map(|ctx| ctx.request_id),
+        };
+        self.inner
+            .store
+            .push_audit_pending(&row, AUDIT_PENDING_CAP)
+            .await?;
         Ok(())
     }
 

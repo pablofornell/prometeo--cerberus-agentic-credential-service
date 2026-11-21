@@ -115,6 +115,11 @@ catalog! {
     IntegrityRowMacMismatch, "integrity.row_mac_mismatch", None, "A row failed its MAC check at unlock and was disabled. target.kind is the table, target.id the row.";
     SshPrepare, "ssh.prepare", Some("item"), "An SSH key was prepared for the agent bridge.";
     SshSign, "ssh.sign", Some("item"), "The ssh-agent bridge signed one request with an SSH key of the vault.";
+    AdminApiStart, "admin.api_start", None, "cerberusd started with the admin API on (ADR-0034).";
+    AdminSessionOpen, "admin.session_open", Some("admin_client"), "An enrolled desktop opened an admin session. details.unlocked says whether it unlocked the vault.";
+    AdminSessionClose, "admin.session_close", Some("admin_client"), "An admin session ended. details.reason says why: closed, idle, max, lock or revoked.";
+    AdminClientEnroll, "admin.client_enroll", Some("admin_client"), "A desktop was enrolled for the admin API.";
+    AdminClientRevoke, "admin.client_revoke", Some("admin_client"), "An admin enrolment was revoked.";
 }
 
 impl fmt::Display for EventType {

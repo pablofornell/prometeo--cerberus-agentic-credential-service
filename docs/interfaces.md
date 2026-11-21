@@ -754,6 +754,13 @@ impl VaultService {
     pub fn emergency_wipe(&self);
     /// Start background loops: sweeper, idle lock, approval expiry, audit prune.
     pub fn spawn_background(&self) -> Vec<tokio::task::JoinHandle<()>>;
+    /// Admin API (ADR-0034 point 6.3): checks the phrase of the live session's operator with the
+    /// KDF and a constant-time VMK compare; no state change. Failures count in the back-off.
+    pub async fn verify_operator_phrase(&self, operator: OperatorId, phrase: cerberus_crypto::SecretString)
+        -> Result<OperatorContext, CoreError>;
+    /// Admin API audit events (`admin.*`): to the chain while unlocked; `api_start`,
+    /// `session_close` and `client_revoke` to `audit_pending` while sealed.
+    pub async fn record_admin_event(&self, ctx: Option<&OperatorContext>, event: AdminAudit) -> Result<(), CoreError>;
 }
 
 // ---- key custody (T05) --------------------------------------------------------------------------

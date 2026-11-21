@@ -23,9 +23,9 @@ pub use agent_api::AgentApi;
 pub use context::{AgentContext, OperatorContext, Surface};
 pub use error::CoreError;
 pub use vault::{
-    CaIssuer, CoreConfig, CoreEvent, CreatedVault, IssuedCa, KeyCustody, LockSettings, NewVault,
-    OperatorInfo, OsEvent, OsEventSink, OsLockEvents, Session, TlsCaMaterial, TlsCustomMaterial,
-    VaultService, VaultStatus,
+    AdminAudit, AdminEventKind, CaIssuer, CoreConfig, CoreEvent, CreatedVault, IssuedCa,
+    KeyCustody, LockSettings, NewVault, OperatorInfo, OsEvent, OsEventSink, OsLockEvents, Session,
+    SessionCloseReason, TlsCaMaterial, TlsCustomMaterial, VaultService, VaultStatus,
 };
 
 /// Version of this crate, taken from `Cargo.toml`.

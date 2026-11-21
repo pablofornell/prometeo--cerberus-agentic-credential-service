@@ -67,6 +67,11 @@ export const EVENT_PHRASES: Readonly<Record<string, string>> = {
   "integrity.row_mac_mismatch": "found a row that failed its MAC check",
   "ssh.prepare": "prepared an SSH key",
   "ssh.sign": "signed with an SSH key",
+  "admin.api_start": "started the server with the admin API on",
+  "admin.session_open": "opened a remote admin session",
+  "admin.session_close": "ended a remote admin session",
+  "admin.client_enroll": "enrolled a desktop for remote admin",
+  "admin.client_revoke": "revoked a remote admin enrolment",
 };
 
 export const EVENT_TYPES: readonly string[] = Object.keys(EVENT_PHRASES);

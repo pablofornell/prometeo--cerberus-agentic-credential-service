@@ -192,6 +192,13 @@ the five events write and verify in the chain.
 Done when: `cargo test -p cerberus-crypto`, `cargo test -p cerberus-core`, `pnpm --dir apps/desktop/ui test
 screens/audit`.
 
+As built (DEC-RM-17): no crypto change — `Vmk::same_key` already is the constant-time compare. The check order is
+`Locked` → back-off → unknown operator or recovery slot (a failed try, no KDF) → `Conflict` → KDF, so the recovery slot
+is `BadCredentials` as the tests ask. A failure while unlocked writes `vault.unlock_failed` to the chain (with
+`details.operator`). `AdminAudit { kind: AdminEventKind, enrolment, label, operator, reason: SessionCloseReason,
+unlocked }`; `record_admin_event` returns `Result` and refuses `session_open` and `client_enroll` while sealed
+(`Locked`), because the pending drain would drop them as unknown rows.
+
 ---
 
 ## Step 4 — Admin client certificate, registry, bundle

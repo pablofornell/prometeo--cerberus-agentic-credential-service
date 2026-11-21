@@ -1367,6 +1367,23 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   `ui_activity(core)` is synchronous (the caller rate-limits it); `handlers::take_payload` and
   `handlers::payload_for_create` hold the payload split that both callers need. (`crates/cerberus-admin/src/rpc.rs`)
 
+- **DEC-RM-17** — RM — Core phrase check and admin audit, as built (plan step 3). (a) No new `Vmk::ct_eq`:
+  `Vmk::same_key` already compares in constant time (`mac::ct_eq`), so `cerberus-crypto` does not change.
+  (b) `verify_operator_phrase` order: `Locked`/`NoVault` → back-off (`UnlockBackoff`, before any KDF) → unknown
+  operator or the recovery slot (a failed try without the KDF, as in `unlock_impl`) → another operator (`Conflict`, not a
+  failed try) → KDF → constant-time compare with the live VMK (a different key is a failed try plus an
+  `IntegrityAlert` on `key_slots`) → reset of the counter → the session must still be the same (epoch and session
+  unchanged, else `Locked`). The plan put `Conflict` before the back-off; then the recovery slot ID would have been a
+  `Conflict`, not the `BadCredentials` its test asks for, and the recovery key must never pass over the network. No
+  state guard is held during the KDF (only the unlock gate, as an unlock does), so a lock is not delayed. (c) A failed
+  try on an unlocked vault writes `vault.unlock_failed` straight to the chain (target the vault, `details.operator`),
+  not to `audit_pending`, so the admin sees it before the next unlock; the back-off counter is the same header field.
+  (d) `record_admin_event(ctx, AdminAudit) -> Result<(), CoreError>`: actor `operator:<id>` with a context, else
+  `system`; target `admin_client:<enrolment>`; details `label`, `operator`, `reason`, `unlocked`. While sealed only
+  `admin.api_start`, `admin.session_close` and `admin.client_revoke` are kept (in `audit_pending`, target only: the
+  pending row has no details); `session_open` and `client_enroll` give `Locked`, because the drain would count them as
+  malformed rows. (`crates/cerberus-core/src/vault/custody.rs`, `integration.rs`, tests `vault/tests/admin_verify.rs`)
+
 ## RD — RustDesk connections (2026-11-21)
 
 - **DEC-RD-1** — New item kind `rustdesk` (Rust `ItemKind::Rustdesk`, wire value `rustdesk`) for a machine reached with

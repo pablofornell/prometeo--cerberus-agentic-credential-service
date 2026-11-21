@@ -380,6 +380,9 @@ const LOCKED_TYPES: &[EventType] = &[
     EventType::AuthFailed,
     EventType::ItemExpire,
     EventType::BackupRecover,
+    EventType::AdminApiStart,
+    EventType::AdminClientRevoke,
+    EventType::AdminSessionClose,
 ];
 
 fn row_hash(row: &AuditRow) -> [u8; 32] {

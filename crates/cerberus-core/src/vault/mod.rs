@@ -49,6 +49,7 @@ pub use backoff::{
 pub use ca::{CaIssuer, IssuedCa, TLS_CUSTOM_SETTING, TlsCaMaterial, TlsCustomMaterial};
 pub use custody::{CreatedVault, KeyCustody, NewVault, OperatorInfo};
 pub use events::{CoreConfig, CoreEvent, OsEvent, OsEventSink, OsLockEvents};
+pub use integration::{AdminAudit, AdminEventKind, SessionCloseReason};
 pub use state::Session;
 
 pub(crate) use integration::by_operator;
