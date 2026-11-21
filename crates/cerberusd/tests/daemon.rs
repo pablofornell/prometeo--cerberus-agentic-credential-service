@@ -638,6 +638,13 @@ async fn admin_api_enrolment_approvals_and_revoke() {
         .as_str()
         .expect("token")
         .to_owned();
+    // A session token is never an agent token: refused on `/v1` and on `/mcp` (ADR-0034 point 4.3).
+    for (method, route, body) in [("GET", "/v1/status", None), ("POST", "/mcp", Some("{}"))] {
+        let refused = https::request_as(addr, &ca, id, method, route, Some(&token), body)
+            .await
+            .expect("agent route");
+        assert_eq!(refused.status, 401, "{method} {route}");
+    }
     let reveal_path = format!("/v1/credentials/{}/reveal", seed.item);
     let purpose = r#"{"purpose":"integration test read"}"#;
     let pending = https::request(
