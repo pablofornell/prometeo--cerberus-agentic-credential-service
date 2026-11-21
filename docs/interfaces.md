@@ -1438,76 +1438,84 @@ pub async fn serve_one_key(key: std::sync::Arc<dyn SignKey>, runtime_dir: &std::
 All commands are `#[tauri::command] #[specta::specta] async fn`. Each takes `tauri::Window` (to check the label) and
 `tauri::State<'_, DesktopState>`, and returns `Result<T, IpcError>` where
 `IpcError { code: String, message: String }`. Column "Window" = allowed window labels. Column "Role" = minimum role
-(ADR-0009); `—` = works without unlock.
+(ADR-0009); `—` = works without unlock. Column "Remote" = what the command does in remote mode (ADR-0034, DEC-RM-6):
+`device` and `session` = sent to `POST /admin/v1/rpc/{command}` (`device`: no admin session needed), `session route` =
+`POST /admin/v1/session`, `desktop` = runs on the desktop in both modes, `local` = refused with `remote_unsupported`
+before any network call (DEC-RM-11). The list is `cerberus_admin::remote::REMOTE_COMMANDS`; `remote_status` returns it.
 
-| Command | Args → Result | Window | Role |
-|---|---|---|---|
-| `vault_status` | `() → VaultStatusView { state, operator?, role?, idle_seconds_left?, hard_lock_at?, memlock_ok, os_hook_ok, header_ok, kdf?, last_lock_reason?, failed_unlocks, free_unlock_tries_left, retry_after_seconds? }` (see below) | main, approval | — |
-| `vault_list_operators` | `() → Vec<OperatorPublic { id, label, role }>` | main | — |
-| `vault_create` | `{ owner_label, phrase, kdf: KdfParams, host_names } → CreatedVaultView { owner_id, recovery_key, ca_pin }` | main | — (NoVault only) |
-| `vault_unlock` | `{ operator_id, phrase } → SessionView` | main | — |
-| `vault_unlock_recovery` | `{ recovery_key } → SessionView` | main | — |
-| `vault_lock` | `() → ()` | main, approval | viewer |
-| `vault_panic` | `() → ()` | main, approval | viewer |
-| `kdf_benchmark` | `() → KdfTuning` | main | — |
-| `passphrase_strength` | `{ phrase, user_inputs } → Strength` | main | — |
-| `passphrase_generate` | `{ words } → String` | main | — |
-| `phrase_change` | `{ current, new, kdf? } → ()` | main | viewer (own slot) |
-| `recovery_rotate` | `() → String` (shown once) | main | owner |
-| `operator_add` | `{ label, role, phrase } → OperatorPublic` | main | owner |
-| `operator_remove` | `{ id } → ()` | main | owner |
-| `operator_set_role` | `{ id, role } → ()` | main | owner |
-| `workspace_list` | `() → Vec<WorkspaceView>` | main | viewer |
-| `workspace_put` | `{ id?, input: WorkspaceInput } → WorkspaceView` | main | operator |
-| `workspace_delete` | `{ id } → ()` (409 if not empty) | main | operator |
-| `item_list` | `{ filter: ItemFilter } → Vec<ItemSummaryView>` (has `custom: Map<string,string>`, metadata only, DEC-INT10-7) | main | viewer |
-| `item_get` | `{ id } → ItemDetail` | main | viewer |
-| `item_create` | `{ input: ItemInput } → ItemDetail` | main | operator |
-| `item_update` | `{ item, input: ItemInputView } → ItemDetailView`. `input.payload = { kind: "keep" }` changes the metadata only (DEC-INT10-6) | main | operator |
-| `item_delete` | `{ id } → ()` | main | operator |
-| `item_reveal` | `{ id } → RevealedSecretView` (UI hides after 15 s) | main | operator |
-| `item_versions` | `{ id } → Vec<ItemVersionInfo>` | main | viewer |
-| `item_restore_version` | `{ id, version } → ItemDetail` | main | operator |
-| `item_totp_preview` | `{ id } → TotpView` | main | operator |
-| `clipboard_copy_secret` | `{ item_id, field } → ()` (cleared after 30 s) | main | operator |
-| `password_generate` | `{ length, classes } → String` | main | operator |
-| `ssh_key_generate` | `{ comment } → SshKeyDraft { public_key, fingerprint }` (private key stays in backend draft) | main | operator |
-| `ssh_key_import` | `{ path or pem, passphrase? } → SshKeyDraft` | main | operator |
-| `agent_list` | `() → Vec<AgentView>` | main | viewer |
-| `agent_create` | `{ input: AgentInput, key: AgentKeyInput } → { agent: AgentView, token: String }` (token shown once) | main | operator |
-| `agent_update` | `{ id, input } → AgentView` | main | operator |
-| `agent_set_status` | `{ id, status } → AgentView` | main | operator |
-| `agent_key_create` | `{ agent_id, key } → { key: AgentKeyView, token: String }` | main | operator |
-| `agent_key_rotate` | `{ key_id, overlap_seconds } → { key: AgentKeyView, token: String }` | main | operator |
-| `agent_key_revoke` | `{ key_id } → ()` | main | operator |
-| `agent_issue_client_cert` | `{ key_id, dest_dir } → { cert_path, key_path, sha256 }` | main | owner |
-| `agent_snippets` | `{ agent_id } → Snippets { mcp_json, curl, env }` (no token inside) | main | viewer |
-| `grant_list` | `{ agent_id? } → Vec<Grant>` | main | viewer |
-| `grant_put` | `{ input: GrantInput } → Grant` (`allow_prod_auto` needs owner) | main | operator |
-| `grant_delete` | `{ id } → ()` | main | operator |
-| `policy_simulate` | `{ agent_id } → Vec<SimulationRow>` | main | viewer |
-| `request_list_pending` | `() → Vec<AccessRequestView>` (also `item_kind`, `role_label`: metadata, DEC-T27-A2-7) | main, approval | viewer |
-| `request_approve` | `{ id, option: ApprovalOption } → LeaseView` | approval, main | operator |
-| `request_deny` | `{ id } → ()` | approval, main | operator |
-| `lease_list` | `() → Vec<LeaseDetail>` | main | viewer |
-| `lease_revoke` | `{ id } → ()` | main | viewer |
-| `lease_revoke_all` | `() → u64` | main | viewer |
-| `audit_query` | `{ query: AuditQueryView { from?, to?, event_type?, agent_id?, item_id?, outcome?: "ok" \| "failed", before_seq?, limit, text? } } → Vec<AuditEntryView>` (`text` matches event type, target, actor ID, agent name and item title, DEC-T27-A2-8) | main | viewer |
-| `audit_verify` | `() → ChainReport` | main | viewer |
-| `audit_export` | `{ dest } → u64` | main | viewer |
-| `settings_get` | `() → SettingsView` | main | viewer |
-| `settings_set` | `{ key, value } → SettingsView` (owner-only keys listed in ADR-0009) | main | operator |
-| `network_status` | `() → NetworkView { bind, port, listening, error, pin, ca_fingerprint, leaf_not_after, custom_cert, mtls_required }` (`pin` and `ca_fingerprint` are of the active chain) | main | viewer |
-| `network_set_bind` | `{ addrs, port } → NetworkView` | main | owner |
-| `tls_export_ca` | `{ dest } → ()` | main | viewer |
-| `tls_load_custom` | `{ chain_path, key_path } → NetworkView` (PEM files; checks, seals in the vault, serves with no restart; the pin changes, DEC-FIX9-1) | main | owner |
-| `tls_use_local_ca` | `() → NetworkView` (removes the custom certificate; the local CA chain is served again) | main | owner |
-| `backup_create` | `{ dest } → ()` | main | operator |
-| `backup_restore` | `{ src, unlock: RestoreUnlockInput } → ()` | main | owner (or NoVault) |
-| `csv_preview` | `{ request: CsvImportRequest } → ImportPreviewView` (T23; dry run: counts, row numbers, no secret) | main | operator |
-| `csv_import` | `{ request: CsvImportRequest } → ImportReport` (T23; all or nothing) | main | operator |
-| `csv_export` | `{ dest, workspace_id? } → u64` (T23; warns: plain secrets) | main | owner |
-| `ui_activity` | `() → ()` (resets the idle timer; rate-limited to 1/s) | main, approval | — |
+| Command | Args → Result | Window | Role | Remote |
+|---|---|---|---|---|
+| `vault_status` | `() → VaultStatusView { state, operator?, role?, idle_seconds_left?, hard_lock_at?, memlock_ok, os_hook_ok, header_ok, kdf?, last_lock_reason?, failed_unlocks, free_unlock_tries_left, retry_after_seconds? }` (see below) | main, approval | — | device |
+| `vault_list_operators` | `() → Vec<OperatorPublic { id, label, role }>` | main | — | device |
+| `vault_create` | `{ owner_label, phrase, kdf: KdfParams, host_names } → CreatedVaultView { owner_id, recovery_key, ca_pin }` | main | — (NoVault only) | local |
+| `vault_unlock` | `{ operator_id, phrase } → SessionView` | main | — | session route |
+| `vault_unlock_recovery` | `{ recovery_key } → SessionView` | main | — | local |
+| `vault_lock` | `() → ()` | main, approval | viewer | session |
+| `vault_panic` | `() → ()` | main, approval | viewer | session |
+| `kdf_benchmark` | `() → KdfTuning` | main | — | local |
+| `passphrase_strength` | `{ phrase, user_inputs } → Strength` | main | — | local |
+| `passphrase_generate` | `{ words } → String` | main | — | local |
+| `phrase_change` | `{ current, new, kdf? } → ()` | main | viewer (own slot) | local |
+| `recovery_rotate` | `() → String` (shown once) | main | owner | local |
+| `operator_add` | `{ label, role, phrase } → OperatorPublic` | main | owner | local |
+| `operator_remove` | `{ id } → ()` | main | owner | local |
+| `operator_set_role` | `{ id, role } → ()` | main | owner | local |
+| `workspace_list` | `() → Vec<WorkspaceView>` | main | viewer | session |
+| `workspace_put` | `{ id?, input: WorkspaceInput } → WorkspaceView` | main | operator | session |
+| `workspace_delete` | `{ id } → ()` (409 if not empty) | main | operator | local |
+| `item_list` | `{ filter: ItemFilter } → Vec<ItemSummaryView>` (has `custom: Map<string,string>`, metadata only, DEC-INT10-7) | main | viewer | session |
+| `item_get` | `{ id } → ItemDetail` | main | viewer | session |
+| `item_create` | `{ input: ItemInput } → ItemDetail` | main | operator | session |
+| `item_update` | `{ item, input: ItemInputView } → ItemDetailView`. `input.payload = { kind: "keep" }` changes the metadata only (DEC-INT10-6) | main | operator | session |
+| `item_delete` | `{ id } → ()` | main | operator | session |
+| `item_reveal` | `{ id } → RevealedSecretView` (UI hides after 15 s) | main | operator | session |
+| `item_versions` | `{ id } → Vec<ItemVersionInfo>` | main | viewer | local |
+| `item_restore_version` | `{ id, version } → ItemDetail` | main | operator | local |
+| `item_totp_preview` | `{ id } → TotpView` | main | operator | session |
+| `clipboard_copy_secret` | `{ item_id, field } → ()` (cleared after 30 s) | main | operator | local |
+| `password_generate` | `{ length, classes } → String` | main | operator | local |
+| `ssh_key_generate` | `{ comment } → SshKeyDraft { public_key, fingerprint }` (private key stays in backend draft) | main | operator | local |
+| `ssh_key_import` | `{ path or pem, passphrase? } → SshKeyDraft` | main | operator | local |
+| `agent_list` | `() → Vec<AgentView>` | main | viewer | session |
+| `agent_create` | `{ input: AgentInput, key: AgentKeyInput } → { agent: AgentView, token: String }` (token shown once) | main | operator | local |
+| `agent_update` | `{ id, input } → AgentView` | main | operator | local |
+| `agent_set_status` | `{ id, status } → AgentView` | main | operator | local |
+| `agent_key_create` | `{ agent_id, key } → { key: AgentKeyView, token: String }` | main | operator | local |
+| `agent_key_rotate` | `{ key_id, overlap_seconds } → { key: AgentKeyView, token: String }` | main | operator | local |
+| `agent_key_revoke` | `{ key_id } → ()` | main | operator | local |
+| `agent_issue_client_cert` | `{ key_id, dest_dir } → { cert_path, key_path, sha256 }` | main | owner | local |
+| `agent_snippets` | `{ agent_id } → Snippets { mcp_json, curl, env }` (no token inside) | main | viewer | local |
+| `grant_list` | `{ agent_id? } → Vec<Grant>` | main | viewer | session |
+| `grant_put` | `{ input: GrantInput } → Grant` (`allow_prod_auto` needs owner) | main | operator | session |
+| `grant_delete` | `{ id } → ()` | main | operator | session |
+| `policy_simulate` | `{ agent_id } → Vec<SimulationRow>` | main | viewer | local |
+| `request_list_pending` | `() → Vec<AccessRequestView>` (also `item_kind`, `role_label`: metadata, DEC-T27-A2-7) | main, approval | viewer | session |
+| `request_approve` | `{ id, option: ApprovalOption } → LeaseView` | approval, main | operator | session |
+| `request_deny` | `{ id } → ()` | approval, main | operator | session |
+| `lease_list` | `() → Vec<LeaseDetail>` | main | viewer | session |
+| `lease_revoke` | `{ id } → ()` | main | viewer | session |
+| `lease_revoke_all` | `() → u64` | main | viewer | local |
+| `audit_query` | `{ query: AuditQueryView { from?, to?, event_type?, agent_id?, item_id?, outcome?: "ok" \| "failed", before_seq?, limit, text? } } → Vec<AuditEntryView>` (`text` matches event type, target, actor ID, agent name and item title, DEC-T27-A2-8) | main | viewer | session |
+| `audit_verify` | `() → ChainReport` | main | viewer | local |
+| `audit_export` | `{ dest } → u64` | main | viewer | local |
+| `settings_get` | `() → SettingsView` | main | viewer | local |
+| `settings_set` | `{ key, value } → SettingsView` (owner-only keys listed in ADR-0009) | main | operator | local |
+| `network_status` | `() → NetworkView { bind, port, listening, error, pin, ca_fingerprint, leaf_not_after, custom_cert, mtls_required }` (`pin` and `ca_fingerprint` are of the active chain) | main | viewer | local |
+| `network_set_bind` | `{ addrs, port } → NetworkView` | main | owner | local |
+| `tls_export_ca` | `{ dest } → ()` | main | viewer | local |
+| `tls_load_custom` | `{ chain_path, key_path } → NetworkView` (PEM files; checks, seals in the vault, serves with no restart; the pin changes, DEC-FIX9-1) | main | owner | local |
+| `tls_use_local_ca` | `() → NetworkView` (removes the custom certificate; the local CA chain is served again) | main | owner | local |
+| `backup_create` | `{ dest } → ()` | main | operator | local |
+| `backup_restore` | `{ src, unlock: RestoreUnlockInput } → ()` | main | owner (or NoVault) | local |
+| `csv_preview` | `{ request: CsvImportRequest } → ImportPreviewView` (T23; dry run: counts, row numbers, no secret) | main | operator | local |
+| `csv_import` | `{ request: CsvImportRequest } → ImportReport` (T23; all or nothing) | main | operator | local |
+| `csv_export` | `{ dest, workspace_id? } → u64` (T23; warns: plain secrets) | main | owner | local |
+| `ui_activity` | `() → ()` (resets the idle timer; rate-limited to 1/s) | main, approval | — | session |
+| `remote_status` | `() → RemoteOverview { mode: "local" \| "remote", active?, profiles: Vec<RemoteProfileView>, remote_commands }` | main | — | desktop |
+| `remote_import_bundle` | `{ path } → RemoteProfileView { id, label, url, ca_pin, ca_sha256, operator_id, not_after, active }` (a file from `file_pick_open`; stores the profile, no secret comes back) | main | — | desktop |
+| `remote_activate` | `{ profile? } → ()` (`null` = local mode; saves the choice and restarts the app; refused while a local vault is unlocked) | main | — | desktop |
+| `remote_disconnect` | `() → ()` (ends this desktop's admin session; the server vault stays as it is) | main | — | desktop |
+| `remote_forget` | `{ profile } → ()` (removes a stored profile and its files; refused for the one in use) | main | — | desktop |
 
 `vault_status` fields added by DEC-INT10-8 to DEC-INT10-10:
 
@@ -1518,6 +1526,12 @@ All commands are `#[tauri::command] #[specta::specta] async fn`. Each takes `tau
 - `failed_unlocks`: failed unlocks in a row (from the vault header; a restart keeps it). `free_unlock_tries_left`:
   `5 - failed_unlocks`, not below 0 (`FREE_UNLOCK_FAILURES`). `retry_after_seconds`: seconds until the next try is
   allowed, or `null` when no wait runs.
+
+`vault_status.remote` (ADR-0034 point 7.3, DEC-RM-10): `null` in local mode. In remote mode `RemoteStatusView {
+profile_id, label, url, operator_id, not_after, server_state?, reachable, has_session, server_version?, problem? }`;
+`state` is then `unlocked` only while this desktop holds an admin session, else `sealed`, and `problem` is the code of
+the last failed contact (`remote_unreachable`, `remote_pin_mismatch`, `remote_protocol_mismatch`,
+`admin_cert_required`). An unreachable server is a normal answer with `reachable = false`.
 
 `item_update` and the payload: `PayloadView` has the input-only kinds `ssh_key_draft` and `keep`. `keep` leaves the stored
 secret, its ciphertext and the version number as they are; the item metadata blobs of the current version are replaced; no

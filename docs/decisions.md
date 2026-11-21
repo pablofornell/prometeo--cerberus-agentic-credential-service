@@ -1506,6 +1506,60 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   `revoke_edits_the_file_only_when_no_daemon_can_answer` (`admin.rs`),
   `a_file_revoke_before_the_socket_exists_is_in_memory_after_the_bind` (`daemon.rs`).
 
+- **DEC-RM-23** — RM — Desktop remote backend, as built (plan step 8). (a) The `ipc!` macro has three arms:
+  `@remote` (20 commands: in remote mode the label check, a borrowed `Args<'a>` with the IPC argument names written by
+  `rpc::to_body`, then `RemoteBackend::forward`), `@both` (`vault_status`, `vault_unlock`, `vault_lock`,
+  `vault_panic`, `file_pick_open` and the `remote_*` commands: their `ops` function handles both modes) and the plain
+  arm (local only: label check, then `remote_unsupported`; the arguments are never serialized). `ui_activity` is the
+  session keep-alive in `DesktopState::ui_activity`; `kdf_benchmark` and `passphrase_*` refuse too (DEC-RM-11).
+  `remote::CUSTOM_REMOTE_COMMANDS` plus the `@remote` set equal `REMOTE_COMMANDS` (contract test
+  `remote_arm_matches_the_allowlist`). Tests drive the forward through `RemoteBackend::forward` with the same names.
+  (b) A session command with no session is `vault_locked` with no network call. An answer `admin_session_required`,
+  `vault_locked` or `admin_cert_required` to a session call drops the token (only the session that sent it: each
+  session has a serial). Error bodies that are not the admin shape map by status (401 `admin_session_required`, 403
+  `forbidden`, 404 `remote_protocol_mismatch` "no admin API", 413 `payload_too_large`, 423 `vault_locked`, 429
+  `rate_limited`, else `internal`); transport failures are `remote_unreachable`, `remote_pin_mismatch` or (bad JSON)
+  `remote_protocol_mismatch`; a bad bundle is `invalid_bundle`. Answers are read into zeroizing buffers (8 MiB cap,
+  64 KiB for `hello`, the session and errors); the call timeout is 30 s, also the stream idle limit (heartbeat 15 s).
+  (c) `vault_status` in remote mode: `hello` when the version is unknown or the last contact failed, then
+  `rpc/vault_status`; the server's last answer is kept for the view while it cannot be reached. `idle_seconds_left`
+  is the smaller of the server idle lock and a local estimate of the session idle limit (from the last session call
+  that resets it: all but `request_list_pending`). `os_hook_ok` is the desktop's hook. `RemoteStatusView` also carries
+  `operator_id` (the bound operator, so the unlock screen can preselect it), `not_after` and `problem` (the code of
+  the last failed contact). A server state `sealed` drops a session the desktop still holds. (d) `vault_lock` with a
+  session forwards and drops the token; without one it does nothing (the desktop shows sealed already).
+  `vault_panic` forwards. (e) New DTOs in `cerberus-admin` `dto/remote.rs`: `BackendMode`, `RemoteStatusView`,
+  `RemoteProfileView` (adds `ca_sha256` and `active`), `RemoteOverview`. (f) Profiles: `prefs.remote = { active,
+  profiles: [{ id, label, url, ca_pin, ca_sha256, operator_id, not_after }] }` (`serde(default)`: old files are local
+  mode); files in `<app_data_dir>/remote/<enrolment id>/` (`0700`; `cert.pem`, `key.pem`, `ca.pem` `0600`); the folder
+  name must parse as an `EnrolmentId`, so a profile ID can never name another folder. Trust is `CaFileAndPin`. A
+  profile with a missing file or a key readable by others starts the app in local mode with `active` cleared (logged).
+  Import replaces a profile of the same enrolment. (g) Mode switch: `ops::remote_activate` refuses while a local vault
+  is unlocked (`conflict`), checks the profile files, closes a remote session and saves the choice; the command then
+  runs the quit work (`shutdown`, at most 10 s) and calls `AppHandle::request_restart`. Checked in the source of
+  `tauri-plugin-single-instance` 2.5.5: the D-Bus name is a resource that `cleanup_before_exit` closes, and Tauri runs
+  that before `process::restart` starts the new process, so the new instance does not find the old one and quit.
+  `request_restart`, not `restart`: called off the main thread `restart` parks the worker forever, and
+  `prevent_exit` is ignored for the restart code, so the quit handler cannot hold the exit (hence the shutdown first).
+  No Linux GUI run was made (no window may open on the person's desktop); the source reading is the check.
+  (h) Event pump: `remote::pump::drive` has no Tauri (tests run it): it follows the session, opens one stream per
+  session, reconnects after 1 s doubling to 30 s, sends `VaultStateChanged` `unlocked`/`sealed` when the session opens
+  or ends, `Locking` from the server, and `PendingCountChanged` from `request_list_pending` after each request event and
+  each (re)connect; a server `sealed` event drops the session. The Tauri half emits through the new shared
+  `pump::emit_wire` and runs the tray, approval window and held-value side effects of the local pump. (i) OS hooks:
+  `os_hooks::OsWatcher` (a watcher that calls any callback) lets remote mode get sleep and screen lock without a core;
+  each event closes the session, and the sleep inhibitor waits until the token is dropped. (j) Tray in remote mode:
+  "Connected to the server" / "Not connected to the server", and Lock is **Disconnect** (DEC-RM-8); "Lock and revoke
+  all" is `vault_panic` on the server. (k) Server fix found by the desktop test: `rpc/vault_lock` and `rpc/vault_panic`
+  no longer bind the connection to the session (and unbind a keep-alive connection that an earlier call bound): the
+  lock ends the session at once and the idle watcher closed the bound connection before the answer was sent, so the
+  desktop saw `remote_unreachable` after a lock that worked. (l) Tests: `desk/tests/remote.rs` runs a real `cerberusd`
+  in this process (`cerberusd` is a dev-dependency of the desktop) instead of a hand-made `cerberus-api` server, so the
+  bundle is a real enrolment; session idle and absolute expiry stay covered by `api/tests/admin.rs` group 7 with a
+  manual clock. The log capture (TRACE, all targets) of that binary holds no phrase, password, `cas_` token or key.
+  (`apps/desktop/src-tauri/src/{remote,ops/remote.rs,commands.rs,state.rs,os_hooks.rs,pump.rs,tray.rs,prefs.rs}`,
+  `tests/remote.rs`, `tests/contract.rs`, `crates/cerberus-api/src/admin/routes.rs`)
+
 ## RD — RustDesk connections (2026-11-21)
 
 - **DEC-RD-1** — New item kind `rustdesk` (Rust `ItemKind::Rustdesk`, wire value `rustdesk`) for a machine reached with

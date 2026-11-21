@@ -2,6 +2,9 @@
 //! admin UI (D1, ADR-0001). Admin actions reach the vault only through typed IPC (ADR-0003): the
 //! commands are in [`commands`], the logic behind them in [`ops`], and `bindings.ts` is generated
 //! from them by `tauri-specta`.
+//!
+//! In remote mode (ADR-0034) the same UI works against one `cerberusd`: [`remote`] holds the
+//! client, and no local vault or server runs.
 
 pub mod commands;
 pub mod dto;
@@ -14,6 +17,7 @@ pub mod ops;
 pub mod os_hooks;
 mod prefs;
 mod pump;
+pub mod remote;
 mod server;
 pub mod shell;
 pub mod state;
@@ -29,14 +33,14 @@ use tauri::{Manager, RunEvent, WindowEvent, Wry};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
-pub use prefs::{AppPaths, Prefs};
+pub use prefs::{AppPaths, Prefs, RemotePrefs, RemoteProfile};
 pub use state::{DesktopState, Shell, StateOptions};
 
 /// Where `bindings.ts` is written by a debug run and compared by the test.
 pub const BINDINGS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ui/src/bindings.ts");
 
 /// Longest the quit sequence waits for the lock and the server to stop.
-const QUIT_WAIT: Duration = Duration::from_secs(10);
+pub(crate) const QUIT_WAIT: Duration = Duration::from_secs(10);
 
 /// True once a quit started, so the second exit request passes.
 static QUITTING: AtomicBool = AtomicBool::new(false);
@@ -122,7 +126,12 @@ pub fn ipc_builder() -> Builder<Wry> {
             commands::clipboard_copy_once,
             commands::file_pick_open,
             commands::rustdesk_status,
-            commands::rustdesk_connect
+            commands::rustdesk_connect,
+            commands::remote_status,
+            commands::remote_import_bundle,
+            commands::remote_activate,
+            commands::remote_disconnect,
+            commands::remote_forget
         ])
         .events(collect_events![
             events::VaultStateChanged,
@@ -172,12 +181,20 @@ fn setup(
     ))?;
     install_panic_hook(&state);
     let watcher = state.clone();
-    let is_locked: os_hooks::IsLocked = Arc::new(move || {
-        watcher.core().map_or(true, |core| {
+    // In remote mode the sleep watcher waits for the admin session to end instead of a lock.
+    let is_locked: os_hooks::IsLocked = Arc::new(move || match watcher.remote() {
+        Some(remote) => !remote.has_session(),
+        None => watcher.core().map_or(true, |core| {
             core.state() != cerberus_types::VaultStateKind::Unlocked
-        })
+        }),
     });
-    if !state.attach_os_events(os_hooks::platform_source(is_locked))? {
+    let source = os_hooks::platform_source(is_locked);
+    let hooked = if state.remote().is_some() {
+        state.attach_remote_os_events(&*source)
+    } else {
+        state.attach_os_events(source)?
+    };
+    if !hooked {
         tracing::warn!("no OS sleep or screen-lock hook; the idle lock still applies");
     }
     app.manage(state.clone());
@@ -186,7 +203,10 @@ fn setup(
         use state::Shell as _;
         shell::TauriShell::new(app.handle().clone()).set_content_protection(true);
     }
-    pump::spawn(app.handle().clone(), state);
+    match state.remote().cloned() {
+        Some(remote) => remote::pump::spawn(app.handle().clone(), state, remote),
+        None => pump::spawn(app.handle().clone(), state),
+    }
     Ok(())
 }
 

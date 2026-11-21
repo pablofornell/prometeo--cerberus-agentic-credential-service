@@ -7,7 +7,7 @@ use cerberus_types::wire::WireSecret;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use super::{OperatorRole, VaultState, opt_ts, ts};
+use super::{OperatorRole, RemoteStatusView, VaultState, opt_ts, ts};
 use crate::error::{IpcError, IpcResult};
 
 /// A secret text that comes from the UI (a phrase, a recovery key). It is zeroized on drop, its
@@ -234,6 +234,10 @@ pub struct VaultStatusView {
     /// state is `no_vault`, no vault is made, and the person can put the newest one back
     /// (`vault_recover_stranded`). T27-G.
     pub stranded_restore: Vec<String>,
+    /// The remote server of a desktop in remote mode (ADR-0034 point 7.3, DEC-RM-10). `null` in
+    /// local mode and on the server itself.
+    #[serde(default)]
+    pub remote: Option<RemoteStatusView>,
 }
 
 impl VaultStatusView {
@@ -258,6 +262,7 @@ impl VaultStatusView {
                 .iter()
                 .map(|path| path.to_string_lossy().into_owned())
                 .collect(),
+            remote: None,
         }
     }
 }
@@ -281,6 +286,7 @@ impl From<VaultStatus> for VaultStatusView {
             free_unlock_tries_left: value.free_unlock_tries_left,
             retry_after_seconds: Some(value.retry_after_seconds).filter(|s| *s > 0),
             stranded_restore: Vec::new(),
+            remote: None,
         }
     }
 }

@@ -2,7 +2,7 @@
 // permissions) and by the crate (`guard.rs`), so it has no `use` and no docs lint here.
 
 /// Every IPC command, in the order of `docs/interfaces.md` section 9, then the added ones.
-pub const ALL_COMMANDS: [&str; 71] = [
+pub const ALL_COMMANDS: [&str; 76] = [
     "vault_status",
     "vault_list_operators",
     "vault_create",
@@ -78,6 +78,12 @@ pub const ALL_COMMANDS: [&str; 71] = [
     // Added by RD (DEC-RD-3): find the RustDesk client and start it on a `rustdesk` item.
     "rustdesk_status",
     "rustdesk_connect",
+    // Added by RM (ADR-0034 point 7): remote profiles, the backend switch and the disconnect.
+    "remote_status",
+    "remote_import_bundle",
+    "remote_activate",
+    "remote_disconnect",
+    "remote_forget",
 ];
 
 /// The commands the approval window may call. Every other command is for the main window only.

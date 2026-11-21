@@ -23,7 +23,7 @@ pub fn spawn(app: AppHandle<Wry>, state: DesktopState) {
     drop(tauri::async_runtime::spawn(run(app, state)));
 }
 
-fn emit<E: Event + serde::Serialize + Clone>(app: &AppHandle<Wry>, event: &E) {
+pub(crate) fn emit<E: Event + serde::Serialize + Clone>(app: &AppHandle<Wry>, event: &E) {
     if let Err(error) = event.emit(app) {
         tracing::warn!(%error, "could not emit a UI event");
     }
@@ -118,13 +118,23 @@ async fn on_event(app: &AppHandle<Wry>, state: &DesktopState, event: CoreEvent) 
         WireEvent::VaultStateChanged { state: kind } => {
             on_state(app, state, VaultStateKind::from(kind)).await;
         }
-        WireEvent::AccessRequestCreated { id } => {
-            emit(app, &AccessRequestCreated { id });
+        event @ (WireEvent::AccessRequestCreated { .. }
+        | WireEvent::AccessRequestResolved { .. }) => {
+            emit_wire(app, event);
             recount(app, state).await;
         }
+        event => emit_wire(app, event),
+    }
+}
+
+/// Emits the Tauri event of a wire event, with the same fields. The local pump and the remote
+/// pump (`remote::pump`) both emit through here.
+pub(crate) fn emit_wire(app: &AppHandle<Wry>, event: WireEvent) {
+    match event {
+        WireEvent::VaultStateChanged { state } => emit(app, &VaultStateChanged { state }),
+        WireEvent::AccessRequestCreated { id } => emit(app, &AccessRequestCreated { id }),
         WireEvent::AccessRequestResolved { id, status } => {
             emit(app, &AccessRequestResolved { id, status });
-            recount(app, state).await;
         }
         WireEvent::AgentActivity {
             agent_id,
@@ -157,7 +167,7 @@ async fn on_event(app: &AppHandle<Wry>, state: &DesktopState, event: CoreEvent) 
             emit(app, &IntegrityAlert { table, row_id });
         }
         // The core has no such event (`from_core` never makes it); the pending count is
-        // `recount`'s work.
+        // `recount`'s work, here and in the remote pump.
         WireEvent::PendingCountChanged { count } => emit(app, &PendingCountChanged { count }),
     }
 }

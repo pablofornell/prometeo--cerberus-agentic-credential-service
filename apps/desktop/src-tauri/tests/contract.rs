@@ -1,7 +1,7 @@
 //! Contract tests of the IPC surface: the bindings file is current, every command of
 //! `docs/interfaces.md` section 9 exists, the capability files and the label guard agree, every
 //! command checks its window label first, and the remote allowlist names IPC commands with their
-//! IPC argument names.
+//! IPC argument names and is exactly the set of commands that go to the server in remote mode.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use cerberus_admin::remote::REMOTE_COMMANDS;
 use cerberus_admin::rpc::arg_names;
 use cerberus_desktop::guard::{ALL_COMMANDS, APPROVAL_COMMANDS};
+use cerberus_desktop::remote::CUSTOM_REMOTE_COMMANDS;
 use cerberus_desktop::{BINDINGS_PATH, export_bindings};
 
 fn manifest(path: &str) -> PathBuf {
@@ -72,7 +73,7 @@ fn bindings_file_is_up_to_date() {
 #[test]
 fn every_documented_command_exists_and_nothing_is_undocumented_but_the_added_ones() {
     let documented = documented_commands();
-    assert_eq!(documented.len(), 66, "interfaces.md lists 66 commands");
+    assert_eq!(documented.len(), 71, "interfaces.md lists 71 commands");
     let ours: BTreeSet<String> = ALL_COMMANDS.iter().map(|s| (*s).to_owned()).collect();
     let missing: Vec<_> = documented.difference(&ours).collect();
     assert!(missing.is_empty(), "missing commands: {missing:?}");
@@ -152,6 +153,77 @@ fn remote_commands_are_ipc_commands() {
     }
 }
 
+/// The commands of `commands.rs` made with the arm `ipc!(@<arm> name(...`.
+fn macro_arm(source: &str, arm: &str) -> BTreeSet<String> {
+    let start = format!("\nipc!(@{arm} ");
+    source
+        .split(&start)
+        .skip(1)
+        .filter_map(|rest| rest.split('(').next())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+/// ADR-0034 point 7.1: in remote mode exactly the allowlist reaches the server. The `@remote` arm
+/// forwards its command; the custom ones (`vault_status`, the session commands, `ui_activity`)
+/// do it in `ops`. Every other command is local only.
+#[test]
+fn remote_arm_matches_the_allowlist() {
+    let source = read("src/commands.rs");
+    let forwarded = macro_arm(&source, "remote");
+    let custom: BTreeSet<String> = CUSTOM_REMOTE_COMMANDS
+        .iter()
+        .map(|n| (*n).to_owned())
+        .collect();
+    assert!(forwarded.is_disjoint(&custom), "{forwarded:?}");
+    let remote: BTreeSet<String> = forwarded.union(&custom).cloned().collect();
+    let allowlist: BTreeSet<String> = REMOTE_COMMANDS
+        .iter()
+        .map(|(n, _)| (*n).to_owned())
+        .collect();
+    assert_eq!(remote, allowlist);
+    // The custom commands handle remote mode in their own `ops` function (or in the state, for
+    // `ui_activity`), so none of them is a local-only wrapper.
+    let both = macro_arm(&source, "both");
+    for name in CUSTOM_REMOTE_COMMANDS {
+        assert!(
+            both.contains(name) || source.contains(&format!("pub fn {name}(")),
+            "`{name}` must not be a local-only command"
+        );
+    }
+    let ops_vault = read("src/ops/vault.rs");
+    for name in ["vault_status", "vault_unlock", "vault_lock", "vault_panic"] {
+        let at = ops_vault
+            .find(&format!("fn {name}("))
+            .unwrap_or_else(|| panic!("no ops `{name}`"));
+        let body = &ops_vault[at..at + ops_vault[at..].find("\n}\n").expect("end")];
+        assert!(
+            body.contains("state.remote()"),
+            "`{name}` has no remote branch"
+        );
+    }
+    // Every other `ipc!` command is the local-only arm.
+    let all: BTreeSet<String> = ALL_COMMANDS.iter().map(|n| (*n).to_owned()).collect();
+    let plain: BTreeSet<String> = source
+        .split("\nipc!(")
+        .skip(1)
+        .filter(|rest| !rest.starts_with('@'))
+        .filter_map(|rest| rest.split('(').next())
+        .map(|name| name.trim().to_owned())
+        .collect();
+    assert!(
+        plain.is_disjoint(&allowlist),
+        "{:?}",
+        plain.intersection(&allowlist).collect::<Vec<_>>()
+    );
+    assert!(plain.is_subset(&all), "{plain:?}");
+    assert_eq!(
+        plain.len() + forwarded.len() + both.len(),
+        71,
+        "every `ipc!` command is counted"
+    );
+}
+
 fn permissions(file: &str) -> BTreeSet<String> {
     let json: serde_json::Value = serde_json::from_str(&read(file)).expect("json");
     json["permissions"]
@@ -188,7 +260,7 @@ fn capability_files_match_the_label_guard() {
 fn every_command_checks_its_window_label_first() {
     let mut sources = String::new();
     for file in [
-        "vault", "items", "agents", "policy", "restore", "system", "csv", "rustdesk",
+        "vault", "items", "agents", "policy", "restore", "system", "csv", "rustdesk", "remote",
     ] {
         sources.push_str(&read(&format!("src/ops/{file}.rs")));
     }

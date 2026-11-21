@@ -1,5 +1,5 @@
-//! Desktop preferences kept outside the vault: the network bind, autostart, content protection
-//! and the RustDesk client program.
+//! Desktop preferences kept outside the vault: the network bind, autostart, content protection,
+//! the RustDesk client program and the remote server profiles (ADR-0034 point 1.3).
 //!
 //! They are not secret and they must be readable before the vault unlocks (the server starts
 //! sealed), so they live in a small JSON file in the app data directory (DEC-T15-7).
@@ -37,6 +37,50 @@ impl AppPaths {
     fn prefs_file(&self) -> PathBuf {
         self.data_dir.join(FILE)
     }
+
+    /// The folder of all remote profiles (`<data_dir>/remote`).
+    #[must_use]
+    pub fn remote_root(&self) -> PathBuf {
+        self.data_dir.join("remote")
+    }
+}
+
+/// One imported enrolment bundle (ADR-0034 point 7.10). The certificate and key files are in
+/// `<data_dir>/remote/<id>/`; this entry holds no key.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteProfile {
+    /// Enrolment ID (a UUID): also the name of the profile folder.
+    pub id: String,
+    /// Enrolment label.
+    pub label: String,
+    /// Base URL of the server, `https://host:port`.
+    pub url: String,
+    /// `sha256/<base64>` pin of the server CA key.
+    pub ca_pin: String,
+    /// Lower-case hex SHA-256 of the CA certificate.
+    pub ca_sha256: String,
+    /// The operator the enrolment is bound to.
+    pub operator_id: String,
+    /// End of validity of the client certificate.
+    pub not_after: jiff::Timestamp,
+}
+
+/// The remote server profiles. `active = None` is local mode, the safe default.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RemotePrefs {
+    /// The profile the next start uses. `None`: local mode.
+    pub active: Option<String>,
+    /// Every imported profile.
+    pub profiles: Vec<RemoteProfile>,
+}
+
+impl RemotePrefs {
+    /// The profile with this ID.
+    #[must_use]
+    pub fn profile(&self, id: &str) -> Option<&RemoteProfile> {
+        self.profiles.iter().find(|profile| profile.id == id)
+    }
 }
 
 /// The preferences.
@@ -53,6 +97,9 @@ pub struct Prefs {
     pub content_protection: bool,
     /// The RustDesk client program the person chose (DEC-RD-3). `None`: look for it.
     pub rustdesk_path: Option<PathBuf>,
+    /// The remote server profiles and the active one (ADR-0034). Files written before remote
+    /// mode existed have none: local mode.
+    pub remote: RemotePrefs,
 }
 
 impl Default for Prefs {
@@ -66,6 +113,7 @@ impl Default for Prefs {
             autostart: false,
             content_protection: false,
             rustdesk_path: None,
+            remote: RemotePrefs::default(),
         }
     }
 }
@@ -105,7 +153,8 @@ impl Prefs {
     }
 }
 
-fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+/// Writes `bytes` to `path` (made or emptied) with mode `0600`, and syncs it.
+pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]
@@ -143,5 +192,37 @@ mod tests {
         assert_eq!(Prefs::load(&paths), prefs);
         std::fs::write(paths.prefs_file(), b"{ not json").expect("write");
         assert_eq!(Prefs::load(&paths), Prefs::default());
+    }
+
+    #[test]
+    fn a_file_without_remote_profiles_is_local_mode_and_profiles_round_trip() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let paths = AppPaths::new(dir.path().to_path_buf());
+        std::fs::write(paths.prefs_file(), br#"{"port": 8443, "autostart": true}"#).expect("write");
+        let old = Prefs::load(&paths);
+        assert_eq!(old.port, 8443);
+        assert_eq!(old.remote, RemotePrefs::default());
+        assert!(old.remote.active.is_none());
+        let profile = RemoteProfile {
+            id: "0190f1e2-0000-7000-8000-000000000001".to_owned(),
+            label: "laptop".to_owned(),
+            url: "https://vault.example.test:8443".to_owned(),
+            ca_pin: "sha256/AAAA".to_owned(),
+            ca_sha256: "00".repeat(32),
+            operator_id: "0190f1e2-0000-7000-8000-000000000002".to_owned(),
+            not_after: "2027-02-19T00:00:00Z".parse().expect("time"),
+        };
+        let prefs = Prefs {
+            remote: RemotePrefs {
+                active: Some(profile.id.clone()),
+                profiles: vec![profile.clone()],
+            },
+            ..old
+        };
+        prefs.save(&paths).expect("save");
+        let back = Prefs::load(&paths);
+        assert_eq!(back, prefs);
+        assert_eq!(back.remote.profile(&profile.id), Some(&profile));
+        assert!(back.remote.profile("other").is_none());
     }
 }

@@ -82,7 +82,7 @@ deps-check:
         "cerberus-mcp": ["cerberus-api", "cerberus-core", "cerberus-client", "cerberus-types"],
         "cerberusd": ["cerberus-admin", "cerberus-api", "cerberus-mcp", "cerberus-core", "cerberus-store", "cerberus-crypto", "cerberus-types"],
         "cerberus-acceptance": [],
-        "cerberus-desktop": ["cerberus-admin", "cerberus-api", "cerberus-mcp", "cerberus-core", "cerberus-store", "cerberus-crypto", "cerberus-types"]
+        "cerberus-desktop": ["cerberus-admin", "cerberus-api", "cerberus-client", "cerberus-mcp", "cerberus-core", "cerberus-store", "cerberus-crypto", "cerberus-types"]
       } as $allowed
       | [.packages[].name] as $members
       | ([ .packages[] as $p

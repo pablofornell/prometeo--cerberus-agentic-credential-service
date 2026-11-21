@@ -447,6 +447,16 @@ Tests:
 Done when: `cargo test -p cerberus-desktop`; `bindings.ts` regenerated (debug run or `export_bindings`) and
 committed; `just deps-check`.
 
+As built (DEC-RM-23): the macro has three arms, `@remote` (generic forward), `@both` (`ops` handles both modes:
+`vault_status`, `vault_unlock`, `vault_lock`, `vault_panic`, `file_pick_open`, the `remote_*` commands) and the plain
+local-only arm; `remote::CUSTOM_REMOTE_COMMANDS` names the allowlisted commands that are not `@remote`.
+`RemoteStatusView` also has `operator_id`, `not_after` and `problem`; `RemoteProfileView` has `ca_sha256` and `active`.
+`remote_activate` runs the quit work, then `AppHandle::request_restart` (safe with the single-instance plugin, checked in
+its source). The pump is `remote::pump::drive` (no Tauri) plus a Tauri half; the OS hook got a callback form
+(`os_hooks::OsWatcher`). In remote mode the tray's Lock is Disconnect. `tests/remote.rs` runs a real `cerberusd` in
+process (dev-dependency) rather than a hand-built API server. The test found a server race: `rpc/vault_lock` and
+`vault_panic` answers were cut by the idle watcher; those calls no longer bind the connection to the session.
+
 ---
 
 ## Step 9 — UI

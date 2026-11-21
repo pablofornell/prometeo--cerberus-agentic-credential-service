@@ -383,7 +383,16 @@ async fn rpc_call(
                 admin.touch(session.id, core.clock().now());
                 core.note_operator_activity();
             }
-            let guard = bind_connection(&state, &req, Some(session.id));
+            // A lock ends every session, this one too: a connection bound to it would be closed
+            // by the idle watcher while the answer is still on its way (DEC-RM-23). These calls
+            // mark the connection authenticated but leave it unbound.
+            let ends_session = matches!(command.as_str(), "vault_lock" | "vault_panic");
+            let bound = (!ends_session).then_some(session.id);
+            let guard = bind_connection(&state, &req, bound);
+            if ends_session {
+                // An earlier call on this keep-alive connection may have bound it.
+                unbind_connection(&state, &req, session.id);
+            }
             (Some(session.ctx), guard)
         }
     };

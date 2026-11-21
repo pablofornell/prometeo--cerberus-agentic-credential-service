@@ -1,5 +1,8 @@
 //! The state of the desktop app: the one vault service, the HTTPS server, the secrets that stay in
 //! the backend (SSH drafts, one-time values) and the clipboard timer (D1, ADR-0001).
+//!
+//! In remote mode (ADR-0034) the state holds a [`RemoteBackend`] instead: no store, no service
+//! and no server are opened, and [`DesktopState::core`] answers `remote_unsupported`.
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -22,6 +25,7 @@ use zeroize::Zeroizing;
 use crate::dto::OneTimeKind;
 use crate::error::{IpcError, IpcResult};
 use crate::prefs::{AppPaths, Prefs};
+use crate::remote::{self, CLOSE_WAIT, RemoteBackend};
 
 /// How long a copied secret stays on the clipboard (plan section 4.7).
 pub const CLIPBOARD_CLEAR_AFTER: Duration = Duration::from_secs(30);
@@ -125,6 +129,11 @@ pub(crate) struct Inner {
     /// Grows each time a new vault service is opened (start, restore). The event pump follows it.
     generation: watch::Sender<u64>,
     os_source: Mutex<Option<Arc<dyn OsLockEvents>>>,
+    /// The remote server, in remote mode. Set at start and never changed: a mode switch restarts
+    /// the app (DEC-RM-9).
+    remote: Option<Arc<RemoteBackend>>,
+    /// In remote mode: whether the OS sleep and screen-lock hook works (it ends the session).
+    remote_os_hook_ok: AtomicBool,
     /// Test only: the next `open_service` fails, as if the file could not be opened.
     #[cfg(test)]
     pub(crate) fail_next_open: std::sync::atomic::AtomicBool,
@@ -205,7 +214,9 @@ impl DesktopState {
         shell: Arc<dyn Shell>,
         options: StateOptions,
     ) -> IpcResult<Self> {
-        let prefs = Prefs::load(&paths);
+        let mut prefs = Prefs::load(&paths);
+        let clock = options.clock.unwrap_or_else(|| Arc::new(SystemClock));
+        let remote = remote_backend(&paths, &mut prefs, &clock);
         let state = Self {
             inner: Arc::new(Inner {
                 paths,
@@ -219,7 +230,7 @@ impl DesktopState {
                 picked: Mutex::new(VecDeque::new()),
                 clipboard_ttl: options.clipboard_ttl,
                 restore_gate: AsyncMutex::new(()),
-                clock: options.clock.unwrap_or_else(|| Arc::new(SystemClock)),
+                clock,
                 last_activity_ms: AtomicI64::new(0),
                 pending: AtomicU32::new(0),
                 listen_error: Mutex::new(None),
@@ -227,6 +238,8 @@ impl DesktopState {
                 stranded_check_failed: AtomicBool::new(false),
                 generation: watch::channel(0).0,
                 os_source: Mutex::new(None),
+                remote,
+                remote_os_hook_ok: AtomicBool::new(false),
                 #[cfg(test)]
                 fail_next_open: AtomicBool::new(false),
                 #[cfg(test)]
@@ -237,6 +250,11 @@ impl DesktopState {
                 failed_store: Mutex::new(None),
             }),
         };
+        // Remote mode: no store, no service, no server (ADR-0034 point 1.2).
+        if let Some(remote) = &state.inner.remote {
+            tracing::info!(profile = %remote.profile().id, "remote mode: no local vault is opened");
+            return Ok(state);
+        }
         // A vault file that is gone while an old one waits at `.pre-restore-*` is a restore that
         // failed badly. A new empty vault would look like lost data, so none is made (T27-G).
         // When the folder cannot be read, none is made either (T27-H).
@@ -375,6 +393,9 @@ impl DesktopState {
     /// The wipe for the panic hook (ADR-0026): the keys, the held values and our clipboard text.
     /// It never waits: a state that is busy is skipped.
     pub fn emergency_wipe(&self) {
+        if let Some(remote) = &self.inner.remote {
+            remote.wipe();
+        }
         if let Ok(guard) = self.inner.core.try_read()
             && let Some(core) = guard.as_ref()
         {
@@ -391,8 +412,19 @@ impl DesktopState {
     }
 
     /// Quit: locks the vault (reason `quit`), clears the clipboard if it holds a copied secret,
-    /// and stops the server and the background tasks.
+    /// and stops the server and the background tasks. In remote mode it closes the admin session
+    /// (at most [`CLOSE_WAIT`]); the server vault stays as it is (DEC-RM-8).
     pub async fn shutdown(&self) {
+        if let Some(remote) = &self.inner.remote {
+            if tokio::time::timeout(CLOSE_WAIT, remote.close_session())
+                .await
+                .is_err()
+            {
+                tracing::info!("the remote session close at quit took too long");
+            }
+            self.clear_held();
+            return;
+        }
         if let Ok(core) = self.core()
             && let Err(error) = core.lock(LockReason::Quit).await
         {
@@ -415,7 +447,9 @@ impl DesktopState {
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
             .ok_or_else(|| {
-                if !locked(&self.inner.stranded).is_empty() {
+                if self.inner.remote.is_some() {
+                    remote::unsupported()
+                } else if !locked(&self.inner.stranded).is_empty() {
                     IpcError::new(
                         "stranded_restore",
                         "a vault left by a failed restore was found; put it back first",
@@ -428,6 +462,40 @@ impl DesktopState {
                     IpcError::unavailable("the vault is being replaced")
                 }
             })
+    }
+
+    /// The remote server, in remote mode.
+    #[must_use]
+    pub fn remote(&self) -> Option<&Arc<RemoteBackend>> {
+        self.inner.remote.as_ref()
+    }
+
+    /// In remote mode, attaches the OS sleep and screen-lock watcher: each event ends this
+    /// desktop's admin session (ADR-0034 point 7.5, DEC-RM-8). Returns false when the OS gives no
+    /// such events, or in local mode.
+    pub fn attach_remote_os_events(&self, source: &dyn crate::os_hooks::OsWatcher) -> bool {
+        let Some(remote) = self.inner.remote.clone() else {
+            return false;
+        };
+        let ok = source.watch(Arc::new(move |event| {
+            tracing::info!(?event, "OS sleep or screen lock: the remote session ends");
+            let remote = Arc::clone(&remote);
+            drop(tauri::async_runtime::spawn(async move {
+                remote.close_session().await;
+            }));
+        }));
+        self.inner.remote_os_hook_ok.store(ok, Ordering::SeqCst);
+        ok
+    }
+
+    /// The time of the vault clock.
+    pub(crate) fn now(&self) -> jiff::Timestamp {
+        self.inner.clock.now()
+    }
+
+    /// Whether the OS hook of remote mode works.
+    pub(crate) fn remote_os_hook_ok(&self) -> bool {
+        self.inner.remote_os_hook_ok.load(Ordering::SeqCst)
     }
 
     /// Test only: takes the swap hook of the next restore.
@@ -520,8 +588,13 @@ impl DesktopState {
         Ok(())
     }
 
-    /// Counts a sign of life of the UI, at most once a second.
+    /// Counts a sign of life of the UI, at most once a second. In remote mode it is the session
+    /// keep-alive, sent at most every 30 s.
     pub fn ui_activity(&self) -> IpcResult<()> {
+        if let Some(remote) = &self.inner.remote {
+            remote.keepalive();
+            return Ok(());
+        }
         let core = self.core()?;
         let now = core.clock().now().as_millisecond();
         let last = self.inner.last_activity_ms.load(Ordering::SeqCst);
@@ -743,6 +816,46 @@ impl DesktopState {
             .is_some_and(|now| sha256(&[now.as_bytes()]) == digest)
         {
             self.inner.shell.clipboard_clear();
+        }
+    }
+}
+
+/// The backend of the active remote profile. A profile that cannot be used (gone from the
+/// preferences, files missing) is logged and the app starts in local mode with `remote.active`
+/// cleared: local mode is the safe default (ADR-0034 point 1.1).
+fn remote_backend(
+    paths: &AppPaths,
+    prefs: &mut Prefs,
+    clock: &Arc<dyn Clock>,
+) -> Option<Arc<RemoteBackend>> {
+    let id = prefs.remote.active.clone()?;
+    let built = prefs
+        .remote
+        .profile(&id)
+        .cloned()
+        .ok_or_else(|| IpcError::unavailable("the active remote profile is not stored"))
+        .and_then(|profile| {
+            let http = remote::profile::transport(paths, &profile)?;
+            Ok((profile, http))
+        });
+    match built {
+        Ok((profile, http)) => Some(Arc::new(RemoteBackend::new(
+            profile,
+            http,
+            Arc::clone(clock),
+        ))),
+        Err(error) => {
+            tracing::error!(
+                profile = %id,
+                code = %error.code,
+                reason = %error.message,
+                "the remote profile cannot be used; starting in local mode"
+            );
+            prefs.remote.active = None;
+            if let Err(error) = prefs.save(paths) {
+                tracing::warn!(%error, "could not save the switch back to local mode");
+            }
+            None
         }
     }
 }

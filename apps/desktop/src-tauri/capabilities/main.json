@@ -82,6 +82,11 @@
     "allow-file-pick-open",
     "allow-vault-recover-stranded",
     "allow-rustdesk-status",
-    "allow-rustdesk-connect"
+    "allow-rustdesk-connect",
+    "allow-remote-status",
+    "allow-remote-import-bundle",
+    "allow-remote-activate",
+    "allow-remote-disconnect",
+    "allow-remote-forget"
   ]
 }

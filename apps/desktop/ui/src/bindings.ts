@@ -81,6 +81,15 @@ export const commands = {
 	filePickOpen: (title: string | null, extensions: string[], options?: InvokeOptions) => typedError<string | null, IpcError_Serialize>(__TAURI_INVOKE("file_pick_open", { title, extensions }, options)),
 	rustdeskStatus: (options?: InvokeOptions) => typedError<RustdeskStatusView_Serialize, IpcError_Serialize>(__TAURI_INVOKE("rustdesk_status", undefined, options)),
 	rustdeskConnect: (item: string, copyPassword: boolean, options?: InvokeOptions) => typedError<RustdeskConnectView, IpcError_Serialize>(__TAURI_INVOKE("rustdesk_connect", { item, copyPassword }, options)),
+	remoteStatus: (options?: InvokeOptions) => typedError<RemoteOverview_Serialize, IpcError_Serialize>(__TAURI_INVOKE("remote_status", undefined, options)),
+	remoteImportBundle: (path: string, options?: InvokeOptions) => typedError<RemoteProfileView, IpcError_Serialize>(__TAURI_INVOKE("remote_import_bundle", { path }, options)),
+	/**
+	 *  `remote_activate`: chooses the backend (`None`: local mode) and restarts the app to use it.
+	 *  The quit work (lock, session close) runs before the restart. See `ops::remote_activate`.
+	 */
+	remoteActivate: (profile: string | null, options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remote_activate", { profile }, options)),
+	remoteDisconnect: (options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remote_disconnect", undefined, options)),
+	remoteForget: (profile: string, options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remote_forget", { profile }, options)),
 };
 
 /** Events */
@@ -489,6 +498,13 @@ export type AutolockTick = {
 	/**  Seconds until the lock. */
 	seconds_left: number,
 };
+
+/**  Which backend the desktop runs. */
+export type BackendMode = 
+/**  The desktop opens its own vault and serves local agents (the default). */
+"local" | 
+/**  The desktop is a client of one `cerberusd`: no local vault, no local server. */
+"remote";
 
 /**  Result of `audit_verify`. */
 export type ChainReportView = ChainReportView_Serialize | ChainReportView_Deserialize;
@@ -1427,6 +1443,116 @@ export type Permission = "find" | "read" | "create_session" | "write" | "use_ssh
 /**  Why a row cannot be imported. */
 export type ProblemCode = "column_count" | "unsupported_kind" | "empty_row" | "missing_title" | "missing_secret" | "invalid_value";
 
+/**  Result of `remote_status`. */
+export type RemoteOverview = RemoteOverview_Serialize | RemoteOverview_Deserialize;
+
+/**  Result of `remote_status`. */
+export type RemoteOverview_Deserialize = {
+	/**  The backend this run uses. */
+	mode: BackendMode,
+	/**  ID of the profile in use, in remote mode. */
+	active?: string | null,
+	/**  The stored profiles. */
+	profiles: RemoteProfileView[],
+	/**
+	 *  The commands a remote server answers (the remote allowlist). Every other command is local
+	 *  only.
+	 */
+	remote_commands: string[],
+};
+
+/**  Result of `remote_status`. */
+export type RemoteOverview_Serialize = {
+	/**  The backend this run uses. */
+	mode: BackendMode,
+	/**  ID of the profile in use, in remote mode. */
+	active: string | null,
+	/**  The stored profiles. */
+	profiles: RemoteProfileView[],
+	/**
+	 *  The commands a remote server answers (the remote allowlist). Every other command is local
+	 *  only.
+	 */
+	remote_commands: string[],
+};
+
+/**  One stored remote profile: what the person checks against `cerberusd status`. */
+export type RemoteProfileView = {
+	/**  Enrolment ID. */
+	id: string,
+	/**  Enrolment label. */
+	label: string,
+	/**  Base URL of the server. */
+	url: string,
+	/**  `sha256/<base64>` pin of the server CA key. */
+	ca_pin: string,
+	/**  Lower-case hex SHA-256 of the CA certificate (`cerberusd status` prints it). */
+	ca_sha256: string,
+	/**  The operator the enrolment is bound to. */
+	operator_id: string,
+	/**  End of validity of the client certificate. */
+	not_after: string,
+	/**  True for the profile the desktop runs with now. */
+	active: boolean,
+};
+
+/**  The remote side of `vault_status` (DEC-RM-10). `null` in local mode. */
+export type RemoteStatusView = RemoteStatusView_Serialize | RemoteStatusView_Deserialize;
+
+/**  The remote side of `vault_status` (DEC-RM-10). `null` in local mode. */
+export type RemoteStatusView_Deserialize = {
+	/**  Enrolment ID of the active profile. */
+	profile_id: string,
+	/**  Label of the profile (the enrolment label). */
+	label: string,
+	/**  Base URL of the server. */
+	url: string,
+	/**  The operator the enrolment is bound to: the only one who can open a session with it. */
+	operator_id: string,
+	/**  End of validity of the client certificate. */
+	not_after: string,
+	/**  The real state of the server vault, as last seen. `null` before the first answer. */
+	server_state?: VaultState | null,
+	/**  True when the last call reached the server. */
+	reachable: boolean,
+	/**  True while this desktop holds a live admin session. */
+	has_session: boolean,
+	/**  Version of `cerberusd`, from `hello`. `null` before the first answer. */
+	server_version?: string | null,
+	/**
+	 *  Error code of the last failed contact (`remote_unreachable`, `remote_pin_mismatch`,
+	 *  `remote_protocol_mismatch`, `admin_cert_required`). `null` after a good answer.
+	 */
+	problem?: string | null,
+};
+
+/**  The remote side of `vault_status` (DEC-RM-10). `null` in local mode. */
+export type RemoteStatusView_Serialize = {
+	/**  Enrolment ID of the active profile. */
+	profile_id: string,
+	/**  Label of the profile (the enrolment label). */
+	label: string,
+	/**  Base URL of the server. */
+	url: string,
+	/**  The operator the enrolment is bound to: the only one who can open a session with it. */
+	operator_id: string,
+	/**  End of validity of the client certificate. */
+	not_after: string,
+	/**  The real state of the server vault, as last seen. `null` before the first answer. */
+	server_state: VaultState | null,
+	/**  True when the last call reached the server. */
+	reachable: boolean,
+	/**  True while this desktop holds a live admin session. */
+	has_session: boolean,
+	/**  Version of `cerberusd`, from `hello`. `null` before the first answer. */
+	server_version: string | null,
+	/**
+	 *  Error code of the last failed contact (`remote_unreachable`, `remote_pin_mismatch`,
+	 *  `remote_protocol_mismatch`, `admin_cert_required`). `null` after a good answer.
+	 */
+	problem: string | null,
+};
+
 /**  State of an access request. */
 export type RequestStatus = "pending" | "approved" | "denied" | "expired" | "cancelled";
 
@@ -1833,6 +1959,11 @@ export type VaultStatusView_Deserialize = {
 	 *  (`vault_recover_stranded`). T27-G.
 	 */
 	stranded_restore: string[],
+	/**
+	 *  The remote server of a desktop in remote mode (ADR-0034 point 7.3, DEC-RM-10). `null` in
+	 *  local mode and on the server itself.
+	 */
+	remote?: RemoteStatusView_Deserialize | null,
 };
 
 /**  Result of `vault_status`. */
@@ -1879,6 +2010,11 @@ export type VaultStatusView_Serialize = {
 	 *  (`vault_recover_stranded`). T27-G.
 	 */
 	stranded_restore: string[],
+	/**
+	 *  The remote server of a desktop in remote mode (ADR-0034 point 7.3, DEC-RM-10). `null` in
+	 *  local mode and on the server itself.
+	 */
+	remote: RemoteStatusView_Serialize | null,
 };
 
 /**  Input of `workspace_put`. */

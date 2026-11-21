@@ -17,6 +17,7 @@ path = "src/lib.rs"
 
 [dependencies]
 cerberus-admin.workspace = true
+cerberus-client.workspace = true
 cerberus-api = { path = "../../../crates/cerberus-api", version = "0.3.0" }
 cerberus-core.workspace = true
 cerberus-mcp.workspace = true
@@ -57,6 +58,9 @@ tauri-build = { workspace = true }
 
 [dev-dependencies]
 tempfile.workspace = true
+# A real `cerberusd` with the admin API for the remote mode tests (dev edges are free, DEC-T10-10).
+cerberusd = { path = "../../../crates/cerberusd" }
+rustls.workspace = true
 
 [lints]
 workspace = true

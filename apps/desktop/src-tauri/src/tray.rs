@@ -1,4 +1,6 @@
 //! The tray icon: lock state, the number of requests that wait, Lock, and Lock and revoke all.
+//! In remote mode the state line names the server connection and Lock is Disconnect: it ends this
+//! desktop's session and leaves the server vault open for its agents (DEC-RM-8).
 //!
 //! The tray shows a count only, never a title or an agent name (threat I-19).
 
@@ -21,7 +23,13 @@ pub struct TrayItems {
     panic: MenuItem<Wry>,
 }
 
-fn status_text(state: VaultStateKind) -> &'static str {
+fn status_text(state: VaultStateKind, remote: bool) -> &'static str {
+    if remote {
+        return match state {
+            VaultStateKind::Unlocked | VaultStateKind::Locking => "Connected to the server",
+            VaultStateKind::NoVault | VaultStateKind::Sealed => "Not connected to the server",
+        };
+    }
     match state {
         VaultStateKind::NoVault => "No vault yet",
         VaultStateKind::Sealed | VaultStateKind::Locking => "Vault locked",
@@ -56,13 +64,14 @@ fn build(app: &AppHandle<Wry>) -> tauri::Result<TrayItems> {
     let status = MenuItem::with_id(
         app,
         "status",
-        status_text(VaultStateKind::Sealed),
+        status_text(VaultStateKind::Sealed, is_remote(app)),
         false,
         None::<&str>,
     )?;
     let pending = MenuItem::with_id(app, "pending", pending_text(0), false, None::<&str>)?;
     let show = MenuItem::with_id(app, "show", "Open Cerberus", true, None::<&str>)?;
-    let lock = MenuItem::with_id(app, "lock", "Lock", false, None::<&str>)?;
+    let lock_text = if is_remote(app) { "Disconnect" } else { "Lock" };
+    let lock = MenuItem::with_id(app, "lock", lock_text, false, None::<&str>)?;
     let panic = MenuItem::with_id(app, "panic", "Lock and revoke all", false, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
@@ -112,10 +121,19 @@ enum Action {
     Panic,
 }
 
+/// True in remote mode.
+fn is_remote(app: &AppHandle<Wry>) -> bool {
+    app.try_state::<DesktopState>()
+        .is_some_and(|state| state.remote().is_some())
+}
+
 fn run_command(app: &AppHandle<Wry>, action: Action) {
     let state = app.state::<DesktopState>().inner().clone();
     drop(tauri::async_runtime::spawn(async move {
         let result = match action {
+            Action::Lock if state.remote().is_some() => {
+                ops::remote_disconnect(&state, MAIN_WINDOW).await
+            }
             Action::Lock => ops::vault_lock(&state, MAIN_WINDOW).await,
             Action::Panic => ops::vault_panic(&state, MAIN_WINDOW).await,
         };
@@ -132,7 +150,7 @@ pub fn update(app: &AppHandle<Wry>, state: VaultStateKind, pending: u32) {
     };
     let unlocked = state == VaultStateKind::Unlocked;
     let steps = [
-        items.status.set_text(status_text(state)),
+        items.status.set_text(status_text(state, is_remote(app))),
         items.pending.set_text(pending_text(pending)),
         items.lock.set_enabled(unlocked),
         items.panic.set_enabled(unlocked),

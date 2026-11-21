@@ -16,6 +16,7 @@ use crate::dto::{
 };
 use crate::error::{IpcError, IpcResult};
 use crate::guard::check;
+use crate::remote::EMPTY;
 use crate::state::DesktopState;
 
 /// Target time of one key derivation at unlock (ADR-0013, DEC-049).
@@ -24,6 +25,9 @@ const KDF_TARGET: Duration = Duration::from_millis(700);
 /// `vault_status`.
 pub async fn vault_status(state: &DesktopState, window: &str) -> IpcResult<VaultStatusView> {
     check(window, "vault_status")?;
+    if let Some(remote) = state.remote() {
+        return Ok(remote.status_view(state.remote_os_hook_ok()).await);
+    }
     let stranded = state.stranded_restore();
     if !stranded.is_empty() {
         return Ok(VaultStatusView::stranded(&stranded));
@@ -77,7 +81,10 @@ async fn session_view(state: &DesktopState) -> IpcResult<SessionView> {
         .ok_or_else(|| cerberus_core::CoreError::Locked.into())
 }
 
-/// `vault_unlock`. It waits while a restore or a stranded-vault recovery runs (they hold the
+/// `vault_unlock`. In remote mode it opens an admin session on the server with the phrase of the
+/// bound operator (ADR-0034 point 7.4); a sealed server vault is unlocked by it.
+///
+/// Locally it waits while a restore or a stranded-vault recovery runs (they hold the
 /// restore gate): an unlock of the old vault between the restore's lock and the swap would start
 /// a server on a service that is being closed (NEW-14), and a recovered vault must have its
 /// revoke marker written before it can be unlocked (NEW-12). Then it unlocks the vault that is in
@@ -89,6 +96,9 @@ pub async fn vault_unlock(
     phrase: Secret,
 ) -> IpcResult<SessionView> {
     check(window, "vault_unlock")?;
+    if let Some(remote) = state.remote() {
+        return remote.open_session(operator_id, phrase).await;
+    }
     let operator = id("operator_id", &operator_id)?;
     let _gate = state.inner.restore_gate.lock().await;
     state
@@ -113,9 +123,19 @@ pub async fn vault_unlock_recovery(
     session_view(state).await
 }
 
-/// `vault_lock`. Locking a vault that is already locked is not an error.
+/// `vault_lock`. Locking a vault that is already locked is not an error. In remote mode it locks
+/// the server vault ("Lock the server vault", DEC-RM-8), which ends every admin session there;
+/// without a session of this desktop there is nothing it may lock.
 pub async fn vault_lock(state: &DesktopState, window: &str) -> IpcResult<()> {
     check(window, "vault_lock")?;
+    if let Some(remote) = state.remote() {
+        if remote.has_session() {
+            remote.forward::<(), _>("vault_lock", &EMPTY).await?;
+        }
+        remote.drop_session(None);
+        state.clear_held();
+        return Ok(());
+    }
     handlers::vault_lock(&state.core()?).await?;
     state.clear_held();
     Ok(())
@@ -124,6 +144,12 @@ pub async fn vault_lock(state: &DesktopState, window: &str) -> IpcResult<()> {
 /// `vault_panic`: revokes all leases, cancels all requests, locks.
 pub async fn vault_panic(state: &DesktopState, window: &str) -> IpcResult<()> {
     check(window, "vault_panic")?;
+    if let Some(remote) = state.remote() {
+        remote.forward::<(), _>("vault_panic", &EMPTY).await?;
+        remote.drop_session(None);
+        state.clear_held();
+        return Ok(());
+    }
     let (core, ctx) = state.operator().await?;
     handlers::vault_panic(&core, &ctx).await?;
     state.clear_held();

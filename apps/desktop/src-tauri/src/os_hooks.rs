@@ -1,4 +1,5 @@
-//! OS sleep and screen-lock watchers that feed `VaultService::on_os_event` (ADR-0026).
+//! OS sleep and screen-lock watchers that feed `VaultService::on_os_event` (ADR-0026), or, in
+//! remote mode, end the admin session of the desktop (ADR-0034 point 7.5).
 //!
 //! - Linux: systemd-logind over D-Bus, through `zbus`. Three watchers: `PrepareForSleep` on the
 //!   manager, `Lock` on the session, and `PropertiesChanged` of the session `LockedHint` (many
@@ -14,15 +15,25 @@
 
 use std::sync::Arc;
 
-use cerberus_core::OsLockEvents;
+use cerberus_core::{OsEvent, OsLockEvents};
 
 /// Tells whether the vault is already locked. The sleep watcher polls it before it lets the
 /// machine suspend.
 pub type IsLocked = Arc<dyn Fn() -> bool + Send + Sync>;
 
+/// What a watcher calls for each event when no vault service takes it (remote mode).
+pub type OsCallback = Arc<dyn Fn(OsEvent) + Send + Sync>;
+
+/// A watcher that feeds a vault service ([`OsLockEvents`]) or any callback.
+pub trait OsWatcher: OsLockEvents {
+    /// Starts to watch and calls `on_event` for each event. Returns false when the OS gives no
+    /// such events.
+    fn watch(&self, on_event: OsCallback) -> bool;
+}
+
 /// The watcher of this platform. `is_locked` is polled after a sleep event until the vault is locked.
 #[must_use]
-pub fn platform_source(is_locked: IsLocked) -> Arc<dyn OsLockEvents> {
+pub fn platform_source(is_locked: IsLocked) -> Arc<dyn OsWatcher> {
     #[cfg(target_os = "linux")]
     {
         Arc::new(linux::Logind::new(is_locked))
@@ -45,6 +56,13 @@ impl OsLockEvents for Unsupported {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
+impl OsWatcher for Unsupported {
+    fn watch(&self, _on_event: OsCallback) -> bool {
+        false
+    }
+}
+
 #[cfg(target_os = "linux")]
 mod linux {
     use std::sync::mpsc::{Sender, channel};
@@ -56,7 +74,7 @@ mod linux {
     use zbus::blocking::{Connection, Proxy};
     use zbus::zvariant::{OwnedFd, OwnedObjectPath};
 
-    use super::IsLocked;
+    use super::{IsLocked, OsCallback, OsWatcher};
 
     const DEST: &str = "org.freedesktop.login1";
     const MANAGER_PATH: &str = "/org/freedesktop/login1";
@@ -69,7 +87,7 @@ mod linux {
     const LOCK_WAIT: Duration = Duration::from_millis(3500);
     const LOCK_POLL: Duration = Duration::from_millis(25);
 
-    type SharedSink = Arc<Mutex<Option<OsEventSink>>>;
+    type SharedSink = Arc<Mutex<Option<OsCallback>>>;
 
     /// The logind watcher. The sink sits in a shared cell, so a new vault service (after a
     /// restore) only replaces the sink and the threads keep running.
@@ -91,7 +109,13 @@ mod linux {
 
     impl OsLockEvents for Logind {
         fn start(&self, sink: OsEventSink) -> bool {
-            *self.sink.lock().unwrap_or_else(PoisonError::into_inner) = Some(sink);
+            self.watch(Arc::new(move |event| sink.send(event)))
+        }
+    }
+
+    impl OsWatcher for Logind {
+        fn watch(&self, on_event: OsCallback) -> bool {
+            *self.sink.lock().unwrap_or_else(PoisonError::into_inner) = Some(on_event);
             let mut started = self.started.lock().unwrap_or_else(PoisonError::into_inner);
             if let Some(ok) = *started {
                 return ok;
@@ -128,9 +152,14 @@ mod linux {
         (0..kinds.len()).all(|_| ready_rx.recv_timeout(READY_WAIT).unwrap_or(false))
     }
 
-    fn send(sink: &Mutex<Option<OsEventSink>>, event: OsEvent) {
-        if let Some(sink) = sink.lock().unwrap_or_else(PoisonError::into_inner).as_ref() {
-            sink.send(event);
+    fn send(sink: &Mutex<Option<OsCallback>>, event: OsEvent) {
+        let callback = sink
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .map(Arc::clone);
+        if let Some(callback) = callback {
+            callback(event);
         }
     }
 

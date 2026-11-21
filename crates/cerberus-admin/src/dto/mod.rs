@@ -9,6 +9,7 @@ mod audit;
 mod items;
 mod network;
 mod policy;
+mod remote;
 mod rustdesk;
 mod vault;
 
@@ -24,6 +25,7 @@ pub use audit::*;
 pub use items::*;
 pub use network::*;
 pub use policy::*;
+pub use remote::*;
 pub use rustdesk::*;
 pub use vault::*;
 
