@@ -115,6 +115,13 @@ export const en = {
 
   "state.empty.firstSteps": "First steps",
 
+  "menu.actions": "Actions",
+  "menu.text": "Text",
+  "menu.cut": "Cut",
+  "menu.copy": "Copy",
+  "menu.paste": "Paste",
+  "menu.selectAll": "Select all",
+
   "secret.hidden": "Hidden",
   "secret.reveal": "Hold to reveal: {label}",
   "secret.hide": "Hide: {label}",

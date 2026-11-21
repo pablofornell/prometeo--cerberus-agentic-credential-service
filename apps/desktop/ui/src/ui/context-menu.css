@@ -1,0 +1,35 @@
+/* The app context menu (ui/ContextMenu.tsx). Tokens only, so light and dark both work. */
+.ctx-menu {
+  position: fixed; z-index: 90; box-sizing: border-box; min-width: 200px; max-width: min(320px, calc(100vw - 16px)); padding: var(--s-1);
+  border-radius: var(--r-md); background: var(--c-bg-surface); color: var(--c-text-primary); box-shadow: var(--sh-overlay);
+  font-size: var(--t-body-sm-size); outline: none; transform-origin: top left; animation: ctx-in var(--d-fast) var(--ease-enter);
+  user-select: none;
+}
+/* The focused item is shown by its fill. The menu itself takes the focus without a ring. */
+.ctx-menu:focus-visible { outline: none; border-radius: var(--r-md); }
+.ctx-item:focus-visible { outline: none; border-radius: var(--r-sm); }
+.ctx-menu:not([data-ready]) { visibility: hidden; }
+@keyframes ctx-in { from { opacity: 0; transform: scale(0.98); } }
+
+.ctx-item {
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: var(--s-2_5); width: 100%; min-height: var(--ctl-sm); padding: 0 var(--s-2_5);
+  border-radius: var(--r-sm); cursor: default; white-space: nowrap; color: var(--c-text-primary);
+}
+.ctx-item .icon, .ctx-gap { flex: none; width: 16px; height: 16px; color: var(--c-text-muted); }
+.ctx-item:focus, .ctx-item:hover { background: var(--press); }
+.ctx-item:focus .icon, .ctx-item:hover .icon { color: var(--c-text-primary); }
+.ctx-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ctx-key { flex: none; padding-left: var(--s-4); color: var(--c-text-muted); font-size: var(--t-caption-size); }
+
+.ctx-item.danger, .ctx-item.danger .icon { color: var(--c-danger-fg); }
+.ctx-item.danger:focus, .ctx-item.danger:hover { background: var(--c-danger-tint); }
+.ctx-item[aria-disabled="true"], .ctx-item[aria-disabled="true"] .icon, .ctx-item[aria-disabled="true"] .ctx-key { color: var(--c-text-muted); opacity: 0.55; }
+.ctx-item[aria-disabled="true"]:focus, .ctx-item[aria-disabled="true"]:hover { background: transparent; }
+
+.ctx-sep { height: 1px; margin: var(--s-1) calc(var(--s-1) * -1); background: var(--hair); }
+
+@media (prefers-reduced-motion: reduce) { .ctx-menu { animation: none; } }
+@media (forced-colors: active) {
+  .ctx-menu { border: 1px solid CanvasText; }
+  .ctx-item:focus, .ctx-item:hover { outline: 1px solid Highlight; outline-offset: -1px; }
+}

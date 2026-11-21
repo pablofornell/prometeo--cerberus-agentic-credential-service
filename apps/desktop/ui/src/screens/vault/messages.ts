@@ -69,6 +69,9 @@ export const messages = defineMessages({
   "drawer.createdBy": "Created by",
   "drawer.updated": "Last change",
   "drawer.unknownOperator": "An operator",
+  "menu.open": "Open details",
+  "menu.label": "Actions for {title}",
+
   "drawer.edit": "Edit",
   "drawer.delete": "Delete",
   "drawer.expiresIn": "Time left",

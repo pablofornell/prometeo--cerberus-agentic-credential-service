@@ -30,6 +30,29 @@ interface SecretFieldProps {
 const MASK = "●".repeat(12);
 
 /**
+ * Runs one clipboard copy of a secret (`clipboard_copy_secret` or `clipboard_copy_once`) with the toast for its result.
+ * The copy button of a `SecretField` and the context menus share it, so the text and the 30 s note are the same.
+ */
+export function useSecretCopy(): (copy: () => Promise<unknown>) => Promise<void> {
+  const toast = useToast();
+  return useCallback(
+    async (copy) => {
+      try {
+        await copy();
+        toast.push({ tone: "success", title: t("secret.copied"), ringSeconds: CLIPBOARD_CLEAR_SECONDS });
+      } catch (error) {
+        toast.push({
+          tone: "error",
+          title: t("secret.copyFailed"),
+          detail: isIpcFailure(error) ? errorText(error.error) : undefined,
+        });
+      }
+    },
+    [toast],
+  );
+}
+
+/**
  * A masked secret. Mono face, hold the eye for 0.5 s to reveal, hides after 15 s, copy clears the clipboard
  * after 30 s. The value lives only in this component's state. It is dropped on hide, unmount and lock
  * (ADR-0010). It never goes into `title`, `aria-label` or logs.
@@ -84,19 +107,10 @@ export function SecretField({ label, onReveal, onCopy, denied = false, autoHideM
     }
   }, [onReveal, autoHideMs, toast]);
 
+  const copyWithToast = useSecretCopy();
   const copy = useCallback(async () => {
-    if (!onCopy) return;
-    try {
-      await onCopy();
-      toast.push({ tone: "success", title: t("secret.copied"), ringSeconds: CLIPBOARD_CLEAR_SECONDS });
-    } catch (error) {
-      toast.push({
-        tone: "error",
-        title: t("secret.copyFailed"),
-        detail: isIpcFailure(error) ? errorText(error.error) : undefined,
-      });
-    }
-  }, [onCopy, toast]);
+    if (onCopy) await copyWithToast(onCopy);
+  }, [onCopy, copyWithToast]);
 
   if (denied) {
     return (

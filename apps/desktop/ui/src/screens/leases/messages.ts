@@ -32,6 +32,8 @@ export const messages = defineMessages({
   "from.approval": "Your approval",
   "uses.left": "{uses} of {max}",
   "revoke": "Revoke",
+  "menu.lease": "Actions for the lease of {agent} for {item}",
+  "menu.session": "Actions for {title}",
   "revoke.label": "Revoke lease of {agent} for {item}",
   "revoke.done": "Lease revoked. The agent's next read needs a new lease.",
   "revoke.failed": "The lease was not revoked",

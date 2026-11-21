@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ItemSummaryView_Serialize as Item } from "../../bindings";
 import { useScreenT } from "../../i18n";
 import { isLockError } from "../../ipc/client";
 import { useOperators } from "../../ipc/queries";
@@ -10,8 +11,10 @@ import { Button, EmptyState, ErrorState, Icon, Input, Select, SegmentedControl, 
 import "./vault.css";
 import { Facets } from "./Facets";
 import { applyFilters, categoryFacets, hasActiveFilters, NO_FILTERS, roleOptions, tagFacets, workspaceCounts, type Filters } from "./filters";
+import { DeleteItemDialog } from "./DeleteItemDialog";
 import { ItemDrawer } from "./ItemDrawer";
 import { ItemList } from "./ItemList";
+import { useItemMenu } from "./itemMenu";
 import { ENVIRONMENTS, KIND_ORDER, kindLabel, ROLE_PRESETS } from "./kinds";
 import { messages } from "./messages";
 import { clearSelection, peekSelection } from "./selection";
@@ -53,6 +56,8 @@ export default function VaultScreen() {
   const [view, setViewState] = useState<View>(loadView);
   const [selectedId, setSelectedId] = useState<string | null>(() => hashQuery.get("item") ?? peekSelection());
   const [wsOpen, setWsOpen] = useState(false);
+  // The item the context menu asked to delete. Its confirm dialog is the one of the drawer.
+  const [deleting, setDeleting] = useState<Item | null>(null);
   const query = useDebounced(filters.q.trim(), 200);
   const found = useSearchIds(query);
   useExposureRefresh();
@@ -76,6 +81,16 @@ export default function VaultScreen() {
   const agentNames = useMemo(() => new Map((agents.data ?? []).map((a) => [a.id, a.name])), [agents.data]);
   const operatorNames = useMemo(() => new Map((operators.data ?? []).map((o) => [o.id, o.label])), [operators.data]);
   const wsList = workspaces.data ?? [];
+  const itemMenu = useItemMenu({
+    canEdit: canWrite,
+    canReveal,
+    onOpen: (item) => {
+      setSelectedId(item.id);
+      // The details are not drawn until the next render. Wait for it, then move the focus there.
+      setTimeout(() => document.getElementById("vb-d-title")?.focus(), 0);
+    },
+    onDelete: setDeleting,
+  });
 
   const slotContext = { canWrite, hasItems: all.length > 0, hasWorkspace: wsList.length > 0, openImport: hashQuery.get("import") === "1" };
 
@@ -214,12 +229,24 @@ export default function VaultScreen() {
             onSelect={setSelectedId}
             onOpen={() => document.getElementById("vb-d-title")?.focus()}
             agentNames={agentNames}
+            menuFor={itemMenu}
           />
         )}
       </section>
 
       <ItemDrawer item={selected} canEdit={canWrite} canReveal={canReveal} agentNames={agentNames} operatorNames={operatorNames} onClose={() => setSelectedId(null)} />
       <WorkspaceDialog open={wsOpen} onOpenChange={setWsOpen} onCreated={(ws) => patch({ workspace: ws.slug })} />
+      {deleting && (
+        <DeleteItemDialog
+          item={deleting}
+          open
+          onOpenChange={(open) => !open && setDeleting(null)}
+          onDeleted={() => {
+            setDeleting(null);
+            if (selectedId === deleting.id) setSelectedId(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@ import {
   Select,
   Skeleton,
   UntrustedText,
+  useContextMenu,
   useToast,
   type SelectOption,
 } from "../../ui";
@@ -181,6 +182,8 @@ function Details({ entry, m }: { entry: AuditEntryView_Serialize; m: M }) {
 
 function EventRow({ entry, m, names, breakSeq }: { entry: AuditEntryView_Serialize; m: M; names: Names; breakSeq: number | null }) {
   const [open, setOpen] = useState(false);
+  const toast = useToast();
+  const menu = useContextMenu();
   const failed = entry.result !== "ok";
   const actor =
     entry.actor_kind === "agent" ? names.agent(entry.actor_id) : entry.actor_kind === "operator" ? names.operator(entry.actor_id) : m("event.system");
@@ -189,8 +192,29 @@ function EventRow({ entry, m, names, breakSeq }: { entry: AuditEntryView_Seriali
   const here = breakSeq !== null && entry.seq === breakSeq;
   const icon = entry.actor_kind === "agent" ? "bot" : entry.actor_kind === "operator" ? "user" : "lock";
   const detailsId = `ev-${entry.seq}-details`;
+  const copyEvent = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(entry, null, 2));
+      toast.push({ tone: "success", title: m("event.copied") });
+    } catch {
+      toast.push({ tone: "error", title: m("event.copyFailed") });
+    }
+  };
+  // The log has no action on an event. The menu shows or hides its details and copies it as JSON (plain text, no secret).
+  const menuProps = menu.targetProps(
+    () => [
+      { id: "details", label: open ? m("event.hide") : m("event.details"), icon: open ? "chevD" : "chevR", onSelect: () => setOpen(!open) },
+      {
+        id: "copy",
+        label: m("event.copy"),
+        icon: "copy",
+        onSelect: () => void copyEvent(),
+      },
+    ],
+    m("event.menu", { seq: entry.seq }),
+  );
   return (
-    <li className={[suspect ? "suspect" : "", here ? "break-point" : ""].filter(Boolean).join(" ") || undefined} data-seq={entry.seq}>
+    <li className={[suspect ? "suspect" : "", here ? "break-point" : ""].filter(Boolean).join(" ") || undefined} data-seq={entry.seq} {...menuProps}>
       <time dateTime={entry.occurred_at}>{timeOf(entry.occurred_at)}</time>
       <span className={`node ${failed ? "bad" : entry.actor_kind}`}>
         <Icon name={failed ? "x" : icon} size={14} />

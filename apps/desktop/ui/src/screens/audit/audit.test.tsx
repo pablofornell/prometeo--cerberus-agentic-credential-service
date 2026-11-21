@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import { describe, expect, it, vi } from "vitest";
@@ -43,6 +43,24 @@ describe("audit timeline", () => {
     const group = await within(row as HTMLElement).findByRole("group", { name: /not verified/ });
     expect(group).toHaveTextContent("<b>Urgent</b>");
     expect(group.querySelector("b")).toBeNull();
+  });
+
+  it("context menu: Show details toggles the row and Copy event writes the event as JSON", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const { container } = open();
+    await screen.findAllByText(/asked for access/);
+    const row = container.querySelector<HTMLElement>('[data-seq="4110"]') as HTMLElement;
+    fireEvent.contextMenu(row, { clientX: 20, clientY: 20 });
+    await user.click(await screen.findByRole("menuitem", { name: "Details" }));
+    expect(await within(row).findByRole("group", { name: /not verified/ })).toBeInTheDocument();
+    fireEvent.contextMenu(row, { clientX: 20, clientY: 20 });
+    expect(await screen.findByRole("menuitem", { name: "Hide details" })).toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Copy event" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toMatchObject({ seq: 4110 });
+    expect(await screen.findByText("Event copied.")).toBeInTheDocument();
   });
 
   it("sends the search text to the backend and clears it with the filters (T21)", async () => {

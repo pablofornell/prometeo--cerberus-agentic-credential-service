@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import { describe, expect, it } from "vitest";
@@ -72,6 +72,23 @@ describe("Leases screen", () => {
     expect(within(list).getByText("Checkout session token")).toBeInTheDocument();
     expect(within(list).getByText(/Stored by Docs writer, ends in/)).toBeInTheDocument();
     await user.click(within(list).getByRole("button", { name: "Delete now: Checkout session token" }));
+    await user.click(within(await screen.findByRole("dialog", { name: "Delete this session item?" })).getByRole("button", { name: "Delete session item" }));
+    await waitFor(() => expect(calls.item_delete).toEqual([{ item: "it-session" }]));
+  });
+
+  it("context menu: a lease row revokes, a session item deletes through the same confirm", async () => {
+    const user = userEvent.setup();
+    const { handlers, calls } = recordedHandlers();
+    renderApp({ path: "/leases", handlers });
+    const table = await screen.findByRole("table", { name: "Active leases" });
+    fireEvent.contextMenu(within(table).getAllByRole("row")[1] as HTMLElement, { clientX: 20, clientY: 20 });
+    await user.click(await screen.findByRole("menuitem", { name: "Revoke" }));
+    await waitFor(() => expect(calls.lease_revoke).toEqual([{ lease: "lse_1" }]));
+
+    const list = await screen.findByRole("list", { name: "Session items" });
+    fireEvent.contextMenu(within(list).getAllByRole("listitem")[0] as HTMLElement, { clientX: 20, clientY: 20 });
+    await user.click(await screen.findByRole("menuitem", { name: "Delete now" }));
+    expect(calls.item_delete).toBeUndefined();
     await user.click(within(await screen.findByRole("dialog", { name: "Delete this session item?" })).getByRole("button", { name: "Delete session item" }));
     await waitFor(() => expect(calls.item_delete).toEqual([{ item: "it-session" }]));
   });

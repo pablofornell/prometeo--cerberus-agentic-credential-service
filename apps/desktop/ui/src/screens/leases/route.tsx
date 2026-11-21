@@ -8,7 +8,7 @@ import { openOverlay } from "../../shell/uiStore";
 import { useRemoteUnsupported } from "../../state/backendMode";
 import { useCan } from "../../state/session";
 import { formatLeft, useNow } from "../../state/time";
-import { Button, ConfirmDialog, EmptyState, EnvBadge, Notice, Panel, Select, TtlRing, useToast } from "../../ui";
+import { Button, ConfirmDialog, EmptyState, EnvBadge, Notice, Panel, Select, TtlRing, useContextMenu, useToast } from "../../ui";
 import { QueryGate } from "../agents/QueryGate";
 import { useAgents } from "../agents/queries";
 import { useRunner } from "../agents/useRunner";
@@ -52,6 +52,7 @@ function LeaseTable({ leases, agentName, items, now, onRevoke, s }: {
   onRevoke: (lease: LeaseDetailView_Serialize) => void;
   s: S;
 }) {
+  const menu = useContextMenu();
   return (
     <table className="grid">
       <caption className="sr-only">{s("list.caption")}</caption>
@@ -74,8 +75,13 @@ function LeaseTable({ leases, agentName, items, now, onRevoke, s }: {
           const endsAt = Date.parse(l.view.expires_at);
           const total = Math.max(1, Math.round((endsAt - Date.parse(l.created_at)) / 1000));
           const left = Math.max(0, Math.round((endsAt - now) / 1000));
+          // The menu has the action of the Revoke button of the row.
+          const target = menu.targetProps(
+            () => [{ id: "revoke", label: s("revoke"), icon: "x", onSelect: () => onRevoke(l) }],
+            s("menu.lease", { agent, item: title }),
+          );
           return (
-            <tr key={l.view.id}>
+            <tr key={l.view.id} {...target}>
               <td>{agent}</td>
               <td>
                 {title} {item && <EnvBadge env={item.environment} />}
@@ -110,6 +116,7 @@ function SessionItems({ canEdit, agentName }: { canEdit: boolean; agentName: (id
   const now = useNow(1000);
   const run = useRunner();
   const [deleting, setDeleting] = useState<ItemSummaryView_Serialize | null>(null);
+  const menu = useContextMenu();
   return (
     <Panel flush icon="key" title={s("sessions.title")} actions={<span className="small muted">{s("sessions.note")}</span>}>
       <QueryGate query={query} action={s("sessions.action")} loadingLabel={s("list.loading")} rows={2}>
@@ -128,8 +135,13 @@ function SessionItems({ canEdit, agentName }: { canEdit: boolean; agentName: (id
                   : by
                     ? s("sessions.by", { name: by, time: left })
                     : s("sessions.byPerson", { time: left });
+                // The menu has the action of the Delete now button, and the same confirm dialog.
+                const target = menu.targetProps(
+                  () => (canEdit ? [{ id: "delete", label: s("sessions.delete"), icon: "trash", danger: true, onSelect: () => setDeleting(item) }] : null),
+                  s("menu.session", { title: item.title }),
+                );
                 return (
-                  <li key={item.id}>
+                  <li key={item.id} {...target}>
                     {endsAt && <TtlRing total={total} endsAt={endsAt} size={28} />}
                     <div className="grow">
                       <div className="title">{item.title}</div>

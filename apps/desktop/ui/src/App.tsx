@@ -6,7 +6,7 @@ import { createQueryClient } from "./ipc/queryClient";
 import { Routes } from "./shell/Routes";
 import { useHashLocation } from "./shell/location";
 import { PrefsProvider } from "./state/prefs";
-import { ToastProvider } from "./ui";
+import { ContextMenuProvider, ToastProvider } from "./ui";
 
 interface AppProps {
   /** Tests pass their own client and location hook. */
@@ -21,10 +21,12 @@ export function App({ queryClient, hook = useHashLocation }: AppProps) {
     <PrefsProvider>
       <QueryClientProvider client={client}>
         <ToastProvider>
-          <Router hook={hook}>
-            <EventBridge />
-            <Routes />
-          </Router>
+          <ContextMenuProvider>
+            <Router hook={hook}>
+              <EventBridge />
+              <Routes />
+            </Router>
+          </ContextMenuProvider>
         </ToastProvider>
       </QueryClientProvider>
     </PrefsProvider>

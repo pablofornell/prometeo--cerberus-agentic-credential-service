@@ -1,7 +1,7 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import type { ItemSummaryView_Serialize as Item } from "../../bindings";
 import { useScreenT } from "../../i18n";
-import { AgentMadeBadge, cx, EnvBadge, KindIcon, RoleChip, TtlRing } from "../../ui";
+import { AgentMadeBadge, cx, EnvBadge, KindIcon, RoleChip, TtlRing, useContextMenu, type MenuEntry } from "../../ui";
 import { ttlSpan } from "./filters";
 import { isSessionKind, kindLabel } from "./kinds";
 import { messages } from "./messages";
@@ -15,6 +15,8 @@ interface Props {
   onOpen: () => void;
   /** Names of agents by ID, for the "created by an agent" badge. */
   agentNames: ReadonlyMap<string, string>;
+  /** The entries of the context menu of one item. */
+  menuFor: (item: Item) => MenuEntry[];
 }
 
 const optionId = (id: string) => `vb-opt-${id}`;
@@ -34,8 +36,9 @@ function Ttl({ item, size }: { item: Item; size: 20 | 22 }) {
  * One listbox for both views. Arrow keys move the selection (and the open details), Home and End jump,
  * Enter moves focus to the details. Only one option is in the tab order.
  */
-export function ItemList({ items, view, selectedId, onSelect, onOpen, agentNames }: Props) {
+export function ItemList({ items, view, selectedId, onSelect, onOpen, agentNames, menuFor }: Props) {
   const tr = useScreenT(messages);
+  const menu = useContextMenu();
   const tabbable = items.some((i) => i.id === selectedId) ? selectedId : items[0]?.id;
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -59,13 +62,22 @@ export function ItemList({ items, view, selectedId, onSelect, onOpen, agentNames
     document.getElementById(optionId(target.id))?.focus();
   };
 
-  const optionProps = (item: Item) => ({
-    id: optionId(item.id),
-    role: "option" as const,
-    tabIndex: item.id === tabbable ? 0 : -1,
-    "aria-selected": item.id === selectedId,
-    onClick: () => onSelect(item.id),
-  });
+  const optionProps = (item: Item) => {
+    const target = menu.targetProps(() => menuFor(item), tr("menu.label", { title: item.title }));
+    return {
+      id: optionId(item.id),
+      role: "option" as const,
+      tabIndex: item.id === tabbable ? 0 : -1,
+      "aria-selected": item.id === selectedId,
+      onClick: () => onSelect(item.id),
+      // A right click selects the item first, like a file list does. The menu acts on that item.
+      onContextMenu: (event: MouseEvent<HTMLElement>) => {
+        onSelect(item.id);
+        target.onContextMenu(event);
+      },
+      onKeyDown: target.onKeyDown,
+    };
+  };
 
   if (view === "grid") {
     return (

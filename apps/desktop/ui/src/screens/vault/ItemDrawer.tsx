@@ -3,9 +3,10 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import type { ItemSummaryView_Serialize as Item } from "../../bindings";
 import { useScreenT } from "../../i18n";
-import { ipc, isIpcFailure } from "../../ipc/client";
+import { ipc } from "../../ipc/client";
 import { useRemoteUnsupported } from "../../state/backendMode";
-import { AgentMadeBadge, Button, ConfirmDialog, EmptyState, EnvBadge, errorText, ErrorState, IconButton, KindIcon, RoleChip, SecretField, Skeleton, TtlRing, useToast } from "../../ui";
+import { AgentMadeBadge, Button, EmptyState, EnvBadge, ErrorState, IconButton, KindIcon, RoleChip, SecretField, Skeleton, TtlRing, useToast } from "../../ui";
+import { DeleteItemDialog } from "./DeleteItemDialog";
 import { ttlSpan } from "./filters";
 import { formatDateTime, isSessionKind, kindLabel } from "./kinds";
 import { HistoryDialog } from "./HistoryDialog";
@@ -53,7 +54,6 @@ function DrawerBody({ item, canEdit, canReveal, agentNames, operatorNames, onClo
   const [, navigate] = useLocation();
   const detail = useItemDetail(item.id);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   // Remote mode: copy needs the clipboard timer of this device and the history is not on the remote allowlist
   // (DEC-RM-14). The value can still be revealed.
@@ -70,21 +70,6 @@ function DrawerBody({ item, canEdit, canReveal, agentNames, operatorNames, onClo
       invalidateItems(queryClient);
     }
     return pickSecret(result.payload, key);
-  };
-
-  const remove = async () => {
-    setDeleting(true);
-    try {
-      await ipc.itemDelete(item.id);
-      toast.push({ tone: "success", title: tr("delete.done", { title: item.title }) });
-      setConfirmDelete(false);
-      invalidateItems(queryClient);
-      onClose();
-    } catch (error) {
-      toast.push({ tone: "error", title: tr("delete.fail"), detail: isIpcFailure(error) ? errorText(error.error) : undefined });
-    } finally {
-      setDeleting(false);
-    }
   };
 
   const info = detail.data;
@@ -210,16 +195,7 @@ function DrawerBody({ item, canEdit, canReveal, agentNames, operatorNames, onClo
         </div>
       )}
 
-      <ConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        tone="danger"
-        title={tr("delete.title", { title: item.title })}
-        description={tr("delete.body", { versions: info?.version ?? 1, workspace: item.workspace, env: item.environment })}
-        confirmLabel={tr("delete.confirm")}
-        onConfirm={() => void remove()}
-        loading={deleting}
-      />
+      <DeleteItemDialog item={item} open={confirmDelete} onOpenChange={setConfirmDelete} onDeleted={onClose} />
       <HistoryDialog open={historyOpen && !noHistory} onOpenChange={setHistoryOpen} item={item} canRestore={canEdit} />
     </aside>
   );

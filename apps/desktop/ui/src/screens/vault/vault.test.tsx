@@ -257,3 +257,58 @@ describe("vault browser", () => {
     await waitFor(() => expect(screen.queryByRole("listbox", { name: "Items" })).not.toBeInTheDocument());
   });
 });
+
+describe("vault item context menu", () => {
+  const menuItems = () => within(screen.getByRole("menu")).getAllByRole("menuitem").map((el) => el.textContent);
+
+  it("right click selects the item and offers open, copy, edit and delete", async () => {
+    open();
+    const row = await firstRow();
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 60 });
+    expect(await screen.findByRole("menu", { name: "Actions for Shop staging admin" })).toBeInTheDocument();
+    expect(menuItems()).toEqual(["Open details", "Copy: Username", "Copy: Password", "Copy: One-time code", "Edit", "Delete"]);
+    expect(row).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("heading", { name: "Shop staging admin" })).toBeInTheDocument();
+  });
+
+  it("copy uses the clipboard command of the drawer, with its toast", async () => {
+    const { fake } = open();
+    fireEvent.contextMenu(await firstRow(), { clientX: 40, clientY: 60 });
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Copy: Password" }));
+    await waitFor(() => expect(fake.calls.copied).toEqual([{ item: "it-stage", field: "password" }]));
+    expect(await screen.findByText(/Copied\. The clipboard clears/)).toBeInTheDocument();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("delete asks for the same confirm as the drawer and Cancel is first", async () => {
+    const { fake } = open();
+    await firstRow();
+    fireEvent.contextMenu(rows()[2] as HTMLElement, { clientX: 40, clientY: 60 });
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    const dialog = await screen.findByRole("dialog", { name: /^Delete / });
+    expect(fake.calls.deleted).toEqual([]);
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete item" }));
+    await waitFor(() => expect(fake.calls.deleted).toEqual(["it-user"]));
+    await waitFor(() => expect(rows()).toHaveLength(12));
+  });
+
+  it("the Menu key opens it on the focused item, Escape closes it and gives the focus back", async () => {
+    open();
+    const row = await firstRow();
+    row.focus();
+    fireEvent.keyDown(row, { key: "ContextMenu" });
+    const first = await screen.findByRole("menuitem", { name: "Open details" });
+    expect(first).toHaveFocus();
+    fireEvent.keyDown(first, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    expect(row).toHaveFocus();
+  });
+
+  it("viewer: open only, no copy, no edit, no delete", async () => {
+    open({ role: "viewer" });
+    fireEvent.contextMenu(await firstRow(), { clientX: 40, clientY: 60 });
+    await screen.findByRole("menu");
+    expect(menuItems()).toEqual(["Open details"]);
+  });
+});
