@@ -14,6 +14,8 @@
 //! - [`events`]: the live UI events as they go on the wire.
 //! - [`clients`]: the registry of enrolled desktops (`admin-clients.json`) of `cerberusd`.
 //! - [`bundle`]: the enrolment bundle that `cerberusd admin enroll` writes and the desktop reads.
+//! - [`wire`]: the admin route paths and the answers that are not IPC DTOs (`hello`, session,
+//!   error body).
 
 #![forbid(unsafe_code)]
 
@@ -25,3 +27,4 @@ pub mod events;
 pub mod handlers;
 pub mod remote;
 pub mod rpc;
+pub mod wire;

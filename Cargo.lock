@@ -870,6 +870,7 @@ version = "0.3.0"
 dependencies = [
  "axum",
  "bytes",
+ "cerberus-admin",
  "cerberus-core",
  "cerberus-crypto",
  "cerberus-ssh-agent",

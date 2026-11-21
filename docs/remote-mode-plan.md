@@ -1,6 +1,7 @@
 # Remote backend mode — phase 2 implementation plan
 
-- Design: [ADR-0034](adr/0034-remote-backend-mode.md), `docs/decisions.md` DEC-RM-1 to DEC-RM-14, threat model TB-10
+- Design: [ADR-0034](adr/0034-remote-backend-mode.md), `docs/decisions.md` DEC-RM-1 to DEC-RM-14 (build notes from
+  DEC-RM-15 on), threat model TB-10
   (`docs/security/threat-model.md`).
 - Written 2026-11-21 against `main` at `f748eb6`. Line numbers are from that tree; re-check them after rebasing on
   the `rustdesk` item kind change (step 0).
@@ -294,6 +295,13 @@ the vault CA):
 12. Log canary: the phrase and the `cas_` token never appear in the captured log (`api/tests/logging.rs` pattern).
 
 Done when: `cargo test -p cerberus-api` (all old tests unchanged plus `admin.rs`); `just deps-check`.
+
+As built (DEC-RM-19): core gained `VaultService::lock_epoch()` for the epoch binding; the shared answer types are in
+`cerberus-admin` `wire.rs` (`HelloView`, `SessionOpenedView`, `AdminErrorBody`, the paths); `AdminState::new(clients,
+limits).with_registry_file(path)` with `enroll`, `revoke(core, id)`, `reload_clients(core)`, `session_live(core, id)`,
+`sweep(core)`, and a sweeper task in `start`. The failure limit lives in `admin/mod.rs`. `DELETE` answers 204. The
+table adds 413 and 415. The log canary (group 12) is its own binary, `tests/admin_logging.rs`. Group 11's
+`agent_openapi_has_no_admin_path` is in `tests/openapi.rs`.
 
 ---
 

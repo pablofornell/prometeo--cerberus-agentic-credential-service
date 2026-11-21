@@ -70,6 +70,10 @@ pub struct Options {
     /// Run the vault on a clock that only the test moves (`Fixture::clock`). Tests that depend on
     /// elapsed time (rate limits, expiry) use it, so a loaded machine cannot change the outcome.
     pub manual_clock: bool,
+    /// Turn the admin API on (ADR-0034) with an empty registry. Implies `keep_ca` and `client_ca`.
+    pub admin: bool,
+    /// Admin limits other than the defaults.
+    pub admin_limits: Option<cerberus_api::AdminLimits>,
 }
 
 pub struct Fixture {
@@ -90,6 +94,8 @@ pub struct Fixture {
     pub state: AppState,
     /// Set when `Options::manual_clock` is on.
     pub clock: Option<cerberus_types::ManualClock>,
+    /// Set when `Options::admin` is on.
+    pub admin: Option<Arc<cerberus_api::AdminState>>,
 }
 
 pub fn op_ctx(owner: &OperatorContext) -> OperatorContext {
@@ -126,7 +132,11 @@ impl Fixture {
         Self::with(Options::default()).await
     }
 
-    pub async fn with(opts: Options) -> Self {
+    pub async fn with(mut opts: Options) -> Self {
+        if opts.admin {
+            opts.keep_ca = true;
+            opts.client_ca = true;
+        }
         let dir = tempfile::tempdir().expect("tempdir");
         let data_dir: PathBuf = dir.path().to_path_buf();
         let tls = TlsPaths::in_data_dir(&data_dir);
@@ -266,6 +276,15 @@ impl Fixture {
             config.client_ca_der = Some(ca_der.clone());
         }
         config.require_client_cert = opts.require_client_cert;
+        let admin = opts.admin.then(|| {
+            Arc::new(cerberus_api::AdminState::new(
+                cerberus_admin::clients::AdminClients::default(),
+                opts.admin_limits.clone().unwrap_or_default(),
+            ))
+        });
+        config.admin = admin.as_ref().map(|state| cerberus_api::AdminConfig {
+            state: Arc::clone(state),
+        });
         let state = AppState::new(core.clone(), &config);
         let server = start(&config, state.clone(), cerberus_api::router(&state))
             .await
@@ -289,6 +308,7 @@ impl Fixture {
             item: item.summary.id,
             state,
             clock: manual,
+            admin,
         }
     }
 

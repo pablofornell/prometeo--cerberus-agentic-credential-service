@@ -160,3 +160,21 @@ fn schema_names_properties_required_and_enums_match() {
     }
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
+
+/// ADR-0034 point 5.5, DEC-RM-12: the admin routes are not part of the agent contract.
+#[test]
+fn agent_openapi_has_no_admin_path() {
+    let got = generated();
+    let paths = keys(&got["paths"]);
+    assert!(!paths.is_empty());
+    assert!(
+        paths.iter().all(|path| !path.contains("admin")),
+        "{paths:?}"
+    );
+    assert!(
+        keys(&draft()["paths"])
+            .iter()
+            .all(|path| !path.contains("admin")),
+        "the draft has no admin path either"
+    );
+}

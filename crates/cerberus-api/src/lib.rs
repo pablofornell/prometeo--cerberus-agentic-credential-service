@@ -6,7 +6,11 @@
 //! 2. Make an [`ApiConfig`] and an [`AppState`]. Get the router with [`router`] (add MCP with the
 //!    `extra` argument of [`app`]).
 //! 3. [`start`] it (or [`serve`] with a shutdown future).
+//!
+//! `cerberusd` may also turn on the admin API under `/admin/v1` ([`admin`], ADR-0034) by putting
+//! an [`AdminConfig`] in [`ApiConfig::admin`]. The desktop app never does.
 
+pub mod admin;
 pub mod config;
 pub mod convert;
 pub mod error;
@@ -22,6 +26,7 @@ pub mod tls;
 use axum::Router;
 use axum::middleware;
 
+pub use admin::{AdminConfig, AdminLimits, AdminState};
 pub use config::{ApiConfig, ApiLimits, AppState, DEFAULT_PORT};
 pub use error::ApiError;
 pub use layers::{AgentCtx, ConnInfo, ReqId};
@@ -33,15 +38,19 @@ pub use tls::{CaExport, LocalCa, LocalCaIssuer, TlsPaths};
 /// Version of this crate, taken from `Cargo.toml`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// The full REST app: `/v1` with its fallbacks, `extra` routes merged in (for example `/mcp`), then the
-/// layers every request passes: request ID and headers, then the Host and Origin check.
+/// The full REST app: `/v1` with its fallbacks, `extra` routes merged in (for example `/mcp`), the
+/// admin routes when [`AppState::admin`] is set, then the layers every request passes: request ID
+/// and headers, then the Host and Origin check (they apply to `/admin` too, ADR-0034 point 2.2).
 ///
 /// Wrap the routes of `extra` that need a token with [`agent_layers`] first.
 pub fn app(state: &AppState, extra: Router) -> Router {
-    routes::with_fallbacks(routes::v1(state))
+    let mut app = routes::with_fallbacks(routes::v1(state))
         .with_state(state.clone())
-        .merge(extra)
-        .layer(middleware::from_fn_with_state(state.clone(), layers::guard))
+        .merge(extra);
+    if state.admin().is_some() {
+        app = app.merge(admin::router(state));
+    }
+    app.layer(middleware::from_fn_with_state(state.clone(), layers::guard))
         .layer(middleware::from_fn(layers::envelope))
 }
 

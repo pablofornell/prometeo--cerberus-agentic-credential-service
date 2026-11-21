@@ -221,6 +221,15 @@ impl VaultService {
         kind_of(self.inner.kind.load(Ordering::SeqCst))
     }
 
+    /// The lock epoch: it grows at every lock request (manual, idle, panic, OS, quit, wipe) and
+    /// never otherwise. An unlock does not change it, so "unlocked and the same epoch as when I
+    /// looked" means "the same unlocked session". The admin API binds its sessions to it
+    /// (ADR-0034 point 6.2).
+    #[must_use]
+    pub fn lock_epoch(&self) -> u64 {
+        self.inner.epoch.load(Ordering::SeqCst)
+    }
+
     /// Events for the UI and SSE.
     #[must_use]
     pub fn subscribe(&self) -> broadcast::Receiver<CoreEvent> {

@@ -77,7 +77,7 @@ deps-check:
         "cerberus-core": ["cerberus-store", "cerberus-crypto", "cerberus-types"],
         "cerberus-ssh-agent": ["cerberus-core", "cerberus-crypto", "cerberus-types"],
         "cerberus-admin": ["cerberus-core", "cerberus-store", "cerberus-crypto", "cerberus-types"],
-        "cerberus-api": ["cerberus-core", "cerberus-crypto", "cerberus-types", "cerberus-ssh-agent"],
+        "cerberus-api": ["cerberus-admin", "cerberus-core", "cerberus-crypto", "cerberus-types", "cerberus-ssh-agent"],
         "cerberus-client": ["cerberus-types"],
         "cerberus-mcp": ["cerberus-api", "cerberus-core", "cerberus-client", "cerberus-types"],
         "cerberusd": ["cerberus-api", "cerberus-mcp", "cerberus-core", "cerberus-store", "cerberus-crypto", "cerberus-types"],

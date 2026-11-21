@@ -22,7 +22,7 @@ use cerberus_core::{CoreEvent, VaultService};
 use cerberus_types::VaultStateKind;
 
 use crate::config::{ApiConfig, AppState};
-use crate::idle::{Activity, Closed, ConnActivity, Pending};
+use crate::idle::{Activity, Closed, ConnActivity, ConnOwner, Pending};
 use crate::layers::ConnInfo;
 use crate::tls::{
     LeafResolver, LocalCa, TlsPaths, custom_from_stored, leaf_names, renew_leaf_if_needed,
@@ -47,6 +47,9 @@ pub enum ServerError {
     /// The bind list is empty.
     #[error("no bind address")]
     NoBind,
+    /// The admin API needs client certificates verified against the vault CA (ADR-0034).
+    #[error("the admin API needs a client CA")]
+    AdminNeedsClientCa,
 }
 
 /// A running server. Drop does not stop it: call [`RunningServer::shutdown`].
@@ -58,6 +61,8 @@ pub struct RunningServer {
     graceful: Arc<GracefulShutdown>,
     /// Set to true to cut every connection that is still open (after the grace time).
     cut: tokio::sync::watch::Sender<bool>,
+    /// Ends admin sessions past their limits (only with the admin API on).
+    sweeper: Option<JoinHandle<()>>,
 }
 
 impl RunningServer {
@@ -161,6 +166,9 @@ impl RunningServer {
     /// Stops accepting, ends SSE streams, and waits (up to 10 s) for open requests.
     pub async fn shutdown(self) {
         self.state.begin_shutdown();
+        if let Some(sweeper) = &self.sweeper {
+            sweeper.abort();
+        }
         for handle in &self.accept {
             handle.abort();
         }
@@ -286,6 +294,7 @@ pub async fn start(
         })
         .collect();
     tracing::info!(?addrs, "agent API listening (TLS 1.3 only)");
+    let sweeper = crate::admin::spawn_sweeper(state.clone());
     Ok(RunningServer {
         addrs,
         resolver,
@@ -293,6 +302,7 @@ pub async fn start(
         accept,
         graceful,
         cut,
+        sweeper,
     })
 }
 
@@ -433,8 +443,10 @@ async fn serve_connection(
     // hyper starts its own header timeout only after it knows the protocol, and HTTP/2 PING
     // frames keep an h2 connection, so the request deadlines are kept here (AUD-4).
     let core = state.core();
-    let owner_live = |agent: cerberus_types::AgentId, key: cerberus_types::AgentKeyId| {
-        core.auth().key_active(&agent, &key, core.clock().now())
+    let admin = state.admin();
+    let owner_live = |owner: ConnOwner| match owner {
+        ConnOwner::Agent(agent, key) => core.auth().key_active(&agent, &key, core.clock().now()),
+        ConnOwner::Admin(session) => admin.is_some_and(|admin| admin.session_live(core, session)),
     };
     tokio::select! {
         result = watched => {
@@ -448,7 +460,7 @@ async fn serve_connection(
                 Closed::NotAuthenticated => "no authenticated request in time",
                 Closed::Idle => "idle",
                 Closed::SendStalled => "the client did not take a response in time",
-                Closed::OwnerGone => "the key of the connection is no longer valid",
+                Closed::OwnerGone => "the key or admin session of the connection is no longer valid",
             };
             tracing::debug!(%peer, reason, "connection closed");
         }

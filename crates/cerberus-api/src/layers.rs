@@ -117,7 +117,7 @@ pub async fn guard(State(state): State<AppState>, req: Request, next: Next) -> R
     next.run(req).await
 }
 
-fn bearer_token(headers: &HeaderMap) -> Zeroizing<String> {
+pub(crate) fn bearer_token(headers: &HeaderMap) -> Zeroizing<String> {
     let text = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())

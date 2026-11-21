@@ -30,8 +30,8 @@ Reading rules:
 An arrow points from a crate to a crate it may use. `just deps-check` enforces the table in ADR-0024.
 
 `cerberus-admin` (ADR-0034, DEC-RM-6) holds the IPC and admin DTOs and `IpcError`, with no transport. It uses
-`cerberus-core`, `cerberus-store`, `cerberus-crypto` and `cerberus-types`. `cerberus-desktop` uses it; ADR-0034 also
-lets `cerberus-api` and `cerberusd` use it for the admin API, and `cerberus-desktop` use `cerberus-client`.
+`cerberus-core`, `cerberus-store`, `cerberus-crypto` and `cerberus-types`. `cerberus-desktop` and `cerberus-api` (the
+admin API, section 5) use it; ADR-0034 also lets `cerberusd` use it, and `cerberus-desktop` use `cerberus-client`.
 
 ---
 
@@ -1214,6 +1214,41 @@ has `from_core`, `with_retry_after`, `body` and the one `IntoResponse`. The extr
 `export`, `to_issued`), `IssuedCert` (`sha256`, `cert_pem`, `key_pem`), `CaExport::from_der`, `LocalCaIssuer` (the core
 `CaIssuer`), `TlsPaths::in_data_dir`, `leaf_names`, `write_leaf`, `read_leaf`, `leaf_needs_renewal`, `renew_leaf_if_needed`,
 `LeafResolver`, `server_config`, `spki_pin`. The wire DTOs are in `cerberus_api::wire`.
+
+**Admin API (ADR-0034, remote-mode plan step 5, DEC-RM-19).** `cerberus-api` also uses `cerberus-admin`. Module
+`cerberus_api::admin`, mounted by `app()` only when `ApiConfig::admin` is `Some` (default `None`; the desktop never sets
+it). `ApiConfig::validate` refuses `admin` without `client_ca_der` (`ServerError::AdminNeedsClientCa`).
+
+```rust
+pub struct AdminConfig { pub state: Arc<AdminState> }          // ApiConfig::admin: Option<AdminConfig>
+pub struct AdminLimits {                                         // Default: the values of ADR-0034
+    pub session_idle_seconds: u32, pub session_max_seconds: u32, // 900, 43 200
+    pub max_sessions: usize, pub max_sessions_per_enrolment: usize, pub max_streams_per_session: usize, // 4, 2, 2
+    pub failures_allowed: u32, pub failure_window_seconds: u32, pub failure_block_seconds: u32,           // 5, 900, 900
+}
+impl AdminState {
+    pub fn new(clients: AdminClients, limits: AdminLimits) -> Self;
+    pub fn with_registry_file(self, path: PathBuf) -> Self;     // enroll / revoke save it; reload_clients reads it
+    pub fn enroll(&self, client: AdminClient) -> Result<(), ClientsError>;
+    pub async fn revoke(&self, core: &VaultService, id: EnrolmentId) -> Result<bool, ClientsError>; // ends its sessions, audits
+    pub async fn reload_clients(&self, core: &VaultService) -> Result<(), ClientsError>;
+    pub fn find_live(&self, cert_sha256: &[u8; 32], now: Timestamp) -> Option<AdminClient>;
+    pub fn clients(&self) -> AdminClients; pub fn session_count(&self) -> usize;
+    pub fn session_live(&self, core: &VaultService, id: SessionId) -> bool;
+    pub async fn sweep(&self, core: &VaultService);
+}
+impl AppState { pub fn admin(&self) -> Option<&Arc<AdminState>>; }
+pub fn status_of(ipc_code: &str) -> u16;                         // the admin status table
+```
+
+Routes (paths in `cerberus_admin::wire`): `GET /admin/v1/hello` (`HelloView`), `POST /admin/v1/session` (body
+`VaultUnlockArgs`, 8 KiB; answer `SessionOpenedView`), `DELETE /admin/v1/session` (204), `POST /admin/v1/rpc/{command}`
+(`application/json`, 16 KiB, 1 MiB for `item_create` / `item_update`; answer the IPC result JSON), `GET /admin/v1/events`
+(SSE, `event: <WireEvent::name()>`, `data: <WireEvent JSON>`, `: keep-alive` every 15 s). Errors are
+`AdminErrorBody { request_id, error: IpcError }`; `origin_refused` and `route_not_found` keep the ADR-0021 shape. The
+connection of a session request is bound to the session (`idle::ConnOwner::Admin`) and closes within about 1 s after
+the session ends. A sweeper task (started by `start`) ends sessions at every vault state change and every 15 s. Core
+gained `VaultService::lock_epoch()` for the session binding.
 
 ---
 

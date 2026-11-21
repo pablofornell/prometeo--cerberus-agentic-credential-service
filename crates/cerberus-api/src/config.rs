@@ -9,6 +9,7 @@ use cerberus_core::{AgentApi, VaultService};
 use cerberus_ssh_agent::SshBridge;
 use tokio::sync::watch;
 
+use crate::admin::{AdminConfig, AdminState};
 use crate::idle::Owners;
 use crate::server::ServerError;
 use crate::tls::{TlsPaths, leaf_names};
@@ -94,6 +95,9 @@ pub struct ApiConfig {
     pub require_client_cert: bool,
     /// Limits and timeouts.
     pub limits: ApiLimits,
+    /// The admin API under `/admin/v1` (ADR-0034). `None` (the default, and always on the
+    /// desktop): no `/admin` route exists. It needs `client_ca_der`.
+    pub admin: Option<AdminConfig>,
 }
 
 impl ApiConfig {
@@ -110,13 +114,16 @@ impl ApiConfig {
             client_ca_der: None,
             require_client_cert: false,
             limits: ApiLimits::default(),
+            admin: None,
         }
     }
 
     /// Checks the rules of ADR-0023: a non-loopback address needs mandatory client certificates.
+    /// The admin API needs client certificates verified against the vault CA (ADR-0034 point 4).
     ///
     /// # Errors
-    /// [`ServerError::NoBind`] or [`ServerError::LanBindNeedsMtls`].
+    /// [`ServerError::NoBind`], [`ServerError::LanBindNeedsMtls`] or
+    /// [`ServerError::AdminNeedsClientCa`].
     pub fn validate(&self) -> Result<(), ServerError> {
         if self.bind.is_empty() {
             return Err(ServerError::NoBind);
@@ -124,6 +131,9 @@ impl ApiConfig {
         let lan = self.bind.iter().any(|addr| !addr.ip().is_loopback());
         if lan && !(self.require_client_cert && self.client_ca_der.is_some()) {
             return Err(ServerError::LanBindNeedsMtls);
+        }
+        if self.admin.is_some() && self.client_ca_der.is_none() {
+            return Err(ServerError::AdminNeedsClientCa);
         }
         Ok(())
     }
@@ -139,6 +149,8 @@ struct Inner {
     shutdown: watch::Sender<bool>,
     /// The shared ssh-agent bridge of the core (T22). Holding it keeps its sockets open.
     ssh: SshBridge,
+    /// The admin API state, when the host turned it on (ADR-0034).
+    admin: Option<Arc<AdminState>>,
 }
 
 /// The state of every handler. Cheap to clone.
@@ -177,6 +189,7 @@ impl AppState {
                 owners: Owners::new(config.limits.max_connections_per_agent),
                 shutdown,
                 ssh,
+                admin: config.admin.as_ref().map(|admin| Arc::clone(&admin.state)),
             }),
         }
     }
@@ -191,6 +204,12 @@ impl AppState {
     #[must_use]
     pub fn ssh_bridge(&self) -> &SshBridge {
         &self.inner.ssh
+    }
+
+    /// The admin API state, when the admin API is on (ADR-0034).
+    #[must_use]
+    pub fn admin(&self) -> Option<&Arc<AdminState>> {
+        self.inner.admin.as_ref()
     }
 
     /// The Agent API of the vault service.

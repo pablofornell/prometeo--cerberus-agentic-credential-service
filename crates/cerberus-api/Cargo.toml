@@ -12,10 +12,12 @@ workspace = true
 
 [dependencies]
 cerberus-types = { workspace = true, features = ["openapi"] }
+cerberus-admin.workspace = true
 cerberus-crypto.workspace = true
 cerberus-core.workspace = true
 cerberus-ssh-agent.workspace = true
 axum.workspace = true
+bytes.workspace = true
 data-encoding.workspace = true
 futures-util.workspace = true
 gethostname.workspace = true
@@ -40,7 +42,6 @@ x509-parser.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
-bytes.workspace = true
 cerberus-store.workspace = true
 hyper = { workspace = true, features = ["client"] }
 rustls = { workspace = true, features = ["tls12"] }

@@ -95,6 +95,16 @@ impl IpcError {
         )
     }
 
+    /// The admin call came without a client certificate whose hash is a live enrolment
+    /// (ADR-0034 point 4.1).
+    #[must_use]
+    pub fn admin_cert_required() -> Self {
+        Self::new(
+            "admin_cert_required",
+            "this call needs an enrolled admin client certificate",
+        )
+    }
+
     /// The arguments are not the JSON the command takes (a bad shape or an unknown field). The
     /// text never quotes the input: it can hold a secret.
     #[must_use]

@@ -12,7 +12,9 @@
 //!   client that never reads (or keeps an HTTP/2 window of 0) cannot hold it. A stream that waits
 //!   for its own next event does not count (NEW-6).
 //! - An authenticated connection is closed when the key of its first authenticated request is
-//!   revoked or expires, or its agent is no longer active (NEW-6).
+//!   revoked or expires, or its agent is no longer active (NEW-6). A connection of an admin
+//!   session (ADR-0034) is closed when that session ends: closed elsewhere, expired, voided by a
+//!   lock, or its enrolment revoked.
 //!
 //! [`Pending`] holds the connections that have not authenticated. When their budget or the whole
 //! server is full, a new connection evicts the oldest one of the busiest source, so silent or
@@ -34,7 +36,17 @@ use cerberus_types::{AgentId, AgentKeyId, Stopwatch};
 use hyper::body::{Frame, SizeHint};
 use tokio::sync::Notify;
 
+use crate::admin::SessionId;
 use crate::config::ApiLimits;
+
+/// Who an authenticated connection belongs to. [`watch`] closes it when the owner is gone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ConnOwner {
+    /// The agent and key of its first authenticated agent request (NEW-6).
+    Agent(AgentId, AgentKeyId),
+    /// The admin session of its last admin request with a session (ADR-0034).
+    Admin(SessionId),
+}
 
 const UNAUTHENTICATED: u8 = 0;
 const AUTHENTICATED: u8 = 1;
@@ -77,8 +89,9 @@ pub(crate) struct Activity {
     admitted_ms: AtomicU64,
     /// Woken when the connection is evicted.
     evict: Notify,
-    /// The agent and key of the first authenticated request, set by [`Owners::bind`].
-    owner: Mutex<Option<(AgentId, AgentKeyId)>>,
+    /// The owner, set by [`Owners::bind`] (the agent of the first authenticated agent request)
+    /// or [`Owners::bind_admin`].
+    owner: Mutex<Option<ConnOwner>>,
     /// True once the connection has ended (it no longer counts for [`Owners`]).
     closed: AtomicBool,
     /// Responses that wait for hyper to pull more of them (NEW-6).
@@ -119,7 +132,7 @@ impl Activity {
         self.closed.load(Ordering::Acquire)
     }
 
-    fn owner(&self) -> Option<(AgentId, AgentKeyId)> {
+    fn owner(&self) -> Option<ConnOwner> {
         *self.owner.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
@@ -314,12 +327,12 @@ pub(crate) enum Closed {
 }
 
 /// Ends when a deadline of the module rules passes. Bytes and HTTP/2 control frames never move a
-/// deadline; only requests do. `owner_live` says whether a key of an agent can still pass a token
-/// check.
+/// deadline; only requests do. `owner_live` says whether the owner of the connection is still
+/// there: a key of an agent can still pass a token check, or an admin session is still live.
 pub(crate) async fn watch(
     activity: Arc<Activity>,
     limits: &ApiLimits,
-    owner_live: &(dyn Fn(AgentId, AgentKeyId) -> bool + Send + Sync),
+    owner_live: &(dyn Fn(ConnOwner) -> bool + Send + Sync),
 ) -> Closed {
     let header = millis(limits.header_timeout);
     let auth = millis(limits.auth_timeout);
@@ -331,8 +344,8 @@ pub(crate) async fn watch(
     loop {
         let now = activity.now_ms();
         let wait = if activity.state() == AUTHENTICATED {
-            if let Some((agent, key)) = activity.owner()
-                && !owner_live(agent, key)
+            if let Some(owner) = activity.owner()
+                && !owner_live(owner)
             {
                 return Closed::OwnerGone;
             }
@@ -541,8 +554,33 @@ impl Owners {
             return false;
         }
         list.push(Arc::downgrade(activity));
-        *owner = Some((agent, key));
+        *owner = Some(ConnOwner::Agent(agent, key));
         true
+    }
+
+    /// Binds the connection to an admin session, so it closes when the session ends. It does not
+    /// count against an agent's connections. A connection that an agent owns stays the agent's;
+    /// one of an earlier admin session moves to the new session.
+    pub fn bind_admin(&self, activity: &Arc<Activity>, session: SessionId) {
+        let mut owner = activity
+            .owner
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if !matches!(*owner, Some(ConnOwner::Agent(..))) {
+            *owner = Some(ConnOwner::Admin(session));
+        }
+    }
+
+    /// Unbinds the connection from an admin session that the client closed itself, so the
+    /// connection is not cut under the answer of that close. It keeps the normal idle deadline.
+    pub fn unbind_admin(&self, activity: &Arc<Activity>, session: SessionId) {
+        let mut owner = activity
+            .owner
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if *owner == Some(ConnOwner::Admin(session)) {
+            *owner = None;
+        }
     }
 }
 
@@ -651,7 +689,7 @@ mod tests {
         for ms in [0, 1, 4] {
             let closed = tokio::time::timeout(
                 Duration::from_secs(2),
-                watch(Activity::new(), &limits_of(ms), &|_, _| true),
+                watch(Activity::new(), &limits_of(ms), &|_| true),
             )
             .await
             .expect("watch ends");
@@ -677,16 +715,14 @@ mod tests {
         activity.handshake_done();
         let early = tokio::time::timeout(
             Duration::from_millis(100),
-            watch(Arc::clone(&activity), &limits, &|_, _| true),
+            watch(Arc::clone(&activity), &limits, &|_| true),
         )
         .await;
         assert!(early.is_err(), "closed right after the wait: {early:?}");
-        let closed = tokio::time::timeout(
-            Duration::from_secs(2),
-            watch(activity, &limits, &|_, _| true),
-        )
-        .await
-        .expect("closed at the deadline");
+        let closed =
+            tokio::time::timeout(Duration::from_secs(2), watch(activity, &limits, &|_| true))
+                .await
+                .expect("closed at the deadline");
         assert_eq!(closed, Closed::NotAuthenticated);
     }
 
@@ -729,10 +765,42 @@ mod tests {
         assert_eq!(conns[2].owner(), None);
         // Another agent is not affected; a bound connection is not counted twice.
         assert!(owners.bind(&conns[0], AgentId::generate(), AgentKeyId::generate()));
-        assert_eq!(conns[0].owner(), Some((agent, key)));
+        assert_eq!(conns[0].owner(), Some(ConnOwner::Agent(agent, key)));
         assert!(owners.bind(&Activity::new(), AgentId::generate(), key));
         conns[0].close();
         assert!(owners.bind(&conns[2], agent, key));
+    }
+
+    /// ADR-0034: an admin session owns a connection outside the agent cap; a newer session takes
+    /// it over, an agent's connection stays the agent's, and only its own session unbinds it.
+    #[tokio::test]
+    async fn an_admin_session_owns_its_connection_until_it_ends() {
+        let owners = Owners::new(1);
+        let (first, second) = (SessionId::generate(), SessionId::generate());
+        let conn = Activity::new();
+        owners.bind_admin(&conn, first);
+        assert_eq!(conn.owner(), Some(ConnOwner::Admin(first)));
+        owners.bind_admin(&conn, second);
+        assert_eq!(conn.owner(), Some(ConnOwner::Admin(second)));
+        owners.unbind_admin(&conn, first);
+        assert_eq!(conn.owner(), Some(ConnOwner::Admin(second)));
+        let agent_conn = Activity::new();
+        assert!(owners.bind(&agent_conn, AgentId::generate(), AgentKeyId::generate()));
+        owners.bind_admin(&agent_conn, first);
+        assert!(matches!(agent_conn.owner(), Some(ConnOwner::Agent(..))));
+        // The watcher closes the connection once its session is gone.
+        let _running = conn.authenticated();
+        let closed = tokio::time::timeout(
+            Duration::from_secs(5),
+            watch(Arc::clone(&conn), &limits_of(60_000), &|owner| {
+                owner != ConnOwner::Admin(second)
+            }),
+        )
+        .await
+        .expect("closed");
+        assert_eq!(closed, Closed::OwnerGone);
+        owners.unbind_admin(&conn, second);
+        assert_eq!(conn.owner(), None);
     }
 
     /// NEW-6: a response waits for hyper from when it is handed over until hyper pulls it, and

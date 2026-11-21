@@ -1402,6 +1402,36 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   scratch buffer, which is not zeroized (the same as every IPC secret). (`crates/cerberus-admin/src/clients.rs`,
   `bundle.rs`)
 
+- **DEC-RM-19** — RM — Admin HTTP module, as built (plan step 5). (a) Core gets `VaultService::lock_epoch()` (the
+  existing epoch that grows at every lock request): a session stores the epoch read **before** its phrase check, the
+  open fails `vault_locked` when the epoch moved or the vault is not unlocked after it, and every check wants the vault
+  unlocked at the same epoch, so no session survives a lock or a new unlock. (b) The answers that are not IPC DTOs live
+  in `cerberus-admin` `wire.rs`, so the desktop (step 8) decodes the same types: route paths, `HelloView {
+  server_version, admin_protocol, vault_state, remote_commands }`, `SessionOpenedView { token, session, idle_seconds,
+  max_seconds }`, `AdminErrorBody { request_id, error }`, `SESSION_TOKEN_PREFIX`; plus `IpcError::admin_cert_required`.
+  (c) `AdminState::new(clients, limits)` + `with_registry_file(path)`; `enroll`, `revoke(core, id)` (ends the
+  enrolment's sessions, audits `admin.session_close` `revoked` and `admin.client_revoke`; a failed save keeps the revoke
+  in memory and returns the error), `reload_clients(core)`, `session_live(core, id)` (also wants the enrolment live, so
+  an expiring certificate ends its stream and connections), `sweep(core)`. A sweeper task, started by `start` and
+  stopped by `shutdown`, sweeps at every vault state change and every 15 s; a request also ends a session it finds
+  past a limit. The failure limit is in `admin/mod.rs` (no separate file). (d) Caps: at the enrolment cap the oldest
+  session of that enrolment ends; at the daemon cap the oldest session of all ends (reason `closed`), so a new login
+  always works. (e) Idle: every session `rpc` call and `DELETE` resets the idle limit and counts as operator activity,
+  except `request_list_pending` (the desktop reads it in the background) and the event stream, so an unattended
+  desktop still reaches its idle limit. (f) Status table as the plan, plus `payload_too_large` 413 and
+  `unsupported_media_type` 415, then the ADR-0021 status of an agent code with the same name, else 500. `rpc` and
+  `session` bodies must be `application/json`. (g) Session open order: device limit (429 before any body or KDF) →
+  body (8 KiB, zeroizing buffer that never grows) → `operator_id` must be the enrolment's (`403 forbidden`) → sealed:
+  `unlock_with_phrase`, unlocked: `verify_operator_phrase`, locking: `vault_locked`. Only `bad_credentials` counts in
+  the device limit; a success clears it. A token over another certificate is refused but does not end the session.
+  (h) `DELETE` answers 204 and unbinds its own connection, so the answer is not cut. A connection is marked
+  authenticated (and bound to the session, `idle::ConnOwner::Admin`) only by requests with a live session and by a
+  successful open; device-only calls keep the unauthenticated deadlines. (i) The event stream sends the core events
+  through `events::from_core` only; `PendingCountChanged` is not sent by the server (core has no such event; the
+  desktop counts with `request_list_pending`, as its local pump does). A third stream of a session is `429
+  rate_limited`. (j) `admin.session_close` rows written while sealed (reason `lock`) keep no details (DEC-RM-17 d).
+  (`crates/cerberus-api/src/admin/`, `tests/admin.rs`, `tests/admin_logging.rs`)
+
 ## RD — RustDesk connections (2026-11-21)
 
 - **DEC-RD-1** — New item kind `rustdesk` (Rust `ItemKind::Rustdesk`, wire value `rustdesk`) for a machine reached with
