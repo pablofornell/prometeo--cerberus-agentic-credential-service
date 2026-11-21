@@ -400,14 +400,18 @@ async fn admin_enroll(
         Ok(found) => found,
         Err(reply) => return reply,
     };
+    let not_owner = || {
+        Reply::failure(
+            ErrorCode::Forbidden.as_str(),
+            "an enrolment needs the passphrase of an owner",
+        )
+    };
+    // The stored role first, so a viewer spends no KDF; the session role decides below.
     if !operators
         .iter()
         .any(|op| op.id == owner_id && op.role == OperatorRole::Owner)
     {
-        return Reply::failure(
-            ErrorCode::Forbidden.as_str(),
-            "an enrolment needs the passphrase of an owner",
-        );
+        return not_owner();
     }
     let ctx = match core.verify_operator_phrase(owner_id, phrase).await {
         Ok(ctx) => ctx,
@@ -425,6 +429,11 @@ async fn admin_enroll(
         }
         Err(error) => return refused_with("enrolment refused", &error),
     };
+    // The role of the live session, not the one stored in the key slots: a header MAC failure
+    // makes the session viewer although the slot says owner (DEC-FIX5-4, DEC-RM-22).
+    if ctx.role != OperatorRole::Owner {
+        return not_owner();
+    }
     let operator = match request.operator.as_deref() {
         None => owner_id,
         Some(wanted) => match operators.iter().find(|op| op.label == wanted) {
@@ -561,7 +570,8 @@ async fn admin_revoke(context: &SocketContext, request: Request) -> Reply {
             Err(error) => Reply::failure(
                 ErrorCode::Internal.as_str(),
                 &format!(
-                    "revoked until the daemon stops, but the registry could not be saved: {error}"
+                    "revoked until the daemon stops, but the registry could not be saved: {error}; \
+                     fix the cause and revoke again to save it"
                 ),
             ),
         },
@@ -703,12 +713,18 @@ where
     })
 }
 
-/// Connects to the socket of a running daemon.
+/// Connects to the socket of a running daemon. Only "no socket file" (`ENOENT`) and "nobody
+/// listens" (`ECONNREFUSED`, a stale file) mean that no daemon runs: any other error (a denied
+/// permission, a bad path) is [`UnlockError::Socket`], so `cerberusd admin` never edits the
+/// registry file under a daemon that runs (DEC-RM-22).
 pub(crate) async fn connect(socket: &Path) -> Result<UnixStream, UnlockError> {
     UnixStream::connect(socket)
         .await
-        .map_err(|_| UnlockError::NotRunning {
-            path: socket.to_path_buf(),
+        .map_err(|error| match error.kind() {
+            io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused => UnlockError::NotRunning {
+                path: socket.to_path_buf(),
+            },
+            _ => UnlockError::Socket(error),
         })
 }
 
@@ -781,6 +797,121 @@ mod tests {
         let long = vec![b'a'; MAX_REQUEST_BYTES as usize + 10];
         let mut over: &[u8] = &long;
         assert!(read_request_line(&mut over).await.is_err());
+    }
+
+    const OWNER_PHRASE: &str = "fake owner phrase for this test";
+    const VIEWER_PHRASE: &str = "fake viewer phrase for this test";
+
+    /// A vault in `dir` with an owner (`owner`) and a viewer (`ops`), sealed. Gives the service
+    /// and the viewer's ID.
+    async fn sealed_vault_with_a_viewer(dir: &Path) -> (VaultService, OperatorId) {
+        use cerberus_api::tls::{LocalCaIssuer, TlsPaths};
+        use cerberus_core::{CoreConfig, NewVault, OperatorContext};
+        use cerberus_store::{OpenOptions, Store};
+        use cerberus_types::{Clock, LockReason, RequestId, SystemClock};
+
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let store = Store::open(
+            OpenOptions {
+                path: dir.join("vault.cerberus"),
+                create: true,
+            },
+            Arc::clone(&clock),
+        )
+        .await
+        .unwrap();
+        let core = VaultService::open(
+            store,
+            clock,
+            CoreConfig {
+                approvals_available: true,
+                idle_lock_default: None,
+                data_dir: dir.to_path_buf(),
+                ca_issuer: Arc::new(LocalCaIssuer::new(TlsPaths::in_data_dir(dir), Vec::new())),
+            },
+        )
+        .await
+        .unwrap();
+        let created = core
+            .create_vault(NewVault {
+                owner_label: "owner".to_owned(),
+                phrase: SecretString::new(OWNER_PHRASE.to_owned()),
+                kdf: cerberus_crypto::KdfParams::new(19_456, 1, 1).unwrap(),
+                host_names: vec![],
+            })
+            .await
+            .unwrap();
+        let owner = OperatorContext {
+            operator_id: created.owner_id,
+            role: OperatorRole::Owner,
+            request_id: RequestId::generate(),
+        };
+        let viewer = core
+            .add_operator(
+                &owner,
+                "ops".to_owned(),
+                OperatorRole::Viewer,
+                SecretString::new(VIEWER_PHRASE.to_owned()),
+            )
+            .await
+            .unwrap();
+        core.lock(LockReason::Manual).await.unwrap();
+        (core, viewer)
+    }
+
+    /// DEC-RM-22: an enrolment needs the owner role of the live session. A slot role edited in
+    /// the file to `owner` fails the header MAC, so the session is viewer (DEC-FIX5-4); the stored
+    /// role alone must not let that operator enrol a desktop.
+    #[tokio::test]
+    async fn an_enrolment_needs_the_owner_role_of_the_session_not_of_the_slot() {
+        use cerberus_store::{OpenOptions, Store};
+        use cerberus_types::SystemClock;
+
+        let dir = tempfile::tempdir().unwrap();
+        let (core, viewer) = sealed_vault_with_a_viewer(dir.path()).await;
+        let raw = Store::open(
+            OpenOptions {
+                path: dir.path().join("vault.cerberus"),
+                create: false,
+            },
+            Arc::new(SystemClock),
+        )
+        .await
+        .unwrap();
+        let mut row = raw
+            .key_slots()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == viewer)
+            .unwrap();
+        row.role = OperatorRole::Owner;
+        let mut tx = raw.begin().await.unwrap();
+        tx.upsert_slot(&row).await.unwrap();
+        tx.commit().await.unwrap();
+        raw.close().await;
+        let ctx = core
+            .unlock_with_phrase(viewer, SecretString::new(VIEWER_PHRASE.to_owned()))
+            .await
+            .unwrap();
+        assert_eq!(ctx.role, OperatorRole::Viewer, "the header MAC failed");
+        let admin = AdminState::new(
+            AdminClients::default(),
+            cerberus_api::AdminLimits::default(),
+        );
+        let request: Request = serde_json::from_value(serde_json::json!({
+            "op": "admin_enroll",
+            "owner": "ops",
+            "label": "laptop",
+            "url": "https://localhost:7373",
+            "phrase": VIEWER_PHRASE,
+        }))
+        .unwrap();
+        let reply = admin_enroll(&core, Some(&admin), request).await;
+        assert!(!reply.ok, "{reply:?}");
+        assert_eq!(reply.error.as_deref(), Some("forbidden"));
+        assert!(reply.bundle.is_none());
+        assert!(admin.clients().list().is_empty());
     }
 
     #[test]

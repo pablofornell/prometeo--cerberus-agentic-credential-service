@@ -89,21 +89,45 @@ pub enum DaemonError {
     },
 }
 
-/// Loads the admin client registry. A wider mode than `0600` stops the start (ADR-0034 point 3.5).
-fn load_admin(data_dir: &Path, config: &Config) -> Result<AdminState, DaemonError> {
-    let path = registry_path(data_dir);
-    let clients = AdminClients::load(&path).map_err(|source| match source {
+/// The error of a registry that cannot be read. A wider mode than `0600` stops the start (ADR-0034
+/// point 3.5).
+fn registry_error(path: PathBuf, source: ClientsError) -> DaemonError {
+    match source {
         ClientsError::Mode { mode } => DaemonError::Mode {
-            path: path.clone(),
+            path,
             mode,
             fix: "0600",
         },
-        source => DaemonError::Admin {
-            path: path.clone(),
-            source,
-        },
-    })?;
+        source => DaemonError::Admin { path, source },
+    }
+}
+
+/// Loads the admin client registry.
+fn load_admin(data_dir: &Path, config: &Config) -> Result<AdminState, DaemonError> {
+    let path = registry_path(data_dir);
+    let clients =
+        AdminClients::load(&path).map_err(|source| registry_error(path.clone(), source))?;
     Ok(AdminState::new(clients, config.admin.limits()).with_registry_file(path))
+}
+
+/// Binds the unlock socket, then reads the registry again. Until the socket exists `cerberusd
+/// admin revoke` edits the file, and the registry was read well before (the store opens in
+/// between), so a revoke in that window would be missing from memory. From the bind on, a revoke
+/// reaches this daemon; one that edits the file after this read is sent here too (the CLI tries
+/// the socket again), and every registry write takes in the revokes of the file (DEC-RM-22).
+async fn bind_socket(
+    data_dir: &Path,
+    core: &VaultService,
+    admin: Option<&AdminState>,
+) -> Result<tokio::net::UnixListener, DaemonError> {
+    let listener = unlock::bind(data_dir).await?;
+    if let Some(admin) = admin {
+        admin
+            .reload_clients(core)
+            .await
+            .map_err(|source| registry_error(registry_path(data_dir), source))?;
+    }
+    Ok(listener)
 }
 
 /// Refuses a path that group or others can use. systemd sets the modes, but a manual run does not
@@ -180,7 +204,7 @@ where
         announce_admin(&core, admin).await;
     }
     let tasks = core.spawn_background();
-    let listener = unlock::bind(&config.data_dir).await?;
+    let listener = bind_socket(&config.data_dir, &core, admin.as_deref()).await?;
     let socket_task = tokio::spawn(unlock::accept_loop(
         listener,
         SocketContext {
@@ -354,4 +378,72 @@ async fn write_ca_pem(core: &VaultService, data_dir: &Path) -> Result<(), Daemon
 #[must_use]
 pub fn ca_pem_path(data_dir: &Path) -> PathBuf {
     data_dir.join(CA_PEM_FILE)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, reason = "test code")]
+mod tests {
+    use cerberus_admin::clients::{AdminClient, EnrolmentId};
+    use cerberus_api::AdminLimits;
+    use cerberus_types::OperatorId;
+
+    use super::*;
+
+    /// DEC-RM-22: a `cerberusd admin revoke` that edited the file after the registry was read and
+    /// before the socket existed is in memory once the socket is bound.
+    #[tokio::test]
+    async fn a_file_revoke_before_the_socket_exists_is_in_memory_after_the_bind() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path();
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let store = Store::open(
+            OpenOptions {
+                path: data.join(VAULT_FILE),
+                create: true,
+            },
+            Arc::clone(&clock),
+        )
+        .await
+        .unwrap();
+        let core = VaultService::open(
+            store,
+            clock,
+            CoreConfig {
+                approvals_available: true,
+                idle_lock_default: None,
+                data_dir: data.to_path_buf(),
+                ca_issuer: Arc::new(LocalCaIssuer::new(TlsPaths::in_data_dir(data), Vec::new())),
+            },
+        )
+        .await
+        .unwrap();
+        let now = core.clock().now();
+        let entry = AdminClient::enrolled(
+            EnrolmentId::generate(),
+            "laptop".to_owned(),
+            OperatorId::generate(),
+            b"fake cert",
+            now + jiff::SignedDuration::from_hours(24),
+            now,
+        )
+        .unwrap();
+        let path = registry_path(data);
+        let mut clients = AdminClients::default();
+        clients.add(entry.clone()).unwrap();
+        clients.save(&path).unwrap();
+        let admin = AdminState::new(AdminClients::load(&path).unwrap(), AdminLimits::default())
+            .with_registry_file(path.clone());
+        // No socket yet: the CLI edits the file.
+        let mut offline = AdminClients::load(&path).unwrap();
+        assert!(offline.revoke(entry.id, now));
+        offline.save(&path).unwrap();
+        let digest = cerberus_crypto::sha256(&[b"fake cert".as_slice()]);
+        assert!(
+            admin.find_live(&digest, now).is_some(),
+            "read before the edit"
+        );
+        let listener = bind_socket(data, &core, Some(&admin)).await.unwrap();
+        assert!(admin.find_live(&digest, now).is_none());
+        drop(listener);
+    }
 }

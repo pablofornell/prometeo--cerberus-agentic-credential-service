@@ -179,6 +179,10 @@ pub async fn list_with(
 /// runs, in the registry file (it takes effect at the next start; no audit event, because the vault
 /// is not open).
 ///
+/// "No daemon" is only a missing socket or one nobody listens on. After the file edit the socket
+/// is tried once more: a daemon that came up meanwhile may have read the file before the edit, so
+/// it gets the revoke too (DEC-RM-22).
+///
 /// # Errors
 /// [`AdminCliError::BadId`], [`AdminCliError::NotFound`], or a socket or file error.
 pub async fn revoke_with(
@@ -214,7 +218,12 @@ pub async fn revoke_with(
             clients
                 .save(&path)
                 .map_err(|source| AdminCliError::Registry { path, source })?;
-            Ok(Source::File)
+            // The file has the revoke whatever this gives: still no daemon, or one that read the
+            // edited file and so has it already (`not_found`).
+            match exchange(socket, &line).await {
+                Ok(_) => Ok(Source::Daemon),
+                Err(_) => Ok(Source::File),
+            }
         }
         Err(error) => Err(error.into()),
     }
@@ -243,5 +252,48 @@ mod tests {
         assert_eq!(start, out.capacity());
         let list = AdminRequestRef::new(Op::AdminList).line().unwrap();
         assert_eq!(&list[..], b"{\"op\":\"admin_list\"}\n");
+    }
+
+    /// DEC-RM-22: only a missing socket (or one nobody listens on) means "no daemon". Any other
+    /// connect error must not edit the registry file under a daemon that may run.
+    #[tokio::test]
+    async fn revoke_edits_the_file_only_when_no_daemon_can_answer() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path();
+        let registry = registry_path(data);
+        let now = SystemClock.now();
+        let entry = AdminClient::enrolled(
+            EnrolmentId::generate(),
+            "laptop".to_owned(),
+            cerberus_types::OperatorId::generate(),
+            b"fake cert",
+            now + jiff::SignedDuration::from_hours(24),
+            now,
+        )
+        .unwrap();
+        let mut clients = AdminClients::default();
+        clients.add(entry.clone()).unwrap();
+        clients.save(&registry).unwrap();
+        // A socket path that fails for another reason: a component is a file (ENOTDIR).
+        let blocker = data.join("not-a-folder");
+        std::fs::write(&blocker, b"").unwrap();
+        let result =
+            revoke_with(&blocker.join("cerberusd.sock"), data, &entry.id.to_string()).await;
+        assert!(
+            matches!(result, Err(AdminCliError::Socket(UnlockError::Socket(_)))),
+            "{result:?}"
+        );
+        let on_disk = AdminClients::load(&registry).unwrap();
+        assert!(
+            on_disk.get(entry.id).unwrap().revoked_at.is_none(),
+            "file not edited"
+        );
+        // No socket file: no daemon, so the file is edited.
+        let source = revoke_with(&data.join("cerberusd.sock"), data, &entry.id.to_string())
+            .await
+            .unwrap();
+        assert_eq!(source, Source::File);
+        let on_disk = AdminClients::load(&registry).unwrap();
+        assert!(on_disk.get(entry.id).unwrap().revoked_at.is_some());
     }
 }

@@ -13,7 +13,8 @@ mod common;
 
 use std::time::Duration;
 
-use cerberus_admin::clients::{AdminClient, EnrolmentId};
+use cerberus_admin::clients::{AdminClient, AdminClients, EnrolmentId};
+use cerberus_api::{AdminLimits, AdminState};
 use cerberus_core::admin::AuditQuery;
 use cerberus_core::vault::KeyCustody;
 use cerberus_crypto::SecretString;
@@ -1003,5 +1004,145 @@ async fn g11_exactly_the_five_admin_routes_exist() {
         let resp = admin.send(method, path, Some(&token), &[], body).await;
         assert_eq!(resp.status, 405, "{method} {path}");
     }
+    fx.stop().await;
+}
+
+// ----------------------------------------------------------------------------------------- 12
+
+/// SHA-256 of a fake certificate, as the device check sees it.
+fn cert_digest(cert: &[u8]) -> [u8; 32] {
+    cerberus_crypto::sha256(&[cert])
+}
+
+/// A registry entry of a fake certificate, bound to the owner, valid for `seconds`.
+fn fake_entry(fx: &Fixture, cert: &[u8], seconds: i64) -> AdminClient {
+    AdminClient::enrolled(
+        EnrolmentId::generate(),
+        "laptop".to_owned(),
+        fx.owner_label_id,
+        cert,
+        now(fx) + SignedDuration::from_secs(seconds),
+        now(fx),
+    )
+    .expect("entry")
+}
+
+/// DEC-RM-22: a revoke whose registry save failed is retried by the next revoke of the same
+/// enrolment, which answers the truth; before, it answered "revoked already" and the stolen
+/// device was live again after a restart.
+#[tokio::test]
+async fn g12_a_revoke_whose_save_failed_is_saved_by_the_next_revoke() {
+    let (fx, _, _) = admin_fixture(false).await;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let folder = dir.path().join("data");
+    let path = folder.join("admin-clients.json");
+    let entry = fake_entry(&fx, b"stolen laptop", 86_400);
+    let mut clients = AdminClients::default();
+    clients.add(entry.clone()).expect("add");
+    let state = AdminState::new(clients, AdminLimits::default()).with_registry_file(path.clone());
+    // The folder is missing, so the save fails; the revoke is in effect in memory.
+    assert!(state.revoke(&fx.core, entry.id).await.is_err());
+    assert!(
+        state
+            .find_live(&cert_digest(b"stolen laptop"), now(&fx))
+            .is_none()
+    );
+    assert!(
+        state.revoke(&fx.core, entry.id).await.is_err(),
+        "still not saved, and said so"
+    );
+    std::fs::create_dir(&folder).expect("folder");
+    assert!(state.revoke(&fx.core, entry.id).await.expect("saved"));
+    let on_disk = AdminClients::load(&path).expect("registry");
+    assert!(on_disk.get(entry.id).expect("entry").revoked_at.is_some());
+    assert!(
+        !state.revoke(&fx.core, entry.id).await.expect("saved"),
+        "saved now: revoked already"
+    );
+    assert_eq!(audit_rows(&fx, "admin.client_revoke").await.len(), 1);
+    fx.stop().await;
+}
+
+/// DEC-RM-22: a registry write never drops a revoke that the file has and memory lacks (an
+/// offline `cerberusd admin revoke`), and a reload never drops a revoke that memory has and the
+/// file lacks.
+#[tokio::test]
+async fn g12_registry_writes_and_reloads_never_undo_a_revoke() {
+    let (fx, _, _) = admin_fixture(false).await;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("admin-clients.json");
+    let (a, b) = (fake_entry(&fx, b"a", 86_400), fake_entry(&fx, b"b", 86_400));
+    let mut clients = AdminClients::default();
+    clients.add(a.clone()).expect("add");
+    clients.add(b.clone()).expect("add");
+    clients.save(&path).expect("save");
+    let state = AdminState::new(
+        AdminClients::load(&path).expect("load"),
+        AdminLimits::default(),
+    )
+    .with_registry_file(path.clone());
+    // An offline revoke after the daemon read the file, then a write of the daemon.
+    let mut offline = AdminClients::load(&path).expect("load");
+    assert!(offline.revoke(a.id, now(&fx)));
+    offline.save(&path).expect("save");
+    state.enroll(fake_entry(&fx, b"c", 86_400)).expect("enroll");
+    let on_disk = AdminClients::load(&path).expect("load");
+    assert!(
+        on_disk.get(a.id).expect("a").revoked_at.is_some(),
+        "kept on disk"
+    );
+    assert_eq!(on_disk.list().len(), 3);
+    assert!(state.find_live(&cert_digest(b"a"), now(&fx)).is_none());
+    assert!(state.find_live(&cert_digest(b"c"), now(&fx)).is_some());
+    // A file that lacks a revoke of the daemon (an old copy put back), then a reload.
+    let before = std::fs::read(&path).expect("read");
+    assert!(state.revoke(&fx.core, b.id).await.expect("revoke"));
+    std::fs::write(&path, before).expect("write back");
+    state.reload_clients(&fx.core).await.expect("reload");
+    assert!(state.find_live(&cert_digest(b"b"), now(&fx)).is_none());
+    // The file lacks it, so the next revoke saves it again.
+    assert!(state.revoke(&fx.core, b.id).await.expect("saved again"));
+    let on_disk = AdminClients::load(&path).expect("load");
+    assert!(on_disk.get(b.id).expect("b").revoked_at.is_some());
+    fx.stop().await;
+}
+
+/// DEC-RM-22: the sweep ends a session whose enrolment is no longer live although the session
+/// is within its own limits (here the entry expires a minute after the open).
+#[tokio::test]
+async fn g12_the_sweep_ends_sessions_of_an_enrolment_that_is_no_longer_live() {
+    let (fx, _, _) = admin_fixture(true).await;
+    let state = fx.admin.as_ref().expect("admin");
+    let ca = fx.ca.as_ref().expect("ca");
+    let id = EnrolmentId::generate();
+    let cert = ca
+        .issue_admin_client(&id.to_string(), now(&fx))
+        .expect("admin cert");
+    let entry = AdminClient::enrolled(
+        id,
+        "short".to_owned(),
+        fx.owner_label_id,
+        &cert.cert_der,
+        now(&fx) + SignedDuration::from_secs(60),
+        now(&fx),
+    )
+    .expect("entry");
+    state.enroll(entry).expect("enroll");
+    let client = Client::new(
+        fx.addr,
+        &fx.ca_der,
+        Some((cert.cert_der.clone(), cert.key_der.expose_secret().to_vec())),
+    );
+    session(&client, &fx).await;
+    assert_eq!(state.session_count(), 1);
+    advance(&fx, 61);
+    state.sweep(&fx.core).await;
+    assert_eq!(state.session_count(), 0);
+    let reasons: Vec<Value> = audit_rows(&fx, "admin.session_close")
+        .await
+        .into_iter()
+        .filter_map(|row| row.event.details.get("reason").cloned())
+        .collect();
+    assert_eq!(reasons, vec![json!("revoked")]);
     fx.stop().await;
 }

@@ -1471,6 +1471,41 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   no vault or server crate (`just client-deps-check`). (`crates/cerberus-client/src/{transport,sse}.rs`,
   `tests/pinning.rs`)
 
+- **DEC-RM-22** — RM — Fixes of the security review of the remote admin API (a2ccc61..476f77d). (a) **Revoke whose
+  save failed** (medium): `AdminState` keeps an `unsaved` flag (set when a registry save fails, cleared by the next
+  good save of the whole registry). A revoke of an enrolment that is revoked in memory while `unsaved` is set saves
+  again and answers as a first revoke (true, or the save error); it does not end sessions or audit again. Before, it
+  answered "revoked already" (`not_found` on the socket), so the save was never retried and the device was live after
+  a restart. The socket error text says to revoke again. (b) **Revoke during a session open**: `open_session` checks,
+  after the phrase check, that the enrolment is still the live entry of the connection's certificate, with the
+  registry read lock held while the session goes in (lock order: registry, then sessions), so a revoke is either seen
+  or ends the new session itself. A refused open answers `403 admin_cert_required` and is audited as
+  `admin.session_open` (with `unlocked`) then `admin.session_close` `revoked`. A sealed vault that the phrase unlocked
+  **stays unlocked**: the same result as an open that ends just before the revoke, and a revoke never locks
+  (invariant 10). The session starts at the time of that check, not of the request. The sweep also ends sessions
+  whose enrolment is no longer live (revoked, or its certificate expired; reason `revoked`), with the registry lock
+  held so an enrolment made meanwhile cannot look dead. (c) **CLI and daemon on the registry file**: `cerberusd admin
+  list|revoke` falls back to the file only on `ENOENT` or `ECONNREFUSED` (any other connect error, e.g. a denied
+  permission, is a socket error); after a file revoke it tries the socket once more and, if a daemon answers, sends it
+  the revoke (it may have read the file before the edit). The daemon reads the registry again right after it binds the
+  socket (`AdminState::reload_clients`), so a file revoke from the window between the first read and the bind is in
+  memory. Every registry write first reads the file and takes in its revokes (`AdminClients::adopt_revokes`: never
+  un-revokes, never adds), and a reload keeps memory revokes the file lacks (and marks them unsaved), so neither side
+  undoes the other's revoke; an unreadable file fails the write (fail closed). (d) **Enrolment owner check**:
+  `admin_enroll` also wants `ctx.role == owner` from `verify_operator_phrase` (the live session role, which a header MAC
+  failure makes `viewer`, DEC-FIX5-4); the stored-role check stays in front so a viewer spends no KDF. (e) **serde_json
+  scratch** (not fixed, accepted as AR-21): serde_json decodes a string with an escape in a private scratch `Vec<u8>`
+  that is freed unwiped, so a phrase with a quote, backslash or control character and every PEM leave copies in freed
+  heap. Not fixable without new crates: the `Read` trait is sealed and the scratch private; `RawValue` needs a feature
+  that is off and fails inside the internally tagged `PayloadView`; a second JSON parser adds more risk. I-20, the
+  `rpc` and `read_body` docs now state this residual instead of "no copy". Tests: `g12_*` in
+  `crates/cerberus-api/tests/admin.rs`; `a_session_is_not_opened_for_an_enrolment_revoked_during_the_phrase_check`
+  (`admin/mod.rs`), `the_sweep_ends_sessions_of_an_enrolment_that_is_no_longer_live` (`admin/session.rs`),
+  `adopt_revokes_takes_in_revokes_and_never_undoes_one` (`cerberus-admin` `clients.rs`),
+  `an_enrolment_needs_the_owner_role_of_the_session_not_of_the_slot` (`cerberusd` `unlock.rs`),
+  `revoke_edits_the_file_only_when_no_daemon_can_answer` (`admin.rs`),
+  `a_file_revoke_before_the_socket_exists_is_in_memory_after_the_bind` (`daemon.rs`).
+
 ## RD — RustDesk connections (2026-11-21)
 
 - **DEC-RD-1** — New item kind `rustdesk` (Rust `ItemKind::Rustdesk`, wire value `rustdesk`) for a machine reached with

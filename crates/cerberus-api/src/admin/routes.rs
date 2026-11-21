@@ -101,8 +101,9 @@ fn is_json(req: &Request) -> bool {
         .is_some_and(|media| media.trim().eq_ignore_ascii_case("application/json"))
 }
 
-/// Reads a JSON body of at most `limit` bytes into a zeroizing buffer that never grows, so no
-/// copy of a phrase or a secret is left in a freed buffer (ADR-0034 I-20).
+/// Reads a JSON body of at most `limit` bytes into a zeroizing buffer that never grows, so this
+/// read leaves no copy of a phrase or a secret in a freed buffer (ADR-0034 I-20). The JSON parse
+/// after it has one residual: see `rpc::from_body` (AR-21).
 async fn read_body(
     state: &AppState,
     req: Request,
@@ -262,7 +263,7 @@ async fn open_session(State(state): State<AppState>, req: Request) -> Result<Res
         .session
         .map(Into::into)
         .ok_or_else(|| AdminError::core(id, CoreError::Locked))?;
-    let (session, token, pushed_out) = admin
+    let opened = admin
         .open_session(
             NewSession {
                 enrolment: device.client.id,
@@ -271,15 +272,34 @@ async fn open_session(State(state): State<AppState>, req: Request) -> Result<Res
                 ctx: ctx.clone(),
                 epoch,
             },
-            now,
+            core.clock().now(),
         )
         .map_err(|error| AdminError::new(id, IpcError::internal(&error)))?;
-    audit_closed(&core, pushed_out).await;
     let mut event = AdminAudit::new(AdminEventKind::SessionOpen);
     event.enrolment = Some(device.client.id.to_string());
     event.label = Some(device.client.label.clone());
     event.operator = Some(operator);
     event.unlocked = Some(unlocked);
+    let Some((session, token, pushed_out)) = opened else {
+        // The device was revoked (or its certificate expired) during the phrase check: no
+        // session. A vault the phrase unlocked stays unlocked, as when the open ends just before
+        // the revoke, which never locks either (invariant 10). Audited as an open that the revoke
+        // ended at once (DEC-RM-22).
+        if let Err(error) = core.record_admin_event(Some(&ctx), event).await {
+            tracing::warn!(%error, "admin.session_open was not audited");
+        }
+        let mut close = AdminAudit::new(AdminEventKind::SessionClose);
+        close.enrolment = Some(device.client.id.to_string());
+        close.label = Some(device.client.label.clone());
+        close.operator = Some(operator);
+        close.reason = Some(cerberus_core::SessionCloseReason::Revoked);
+        if let Err(error) = core.record_admin_event(Some(&ctx), close).await {
+            tracing::warn!(%error, "admin.session_close was not audited");
+        }
+        tracing::warn!(enrolment = %device.client.id, unlocked, "admin session refused: the device was revoked during the open");
+        return Err(AdminError::new(id, IpcError::admin_cert_required()));
+    };
+    audit_closed(&core, pushed_out).await;
     if let Err(error) = core.record_admin_event(Some(&ctx), event).await {
         tracing::warn!(%error, "admin.session_open was not audited");
     }

@@ -20,6 +20,7 @@ mod routes;
 mod session;
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError, RwLock};
 use std::time::Duration;
 
@@ -160,6 +161,9 @@ impl Failures {
 pub struct AdminState {
     clients: RwLock<AdminClients>,
     registry: Option<PathBuf>,
+    /// True while the registry in memory has a revoke that the file may lack: its save failed.
+    /// Only changed with the `clients` write lock held.
+    unsaved: AtomicBool,
     sessions: Mutex<SessionTable>,
     failures: Mutex<Failures>,
     limits: AdminLimits,
@@ -197,6 +201,7 @@ impl AdminState {
         Self {
             clients: RwLock::new(clients),
             registry: None,
+            unsaved: AtomicBool::new(false),
             sessions: Mutex::new(SessionTable::default()),
             failures: Mutex::new(Failures::default()),
             limits,
@@ -246,41 +251,80 @@ impl AdminState {
         self.clients_read().find_live(cert_sha256, now).cloned()
     }
 
+    /// Writes `clients` to the registry file, when there is one. The file is read first and
+    /// every revoke it has is taken into `clients`, so a write never undoes an offline
+    /// `cerberusd admin revoke` that ran after the daemon read the file (DEC-RM-22). A session of
+    /// an enrolment revoked that way ends at the next sweep; the device check refuses it at once.
+    /// Gives the enrolments it revoked that way.
+    ///
+    /// # Errors
+    /// The load error of the file (nothing is written then) or the save error.
+    fn persist(&self, clients: &mut AdminClients) -> Result<Vec<EnrolmentId>, ClientsError> {
+        let Some(path) = &self.registry else {
+            return Ok(Vec::new());
+        };
+        let on_disk = AdminClients::load(path)?;
+        let taken = clients.adopt_revokes(&on_disk);
+        if !taken.is_empty() {
+            tracing::warn!(
+                count = taken.len(),
+                "revokes of the registry file taken in before it is written"
+            );
+        }
+        clients.save(path)?;
+        Ok(taken)
+    }
+
     /// Adds an enrolment and saves the registry (when it has a file). Nothing changes when the
     /// save fails.
     ///
     /// # Errors
-    /// [`ClientsError::Duplicate`], or the save error.
+    /// [`ClientsError::Duplicate`], or the load or save error of the file.
     pub fn enroll(&self, client: AdminClient) -> Result<(), ClientsError> {
         let mut clients = self.clients_write();
         let mut next = clients.clone();
         next.add(client)?;
-        if let Some(path) = &self.registry {
-            next.save(path)?;
-        }
+        let taken = self.persist(&mut next)?;
         *clients = next;
+        // The whole registry in memory is on disk now, a revoke whose save failed included.
+        self.unsaved.store(false, Ordering::SeqCst);
+        drop(clients);
+        if !taken.is_empty() {
+            // Event streams of the revoked enrolments stop now.
+            self.bump();
+        }
         Ok(())
     }
 
     /// Revokes an enrolment: it can no longer pass the device check, its sessions end (their
     /// connections close within about 1 s), and `admin.session_close` (`revoked`) and
-    /// `admin.client_revoke` are audited. Returns false when there is no such enrolment or it
-    /// was revoked already.
+    /// `admin.client_revoke` are audited. Returns false when there is no such enrolment, or it
+    /// was revoked already and that revoke is saved.
+    ///
+    /// When the enrolment is revoked in memory but an earlier save failed, a new call only saves
+    /// the registry again (no new audit) and answers as a first revoke: true once it is saved,
+    /// else the error (DEC-RM-22).
     ///
     /// # Errors
-    /// The save error of the registry file. The revoke is in effect in memory anyway, until the
-    /// daemon restarts.
+    /// The load or save error of the registry file. The revoke is in effect in memory anyway,
+    /// until the daemon restarts; call again to retry the save.
     pub async fn revoke(&self, core: &VaultService, id: EnrolmentId) -> Result<bool, ClientsError> {
         let now = core.clock().now();
         let (entry, saved) = {
             let mut clients = self.clients_write();
             if !clients.revoke(id, now) {
-                return Ok(false);
+                let pending = self.unsaved.load(Ordering::SeqCst)
+                    && clients.get(id).is_some_and(|c| c.revoked_at.is_some());
+                if !pending {
+                    return Ok(false);
+                }
+                // Revoked, sessions ended and audited by the first call: only the save is left.
+                let saved = self.persist(&mut clients);
+                self.unsaved.store(saved.is_err(), Ordering::SeqCst);
+                return saved.map(|_| true);
             }
-            let saved = match &self.registry {
-                Some(path) => clients.save(path),
-                None => Ok(()),
-            };
+            let saved = self.persist(&mut clients);
+            self.unsaved.store(saved.is_err(), Ordering::SeqCst);
             (clients.get(id).cloned(), saved)
         };
         let closed = self.sessions().drop_enrolment(id);
@@ -295,11 +339,12 @@ impl AdminState {
         if let Err(error) = core.record_admin_event(None, event).await {
             tracing::warn!(%error, "admin.client_revoke was not audited");
         }
-        saved.map(|()| true)
+        saved.map(|_| true)
     }
 
     /// Reads the registry file again (an offline `cerberusd admin revoke` edited it). Sessions of
-    /// enrolments that are no longer live end (`revoked`). Without a file this does nothing.
+    /// enrolments that are no longer live end (`revoked`). A revoke in memory that the file lacks
+    /// (its save failed) is kept. Without a file this does nothing.
     ///
     /// # Errors
     /// The load error. The registry in memory stays as it was.
@@ -307,10 +352,13 @@ impl AdminState {
         let Some(path) = &self.registry else {
             return Ok(());
         };
-        let fresh = AdminClients::load(path)?;
+        let mut fresh = AdminClients::load(path)?;
         let now = core.clock().now();
         let gone: Vec<EnrolmentId> = {
             let mut clients = self.clients_write();
+            if !fresh.adopt_revokes(&clients).is_empty() {
+                self.unsaved.store(true, Ordering::SeqCst);
+            }
             *clients = fresh;
             clients
                 .list()
@@ -353,11 +401,19 @@ impl AdminState {
         enrolment.is_some_and(|e| self.clients_read().get(e).is_some_and(|c| c.is_live(now)))
     }
 
-    /// Ends every session that is past a limit or older than the last lock, and audits them.
+    /// Ends every session that is past a limit, older than the last lock, or of an enrolment
+    /// that is no longer live (revoked, or its certificate expired; reason `revoked`), and audits
+    /// them.
     pub async fn sweep(&self, core: &VaultService) {
-        let closed = self
-            .sessions()
-            .sweep(core.clock().now(), live_epoch(core), &self.limits);
+        let now = core.clock().now();
+        let closed = {
+            // Held while the table is swept, so an enrolment made since cannot look dead.
+            let clients = self.clients_read();
+            self.sessions()
+                .sweep(now, live_epoch(core), &self.limits, |enrolment| {
+                    clients.get(enrolment).is_some_and(|c| c.is_live(now))
+                })
+        };
         if !closed.is_empty() {
             self.bump();
         }
@@ -401,19 +457,32 @@ impl AdminState {
         self.failures().succeeded(enrolment);
     }
 
+    /// Opens a session, or `Ok(None)` when its enrolment is no longer the live entry of its
+    /// certificate. The device check ran when the request came in, before the phrase check (about
+    /// 1 s of KDF): a revoke in between must not give a session. The registry lock is held while
+    /// the session goes in, so a revoke is either seen here or ends the new session itself
+    /// (DEC-RM-22).
     pub(crate) fn open_session(
         &self,
         new: NewSession,
         now: Timestamp,
     ) -> Result<
-        (SessionId, cerberus_types::wire::WireSecret, Vec<Closed>),
+        Option<(SessionId, cerberus_types::wire::WireSecret, Vec<Closed>)>,
         cerberus_crypto::CryptoError,
     > {
+        let clients = self.clients_read();
+        if clients
+            .find_live(&new.cert_sha256, now)
+            .is_none_or(|client| client.id != new.enrolment)
+        {
+            return Ok(None);
+        }
         let opened = self.sessions().open(new, now, &self.limits)?;
+        drop(clients);
         if !opened.2.is_empty() {
             self.bump();
         }
-        Ok(opened)
+        Ok(Some(opened))
     }
 
     pub(crate) fn check_session(
@@ -538,6 +607,49 @@ mod tests {
             admin.begin_attempt(e, t0()).err(),
             Some(AttemptRefusal::Blocked(900))
         );
+    }
+
+    /// DEC-RM-22: a revoke that lands while the phrase is checked (after the device check of the
+    /// request) gives no session.
+    #[test]
+    fn a_session_is_not_opened_for_an_enrolment_revoked_during_the_phrase_check() {
+        let cert = b"admin client cert";
+        let digest = cerberus_crypto::sha256(&[cert.as_slice()]);
+        let entry = AdminClient::enrolled(
+            EnrolmentId::generate(),
+            "laptop".to_owned(),
+            cerberus_types::OperatorId::generate(),
+            cert,
+            t0() + jiff::SignedDuration::from_hours(24),
+            t0(),
+        )
+        .expect("entry");
+        let id = entry.id;
+        let mut clients = AdminClients::default();
+        clients.add(entry.clone()).expect("add");
+        let admin = AdminState::new(clients, AdminLimits::default());
+        let new = || NewSession {
+            enrolment: id,
+            label: entry.label.clone(),
+            cert_sha256: digest,
+            ctx: cerberus_core::OperatorContext {
+                operator_id: entry.operator_id,
+                role: cerberus_types::OperatorRole::Owner,
+                request_id: cerberus_types::RequestId::generate(),
+            },
+            epoch: 1,
+        };
+        assert!(admin.open_session(new(), t0()).expect("open").is_some());
+        // The request passed the device check, then the revoke landed.
+        assert!(admin.clients_write().revoke(id, t0()));
+        assert!(admin.open_session(new(), t0()).expect("open").is_none());
+        assert_eq!(admin.session_count(), 1, "only the session from before");
+        // Another certificate under the same enrolment ID is not the live entry either.
+        let other = NewSession {
+            cert_sha256: [7; 32],
+            ..new()
+        };
+        assert!(admin.open_session(other, t0()).expect("open").is_none());
     }
 
     #[test]

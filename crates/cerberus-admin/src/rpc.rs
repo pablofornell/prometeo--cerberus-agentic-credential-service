@@ -4,8 +4,9 @@
 //!
 //! - One `Args` struct per command of [`crate::remote::REMOTE_COMMANDS`]. Unknown fields are refused, so a typo
 //!   is an error and not a silently dropped argument.
-//! - [`to_body`] writes JSON into a zeroizing buffer and [`from_body`] reads it, so a phrase or
-//!   a revealed secret leaves no plain copy behind in a grown buffer or a `serde_json::Value`.
+//! - [`to_body`] writes JSON into a zeroizing buffer that never leaves a grown copy behind, and
+//!   [`from_body`] parses the caller's buffer straight into the typed arguments, with no
+//!   `serde_json::Value` in between. One residual stays (DEC-RM-22, AR-21): see [`from_body`].
 //! - [`dispatch`] checks the gate of the command, parses the arguments, calls the handler and
 //!   writes the answer. The device and session checks happen before, in the server.
 
@@ -138,6 +139,13 @@ pub(crate) fn zeroizing_json<T: Serialize + ?Sized>(
 }
 
 /// Reads JSON arguments or a JSON answer.
+///
+/// Residual (DEC-RM-22, threat model I-20 and AR-21): serde_json decodes a string that has an
+/// escape (`\"`, `\\`, `\n`, `\uXXXX`, ...) in its own scratch `Vec<u8>`, which grows by
+/// reallocation and is freed without a wipe. So a phrase with a quote, a backslash or a control
+/// character, and every PEM (its line breaks are escaped), leaves unwiped copies in freed heap
+/// memory. A string without an escape is read in place from `body`. serde_json's reader trait is
+/// sealed and the scratch is private, so a caller cannot replace either.
 ///
 /// # Errors
 /// `invalid_request` for a bad shape or an unknown field. The serde text is not kept: it can

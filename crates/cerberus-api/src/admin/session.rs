@@ -310,17 +310,25 @@ impl SessionTable {
             .collect()
     }
 
-    /// Removes every session that has ended at `now`.
+    /// Removes every session that has ended at `now`, and every session whose enrolment is no
+    /// longer live by `enrolment_live` (reason `revoked`: revoked, or its certificate expired).
     pub fn sweep(
         &mut self,
         now: Timestamp,
         live_epoch: Option<u64>,
         limits: &AdminLimits,
+        enrolment_live: impl Fn(EnrolmentId) -> bool,
     ) -> Vec<Closed> {
         let ended: Vec<(SessionId, SessionCloseReason)> = self
             .sessions
             .values()
-            .filter_map(|s| Self::ended(s, now, live_epoch, limits).map(|reason| (s.id, reason)))
+            .filter_map(|s| {
+                Self::ended(s, now, live_epoch, limits)
+                    .or_else(|| {
+                        (!enrolment_live(s.enrolment)).then_some(SessionCloseReason::Revoked)
+                    })
+                    .map(|reason| (s.id, reason))
+            })
             .collect();
         ended
             .into_iter()
@@ -436,8 +444,25 @@ mod tests {
             other => panic!("{other:?}"),
         }
         let (_, _, _) = table.open(new(e, 1), t0(), &limits).unwrap();
-        assert_eq!(table.sweep(t0(), None, &limits).len(), 1);
+        assert_eq!(table.sweep(t0(), None, &limits, |_| true).len(), 1);
         assert_eq!(table.len(), 0);
+    }
+
+    /// DEC-RM-22: the sweep also ends a session whose enrolment is no longer live, even when the
+    /// session itself is within its limits.
+    #[test]
+    fn the_sweep_ends_sessions_of_an_enrolment_that_is_no_longer_live() {
+        let limits = AdminLimits::default();
+        let mut table = SessionTable::default();
+        let (dead, live) = (EnrolmentId::generate(), EnrolmentId::generate());
+        table.open(new(dead, 1), t0(), &limits).unwrap();
+        let (kept, ..) = table.open(new(live, 2), t0(), &limits).unwrap();
+        let closed = table.sweep(t0(), Some(3), &limits, |e| e == live);
+        assert_eq!(closed.len(), 1);
+        assert_eq!(closed[0].enrolment, dead);
+        assert_eq!(closed[0].reason, SessionCloseReason::Revoked);
+        assert!(table.is_live(kept, t0(), Some(3), &limits));
+        assert_eq!(table.len(), 1);
     }
 
     #[test]

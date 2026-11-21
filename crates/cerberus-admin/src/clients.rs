@@ -284,6 +284,27 @@ impl AdminClients {
         }
     }
 
+    /// Takes in every revoke of `other` that this registry lacks: an entry with the same ID that
+    /// is revoked there and not here gets the revoke time of `other`. Nothing is ever un-revoked,
+    /// and entries that are only in `other` are not added. Gives the IDs it revoked.
+    ///
+    /// The daemon calls it before it writes the file and when it reads it again, so neither
+    /// direction undoes a revoke of the other (an offline `cerberusd admin revoke`, or a revoke
+    /// whose save failed) (DEC-RM-22).
+    pub fn adopt_revokes(&mut self, other: &Self) -> Vec<EnrolmentId> {
+        let mut revoked = Vec::new();
+        for client in &mut self.clients {
+            if client.revoked_at.is_some() {
+                continue;
+            }
+            if let Some(at) = other.get(client.id).and_then(|c| c.revoked_at) {
+                client.revoked_at = Some(at);
+                revoked.push(client.id);
+            }
+        }
+        revoked
+    }
+
     /// Every entry, in enrolment order.
     #[must_use]
     pub fn list(&self) -> &[AdminClient] {
@@ -386,6 +407,30 @@ mod tests {
         let expired = live.not_after;
         assert_eq!(registry.find_live(&digest(b"live"), expired), None);
         assert_eq!(registry.live_count(now), 1);
+    }
+
+    /// DEC-RM-22: a revoke on one side is taken in by the other, with its time; nothing is
+    /// un-revoked and nothing is added.
+    #[test]
+    fn adopt_revokes_takes_in_revokes_and_never_undoes_one() {
+        let now = t0();
+        let later = now + SignedDuration::from_secs(60);
+        let (a, b, c) = (entry(b"a", now), entry(b"b", now), entry(b"c", now));
+        let mut memory = AdminClients::default();
+        memory.add(a.clone()).unwrap();
+        memory.add(b.clone()).unwrap();
+        assert!(memory.revoke(b.id, now));
+        let mut disk = AdminClients::default();
+        disk.add(a.clone()).unwrap();
+        disk.add(b.clone()).unwrap();
+        disk.add(c.clone()).unwrap();
+        assert!(disk.revoke(a.id, later));
+        assert_eq!(memory.adopt_revokes(&disk), vec![a.id]);
+        assert_eq!(memory.get(a.id).unwrap().revoked_at, Some(later));
+        assert_eq!(memory.get(b.id).unwrap().revoked_at, Some(now), "kept");
+        assert!(memory.get(c.id).is_none(), "not added");
+        assert!(memory.adopt_revokes(&disk).is_empty());
+        assert_eq!(disk.adopt_revokes(&memory), vec![b.id]);
     }
 
     #[test]
