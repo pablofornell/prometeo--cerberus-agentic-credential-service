@@ -1,4 +1,5 @@
-//! Items: typed payloads, validation, versions, expiry, TOTP and SSH keys (ADR-0027, ADR-0007).
+//! Items: typed payloads, validation, versions, expiry, TOTP, SSH keys and RustDesk connections
+//! (ADR-0027, ADR-0007, DEC-RD-1).
 //!
 //! A payload is the secret part of an item. It is sealed with its own key (ADR-0014) and exists in
 //! plain form only inside the call that needs it. The metadata (title, role, environment, ...) is
@@ -6,6 +7,7 @@
 
 pub(crate) mod batch;
 mod payload;
+mod rustdesk;
 mod service;
 mod settings;
 mod ssh;
@@ -17,6 +19,9 @@ mod validate;
 pub(crate) mod tests;
 
 pub use payload::{Payload, TotpAlgorithm, TotpSeed};
+pub use rustdesk::{
+    KEY_ID_SERVER, KEY_RELAY_SERVER, KEY_RUSTDESK_ID, KEY_SERVER_KEY, RustdeskMeta, is_rustdesk_id,
+};
 pub use service::{
     ItemDetail, ItemFilter, ItemInput, ItemUpdate, ItemVersionInfo, PayloadChange, RevealedItem,
 };

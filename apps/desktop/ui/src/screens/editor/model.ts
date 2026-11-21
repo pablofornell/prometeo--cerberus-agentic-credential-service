@@ -11,6 +11,7 @@ import type {
   TotpAlgorithmView,
 } from "../../bindings";
 import { DEFAULT_CATEGORY } from "../vault/kinds";
+import { cleanRustdeskId, isRustdeskId, RUSTDESK_KEYS } from "../vault/rustdesk";
 
 export interface Pair {
   id: number;
@@ -37,7 +38,7 @@ export interface FormState {
   /** The expiry an edited item has now. */
   currentExpiry: string | null;
   maxUses: string;
-  /** The `custom` values the item has now. They go back on save, apart from the SSH fields below. */
+  /** The `custom` values the item has now. They go back on save, apart from the SSH and RustDesk fields below. */
   custom: Record<string, string>;
   /** True while an edited item keeps its secret. Save then sends `{ kind: "keep" }`. */
   keepSecret: boolean;
@@ -92,6 +93,13 @@ export interface FormState {
   envVars: Pair[];
 
   noteText: string;
+
+  /** RustDesk connection: metadata in `custom`, so it can change while the item keeps its password (DEC-RD-1). */
+  rdId: string;
+  rdIdServer: string;
+  rdRelayServer: string;
+  rdKey: string;
+  rdPassword: string;
 }
 
 let pairId = 0;
@@ -158,6 +166,11 @@ export function initialState(kind: ItemKind = "web_login", workspaceId = ""): Fo
     certChain: "",
     envVars: [newPair()],
     noteText: "",
+    rdId: "",
+    rdIdServer: "",
+    rdRelayServer: "",
+    rdKey: "",
+    rdPassword: "",
   };
 }
 
@@ -195,6 +208,10 @@ export function fromItem(detail: Detail): FormState {
     sshHost: text(s.custom.host),
     sshPort: s.custom.port ?? "22",
     sshUser: text(s.custom.user),
+    rdId: text(s.custom[RUSTDESK_KEYS.id]),
+    rdIdServer: text(s.custom[RUSTDESK_KEYS.idServer]),
+    rdRelayServer: text(s.custom[RUSTDESK_KEYS.relayServer]),
+    rdKey: text(s.custom[RUSTDESK_KEYS.serverKey]),
   };
 }
 
@@ -292,23 +309,33 @@ export function payloadOf(state: FormState): PayloadIn {
       return { kind: "env_bundle", vars: toMap(state.envVars) };
     case "note":
       return { kind: "note", text: state.noteText };
+    case "rustdesk":
+      return { kind: "rustdesk", password: state.rdPassword === "" ? null : state.rdPassword };
   }
 }
 
 /** The full `item_create` / `item_update` input. */
 export function toInput(state: FormState, nowMs: number): ItemInput {
   const custom: Record<string, string> = { ...state.custom };
-  if (state.kind === "ssh_key") {
-    const entries: [string, string][] = [
-      ["machine", state.sshMachine.trim()],
-      ["host", state.sshHost.trim()],
-      ["port", state.sshPort.trim()],
-      ["user", state.sshUser.trim()],
-    ];
-    for (const [key, value] of entries) {
-      if (value !== "") custom[key] = value;
-      else delete custom[key];
-    }
+  const entries: [string, string][] =
+    state.kind === "ssh_key"
+      ? [
+          ["machine", state.sshMachine.trim()],
+          ["host", state.sshHost.trim()],
+          ["port", state.sshPort.trim()],
+          ["user", state.sshUser.trim()],
+        ]
+      : state.kind === "rustdesk"
+        ? [
+            [RUSTDESK_KEYS.id, cleanRustdeskId(state.rdId)],
+            [RUSTDESK_KEYS.idServer, state.rdIdServer.trim()],
+            [RUSTDESK_KEYS.relayServer, state.rdRelayServer.trim()],
+            [RUSTDESK_KEYS.serverKey, state.rdKey.trim()],
+          ]
+        : [];
+  for (const [key, value] of entries) {
+    if (value !== "") custom[key] = value;
+    else delete custom[key];
   }
   return {
     workspace_id: state.workspaceId,
@@ -332,13 +359,14 @@ export function localProblems(state: FormState): Record<string, string> {
   if (state.title.trim() === "") problems.title = "title";
   if (state.workspaceId === "") problems.workspace = "workspace";
   if (state.kind === "ssh_key" && !state.sshDraft && !state.keepSecret) problems["payload.private_key"] = "key";
+  if (state.kind === "rustdesk" && !isRustdeskId(cleanRustdeskId(state.rdId))) problems["custom.rustdesk_id"] = "rustdeskId";
   if (state.expiry === "date" && Number.isNaN(new Date(state.expiryDate).getTime())) problems.expires_at = "date";
   return problems;
 }
 
 /** Field paths the form shows next to a control. Other problems go to the banner. */
 const INLINE =
-  /^(title|description|role_label|category|target|tags(\[\d+\])?|expires_at|max_uses|workspace|custom\.(machine|host|port|user)|payload\.(username|password|url|totp|key|key_id|header_name|base_url|passphrase|private_key|public_key|fingerprint|token|token_type|storage_state|origin|engine|host|port|database|provider|access_key_id|secret_access_key|session_token|region|cert_pem|key_pem|chain_pem|text)|payload\.(vars|params|extra)(\..+)?|vars(\..+)?|params(\..+)?|extra(\..+)?)$/;
+  /^(title|description|role_label|category|target|tags(\[\d+\])?|expires_at|max_uses|workspace|custom\.(machine|host|port|user|rustdesk_id|id_server|relay_server|server_key)|payload\.(username|password|url|totp|key|key_id|header_name|base_url|passphrase|private_key|public_key|fingerprint|token|token_type|storage_state|origin|engine|host|port|database|provider|access_key_id|secret_access_key|session_token|region|cert_pem|key_pem|chain_pem|text)|payload\.(vars|params|extra)(\..+)?|vars(\..+)?|params(\..+)?|extra(\..+)?)$/;
 
 export const isInline = (field: string): boolean => INLINE.test(field);
 

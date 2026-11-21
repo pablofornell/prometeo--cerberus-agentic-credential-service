@@ -43,12 +43,16 @@ impl std::fmt::Debug for Index {
     }
 }
 
-/// The words of an item that go into the token map: title, description, role label, tags, target.
+/// The words of an item that go into the token map: title, description, role label, tags, target,
+/// and the RustDesk ID of a `rustdesk` item (DEC-RD-1).
 fn item_words(meta: &ItemMeta) -> BTreeSet<Word> {
     let mut out = BTreeSet::new();
+    let rustdesk_id = (meta.kind == ItemKind::Rustdesk)
+        .then(|| meta.custom.get(crate::items::KEY_RUSTDESK_ID))
+        .flatten();
     let texts = [Some(&meta.title), Some(&meta.description)]
         .into_iter()
-        .chain([meta.role_label.as_ref(), meta.target.as_ref()])
+        .chain([meta.role_label.as_ref(), meta.target.as_ref(), rustdesk_id])
         .flatten()
         .chain(meta.tags.iter());
     for text in texts {
@@ -339,6 +343,28 @@ mod tests {
         assert_eq!(index.workspace_by_slug("SHOP-frontend "), Some(ws_id));
         assert_eq!(index.workspace_by_slug("shop fe"), Some(ws_id));
         assert_eq!(index.workspace_by_slug("other"), None);
+    }
+
+    #[test]
+    fn the_rustdesk_id_is_a_search_word_of_a_rustdesk_item_only() {
+        let ws = workspace("home", &[]);
+        let mut laptop = item(ws.id, "Laptop", Environment::Other);
+        laptop.kind = ItemKind::Rustdesk;
+        laptop
+            .custom
+            .insert("rustdesk_id".to_owned(), z("123456789"));
+        let mut login = item(ws.id, "Login", Environment::Other);
+        login
+            .custom
+            .insert("rustdesk_id".to_owned(), z("987654321"));
+        let laptop_id = laptop.id;
+        let index = Index::build(vec![laptop, login], vec![ws], Vec::new());
+        assert!(
+            index
+                .items_with_word("123456789")
+                .is_some_and(|ids| ids.len() == 1 && ids.contains(&laptop_id))
+        );
+        assert!(index.items_with_word("987654321").is_none());
     }
 
     #[test]

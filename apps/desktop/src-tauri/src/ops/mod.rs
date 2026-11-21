@@ -13,6 +13,7 @@ mod generate;
 mod items;
 mod policy;
 mod restore;
+mod rustdesk;
 mod system;
 mod vault;
 
@@ -22,5 +23,6 @@ pub use generate::CharClass;
 pub use items::*;
 pub use policy::*;
 pub use restore::*;
+pub use rustdesk::{RUSTDESK_PATH_KEY, rustdesk_connect, rustdesk_status};
 pub use system::*;
 pub use vault::*;

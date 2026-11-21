@@ -1278,3 +1278,162 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
 - **DEC-T29-4** — Signing: macOS signing and notarization use Tauri's `APPLE_*` variables, only when `APPLE_CERTIFICATE` is set (the secrets are named in the guide, no value anywhere). Windows has no signing step. Integrity for every file comes from `SHA256SUMS` and, on a public repository, a GitHub build provenance attestation (`actions/attest-build-provenance`, keyless; not offered for private user repositories). The release is built as a draft and published by the workflow once every platform's files and SHA256SUMS are attached (DEC-REL-1, 2026-11-17: owner asked for automatic releases; a published release is never rebuilt in place).
 - **DEC-T29-5** — No auto-updater (no updater plugin or signing key exists in the app, and the plan has no update channel). Updates are manual installs. Revisit with a signed update channel in a later version.
 - **DEC-T29-6** — Release recipes in the `justfile` (`package`, `package-binaries`, `sbom`, `checksums`, `release-local`) are the single build path for local and CI; the workflow only calls them. SBOM: `cargo-cyclonedx` 1.5 JSON per binary; the UI (pnpm) dependencies are not included. `dist/` and `*_bin.cdx.json` are git-ignored. The systemd unit already holds the AUD-29 hardening (DEC-T27-B-9); it is shipped in the Linux tarball unchanged. `systemd-analyze verify` only complains that `/usr/local/bin/cerberusd` is absent; `systemd-analyze security --offline` gives 0.9 SAFE.
+
+## RM — Remote backend mode, design (2026-11-21)
+
+- **DEC-RM-1** — RM — The owner asked for the desktop app to work against a deployed backend. New ADR-0034 amends D1, D2
+  and D3 (ADR-0001, ADR-0002 points 2–4, ADR-0003 points 1–2, ADR-0023, ADR-0024); the old text stays, the status lines
+  say what changed. Local mode stays the default and does not change. (ADR-0034, `docs/PLAN.md` 1.2)
+- **DEC-RM-2** — RM — The admin API is part of `cerberusd` only, off by default (`[admin] enabled = false`,
+  `CERBERUSD_ADMIN_ENABLED`). Off means no `/admin` route is mounted, so `/admin/...` gives `404 route_not_found` like
+  any unknown path. On means `/admin/v1` on the same TLS 1.3 listener and HTTP rules as the Agent API; the listener then
+  asks every client for a CA-signed certificate but still lets agents without one in on a loopback bind. The desktop's
+  own vault never gets an admin route. Rejected: a second listener (more config, no gain now). (ADR-0034 point 2)
+- **DEC-RM-3** — RM — Two factors on every admin call: an **enrolled** client certificate (its SHA-256 in
+  `admin-clients.json`, not revoked, not expired; checked per request) and an operator **session** opened with a
+  passphrase. "Signed by the vault CA" is not enough, because agent mTLS certificates (DEC-T09-5) come from the same CA.
+  Agent `cvt_` tokens never pass on `/admin`, and `cas_` session tokens never pass on `/v1` or `/mcp`. (ADR-0034 point 4)
+- **DEC-RM-4** — RM — Enrolment is local to the server: `cerberusd admin enroll --label --url [--operator] --out` talks
+  to the daemon over the unlock socket (same-UID check, DEC-T13-1), needs the vault unlocked (CA key) and an owner
+  phrase, binds the enrolment to one operator, and writes a JSON bundle (URL, CA pin and PEM, client cert and PKCS#8 key,
+  mode 0600, created new). Client certificate 90 days, CN `cerberus-admin <enrolment id>`. The registry is plain JSON,
+  mode 0600, because a remote unlock needs it while sealed (AR-19). `cerberusd admin revoke <id>` needs no phrase (it
+  only removes power) and works with or without a running daemon. Rejected: an encrypted bundle with a one-time code
+  (more UX, little gain: the bundle alone opens no session); deferred to DEC-RM-14. (ADR-0034 point 3)
+- **DEC-RM-5** — RM — Sessions: token `cas_<uuidv7>.<32 random bytes, base64url>`, SHA-256 kept in daemon memory only;
+  bound to the client certificate, the operator and the unlock epoch; idle 900 s (60–3600), absolute 12 h (900–86400,
+  never past the hard lock); at most 4 per daemon and 2 per enrolment. Open on a sealed vault = `unlock_with_phrase`;
+  on a vault unlocked by the same operator = new core `verify_operator_phrase` (KDF on the slot, constant-time VMK
+  compare, no state change); unlocked by another operator = `409 conflict`, because core has one session
+  (`Session::authorize`, `vault/state.rs:58`). Failures count in the ADR-0026 back-off and in a per-enrolment limit
+  (5 / 15 min → 15 min refusal before the KDF). The recovery key is never accepted remotely. (ADR-0034 point 6)
+- **DEC-RM-6** — RM — The admin wire **is** the IPC contract: `POST /admin/v1/rpc/{command}` with the IPC arguments as
+  JSON (Rust argument names) and the IPC result DTO as the answer. The DTOs and `IpcError` move from the desktop crate to
+  a new transport-free crate `cerberus-admin` (names unchanged, so `bindings.ts` does not change), with one handler per
+  allowlisted command that both the desktop `ops` and the server call. MVP allowlist: 25 commands (2 pre-session,
+  `vault_unlock` through the session route, 22 with a session). Admin errors are `{ request_id, error: IpcError }`, not
+  the ADR-0021 agent shape, so the UI error handling is the same in both modes; `ErrorCode` and the agent OpenAPI do not
+  change. Rejected: a resource-style admin REST API (duplicates about 60 DTO shapes). (ADR-0034 point 5)
+- **DEC-RM-7** — RM — With the admin API on, `cerberusd` builds its core with `approvals_available = true` (decided at
+  start, not per connected desktop). An `ask_*` request that no desktop decides expires after its timeout (default
+  120 s, ADR-0018). With it off, ADR-0002 point 4 (`403 approval_unavailable`) stays. (ADR-0034 point 2.3)
+- **DEC-RM-8** — RM — "Disconnect" is not "lock". A closed, expired or lost session, the desktop quitting, and OS sleep
+  or screen lock on the desktop end only the remote session; the server vault stays unlocked for its agents. Only
+  `vault_lock`, `vault_panic` or the daemon's own lock rules lock it. The UI shows the two actions apart. Reason: the
+  server exists to serve agents. (ADR-0034 points 6.6, 7.5)
+- **DEC-RM-9** — RM — The desktop proxy lives in Rust (`ipc!` macro → `cerberus-client` `PinnedHttps` with CA pin and
+  client certificate). The webview CSP stays `connect-src ipc: http://ipc.localhost`. The session token never reaches
+  the webview. The mode is a desktop preference; switching restarts the app, so a local service and a remote backend
+  never run together; switching to remote is refused while a local vault is unlocked. In remote mode no local vault is
+  opened and no local HTTPS server runs. (ADR-0034 points 1, 7)
+- **DEC-RM-10** — RM — In remote mode `vault_status.state` is `unlocked` only while this desktop holds a live session,
+  else `sealed`, so the router guard and the screens need no new state. A new field `VaultStatusView.remote` (null in
+  local mode) carries profile, URL, the server's real state, reachability and version. An unreachable server is a normal
+  answer (`remote.reachable = false`), not an error, so the unlock screen can offer "Retry" and "Use the local vault".
+  (ADR-0034 point 7.3)
+- **DEC-RM-11** — RM — Commands off the allowlist answer `remote_unsupported` on the desktop before any network call,
+  and the UI hides or greys them ("Not available for a remote server"). Local UI preferences that touch no vault (UI
+  scale and zoom keys, language, theme) keep working in remote mode; the request listed zoom among the disabled
+  commands, but it never reaches a backend, so disabling it would protect nothing. Item payloads that point at a
+  desktop-held SSH draft are refused in remote mode. (ADR-0034 points 5.6, 7.7, 7.8)
+- **DEC-RM-12** — RM — The admin routes are not in `docs/api/openapi-draft.yaml` (the agent contract). They get their own
+  route-list test (exactly five routes), and a new test checks that the generated agent OpenAPI has no `/admin` path.
+  (ADR-0034 point 5.5)
+- **DEC-RM-13** — RM — Doc drift: ADR-0002 point 3 and ADR-0031 point 3 name `cerberusd restore <file>`, which was never
+  built (`cerberusd` has `serve`, `unlock`, `status`; `docs/guides/cerberusd.md` says there is no restore command).
+  Notes were added to both status lines; the text is not rewritten. Remote mode does not add a restore: on a server the
+  restore stays a file copy. (ADR-0002, ADR-0031)
+- **DEC-RM-14** — RM — Deferred, not in the MVP: copy-to-clipboard in remote mode (reveal over RPC, then the local
+  clipboard timer); more commands on the allowlist (`item_versions`, `item_restore_version`, agent create, keys and
+  status, `lease_revoke_all`, `audit_verify`, vault settings); switching the session operator on an unlocked vault; a
+  sealed mirror of `admin-clients.json` checked at unlock (AR-19); the client key in the OS keychain (AR-20); a separate
+  `admin.bind`; an encrypted bundle. Each needs only an allowlist entry or a small change on top of the MVP.
+  (`docs/remote-mode-plan.md`, "Follow-ups")
+
+## RD — RustDesk connections (2026-11-21)
+
+- **DEC-RD-1** — New item kind `rustdesk` (Rust `ItemKind::Rustdesk`, wire value `rustdesk`) for a machine reached with
+  RustDesk. The RustDesk ID, the ID server, the relay server and the server public key are not secret, so they are
+  item metadata in `custom` (`rustdesk_id`, `id_server`, `relay_server`, `server_key`), as the host of an SSH key is;
+  only the permanent password is in the payload (`Payload::Rustdesk { password: Option<SecretString> }`, at most
+  1024 characters). Why metadata: the share card and **Connect** need no reveal (no use count, no audit read, nothing
+  exhausted by `max_uses`), and the connection can be edited while the password is kept (`{ kind: "keep" }`).
+  Rules (`items/rustdesk.rs`, checked by `validate_fields` for this kind, so also on a metadata-only update):
+  `rustdesk_id` is required, 9 to 20 ASCII digits and nothing else (the brief's choice; RustDesk custom IDs with
+  letters are not accepted); servers are `host`, IPv4 or `[IPv6]` with an optional port (`[A-Za-z0-9.-_:[]]`, 1 to
+  255); the key is Base64 (standard or URL-safe), 1 to 128. Search: the index adds the `rustdesk_id` of a `rustdesk`
+  item to its words (`index::item_words`), so `item_list { q }` and the agent catalog query find it by ID (SSH host
+  metadata is still not a search word; not changed here). Agents: no new permission; a `read` grant gives the item
+  like any other. The wire `RustdeskSecret` carries all five fields: on create the four plain ones become metadata
+  (`convert::create_item_input`, as for SSH), and a read fills them back from the metadata
+  (`convert::fill_rustdesk_meta`), so an agent gets the whole connection in one answer. `ItemSummary` on the wire
+  still has no `custom` (DEC-INT10-7): an agent with only `find` sees no ID. Default category of agent items:
+  `Remote desktop` (also a new built-in category in the UI, icon `monitor`). `cerberus run` maps
+  `CERBERUS_RUSTDESK_ID`, `_PASSWORD`, `_ID_SERVER`, `_RELAY_SERVER`, `_KEY`. CSV export writes the password in
+  `password` and the connection as JSON in `extra`; CSV import does not make `rustdesk` items (like `ssh_key`,
+  `cloud` and `certificate`). Resolve `ALL_KINDS` and the MCP/OpenAPI `ItemKind` enums list the kind. Tests: core
+  `an_id_is_nine_to_twenty_digits`, `the_id_is_required_and_servers_and_key_are_checked`,
+  `meta_round_trips_through_custom`, `a_rustdesk_item_needs_its_id_in_the_metadata`,
+  `the_rustdesk_id_is_a_search_word_of_a_rustdesk_item_only`,
+  `a_rustdesk_row_has_the_password_and_the_connection_from_the_metadata`; api
+  `a_rustdesk_create_keeps_the_connection_as_metadata_and_the_password_as_payload`,
+  `a_rustdesk_read_gets_the_connection_back_from_the_metadata`; client
+  `rustdesk_defaults_hold_the_id_and_the_password_only_as_secret`.
+- **DEC-RD-2** — Schema version 2: migration `0002_rustdesk_kind.sql` adds `'rustdesk'` to the `items.kind` CHECK.
+  SQLite cannot alter a CHECK, so the table is rebuilt (new table, copy every row with its rowid, drop, rename, index
+  again). `0001` is not edited (its checksum is recorded in every vault). Foreign keys must be off for the drop
+  (with them on, `DROP TABLE` runs an implicit `DELETE` that cascades to `item_versions`, `access_requests` and
+  `leases`), and `PRAGMA foreign_keys` is ignored inside a transaction, so the file starts with `-- no-transaction`
+  (sqlx then runs it without its own transaction) and opens `BEGIN IMMEDIATE` … `COMMIT` itself, with
+  `user_version = 2` inside it. A temporary table with `CHECK (violations = 0)` fed from `pragma_foreign_key_check`
+  fails the migration if any reference broke. A failure rolls back everything; the pre-migrate copy
+  (`<vault>.pre-migrate-v1`, ADR-0013) is written before. A second run (crash between `COMMIT` and the sqlx
+  bookkeeping row) is the same rebuild again and keeps the data. Rejected: `PRAGMA writable_schema` to edit the stored
+  SQL in place (documented as dangerous, and it needs a manual `schema_version` bump); renaming the old table first
+  (with `legacy_alter_table` off, SQLite rewrites the child foreign keys to the renamed old table).
+  `docs/schema.sql` shows the new list. Older builds refuse a version 2 file (`TooNew`), as for any newer schema.
+  Tests: store `migration_0002_allows_rustdesk_and_keeps_every_row` (a version 1 file with items and versions:
+  every row and rowid kept, `rustdesk` accepted and `bogus` refused, foreign keys on and enforced, the cascade points
+  at the new table, the index exists, the pre-migrate copy exists, a second run changes nothing);
+  `older_schema_is_migrated_after_a_pre_migrate_copy` now builds on all migrations of this build; the version
+  assertions of the store tests read `schema_version()` or expect 2.
+- **DEC-RD-3** — Desktop: two new IPC commands (main window only, `names.rs`, capability, bindings; listed as added
+  commands in the contract test, not in interfaces.md section 9). `rustdesk_status` (any role): the program chosen in
+  Settings and the client that would start; nothing runs. `rustdesk_connect(item, copy_password)` (any role): reads
+  the item summary (no reveal), refuses another kind and an ID that is not 9 to 20 digits (checked again here, before
+  anything starts), finds the client, and starts it through the new `Shell::launch(program, args)`:
+  `std::process::Command` with an argument list, no shell, stdin/stdout/stderr null, a thread that waits for the
+  child so it leaves no zombie. Arguments: `--connect <id>`, or for Flatpak `flatpak run --command=rustdesk
+  com.rustdesk.RustDesk --connect <id>` (matches `core_main_invoke_new_connection` of RustDesk). The password is
+  never an argument (RustDesk accepts `--password`, but argv is readable by other processes of the user and shows in
+  process lists): with `copy_password` the item is revealed like `clipboard_copy_secret` (counted,
+  audited, the role must allow it) and copied with the 30 s clear. The answer says `copied`, `not_stored`,
+  `not_copied` (a failed read or copy does not undo the start; it is logged without the value) or `skipped`; the UI
+  shows the toast "Password copied — paste it in RustDesk". The client is started first, so a missing client costs no
+  reveal. Lookup order: the chosen program only (no fallback, so the person knows what runs); else `rustdesk` on
+  `PATH` (absolute directories only); else standard locations (Linux `/usr/bin`, `/usr/local/bin`,
+  `/usr/share/rustdesk`; macOS `/Applications/RustDesk.app` and `~/Applications`; Windows
+  `%ProgramFiles%\RustDesk\rustdesk.exe`); else Flatpak when `flatpak` is on `PATH` and the app folder exists in
+  `/var/lib/flatpak/app` or `~/.local/share/flatpak/app`. Not found: `unavailable` with an install hint, and the UI
+  shows a notice and disables Connect. The chosen program is the desktop preference `rustdesk_path`
+  (`desktop-prefs.json`, settings key `rustdesk_path`, operator role like `autostart`); `null` or an empty text goes
+  back to the lookup. A value must be an absolute path to a runnable file whose name starts with `rustdesk` (any
+  case), so a compromised webview cannot point Connect at an arbitrary program by name. Tests run no program: the
+  default `Shell::launch` refuses, the fakes record. Tests: desktop unit `ops::rustdesk::tests::*` (lookup order,
+  relative `PATH` entries skipped, Flatpak needs tool and app, a missing chosen program finds nothing, the argument
+  list, the path rule) and `tests/rustdesk.rs` (`connect_starts_the_chosen_client_with_the_id_and_copies_the_password`,
+  `an_item_without_a_password_says_so_and_other_kinds_are_refused`,
+  `a_missing_client_starts_nothing_and_a_bad_program_is_refused`, `the_id_is_required_checked_and_searchable`).
+- **DEC-RD-4** — UI. Editor: kind **RustDesk** with its own panel (like SSH): the connection fields are always
+  editable (spaces are removed from the ID, a local check asks for 9 to 20 digits), the password is kept until
+  **Replace password** and an empty replacement removes it. Item details: a **Connection** card with the ID, servers,
+  key, the link `rustdesk://<id>` plus `?key=<encodeURIComponent(key)>` when there is a key (RustDesk reads `key` from
+  the query; `+` must be encoded because a query decoder turns it into a space), a **To share** text block with
+  **Copy all** (ID, servers, key, link), and **Connect**. The link and the text never hold the password; they are not
+  secret, so they use the page clipboard API, while the password row is the usual `SecretField` with
+  `clipboard_copy_secret` (30 s clear). A viewer can connect without the password. Settings: section
+  **Remote desktop** with the program path (text or the native file dialog, Save, Find automatically) and what the
+  lookup found. Mock and fixtures: one `rustdesk` item (`it-laptop`), handlers for both commands, a `missing` mode.
+  Tests: vault (share text and link without password, axe, connect and toast, viewer, not installed), editor (create,
+  local ID check, edit with keep, remove the password), settings (found, choose, back to automatic, not found,
+  viewer), helpers (`rustdesk.test.ts`).

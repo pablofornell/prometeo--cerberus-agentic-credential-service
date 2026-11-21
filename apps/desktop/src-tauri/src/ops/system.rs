@@ -8,6 +8,7 @@ use cerberus_types::OperatorRole as CoreRole;
 use serde_json::Value;
 
 use super::files;
+use super::rustdesk::{RUSTDESK_PATH_KEY, parse_path_setting};
 use crate::dto::{AuditEntryView, AuditQueryView, ChainReportView, NetworkView, SettingsView};
 use crate::error::{IpcError, IpcResult};
 use crate::guard::check;
@@ -61,11 +62,18 @@ async fn settings_view(state: &DesktopState) -> IpcResult<SettingsView> {
         CONTENT_PROTECTION_KEY.to_owned(),
         Value::Bool(prefs.content_protection),
     );
+    view.values.insert(
+        RUSTDESK_PATH_KEY.to_owned(),
+        prefs.rustdesk_path.map_or(Value::Null, |path| {
+            Value::String(path.display().to_string())
+        }),
+    );
     Ok(view)
 }
 
-/// `settings_set`: one key at a time. `autostart` and `content_protection` are desktop settings
-/// (operator role); every other key goes to the vault, which checks the role of its group.
+/// `settings_set`: one key at a time. `autostart`, `content_protection` and `rustdesk_path` are
+/// desktop settings (operator role); every other key goes to the vault, which checks the role of
+/// its group.
 pub async fn settings_set(
     state: &DesktopState,
     window: &str,
@@ -73,12 +81,18 @@ pub async fn settings_set(
     value: Value,
 ) -> IpcResult<SettingsView> {
     check(window, "settings_set")?;
-    if key != AUTOSTART_KEY && key != CONTENT_PROTECTION_KEY {
+    if key != AUTOSTART_KEY && key != CONTENT_PROTECTION_KEY && key != RUSTDESK_PATH_KEY {
         let (core, ctx) = state.operator().await?;
         return Ok(core.settings_set(&ctx, &key, value).await?.into());
     }
     let (core, ctx) = state.operator().await?;
     core.authorize_role(&ctx, CoreRole::Operator).await?;
+    if key == RUSTDESK_PATH_KEY {
+        let mut prefs = state.prefs();
+        prefs.rustdesk_path = parse_path_setting(&value)?;
+        state.set_prefs(prefs)?;
+        return settings_view(state).await;
+    }
     let on = value
         .as_bool()
         .ok_or_else(|| IpcError::invalid(&key, "must be true or false"))?;

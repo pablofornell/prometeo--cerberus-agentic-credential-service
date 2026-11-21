@@ -120,7 +120,9 @@ pub fn ipc_builder() -> Builder<Wry> {
             commands::csv_export,
             commands::ui_activity,
             commands::clipboard_copy_once,
-            commands::file_pick_open
+            commands::file_pick_open,
+            commands::rustdesk_status,
+            commands::rustdesk_connect
         ])
         .events(collect_events![
             events::VaultStateChanged,

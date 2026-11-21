@@ -17,6 +17,8 @@ pub enum ItemKind {
     Certificate,
     EnvBundle,
     Note,
+    /// A RustDesk remote desktop connection (DEC-RD-1).
+    Rustdesk,
 }
 
 /// Environment of an item.

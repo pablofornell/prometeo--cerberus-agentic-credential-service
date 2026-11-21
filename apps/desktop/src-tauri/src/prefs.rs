@@ -1,4 +1,5 @@
-//! Desktop preferences kept outside the vault: the network bind, autostart and content protection.
+//! Desktop preferences kept outside the vault: the network bind, autostart, content protection
+//! and the RustDesk client program.
 //!
 //! They are not secret and they must be readable before the vault unlocks (the server starts
 //! sealed), so they live in a small JSON file in the app data directory (DEC-T15-7).
@@ -50,6 +51,8 @@ pub struct Prefs {
     pub autostart: bool,
     /// Ask the OS not to capture the window in screenshots. Off by default.
     pub content_protection: bool,
+    /// The RustDesk client program the person chose (DEC-RD-3). `None`: look for it.
+    pub rustdesk_path: Option<PathBuf>,
 }
 
 impl Default for Prefs {
@@ -62,6 +65,7 @@ impl Default for Prefs {
             port: DEFAULT_PORT,
             autostart: false,
             content_protection: false,
+            rustdesk_path: None,
         }
     }
 }

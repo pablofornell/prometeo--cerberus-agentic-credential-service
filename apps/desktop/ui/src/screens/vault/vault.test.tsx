@@ -34,10 +34,10 @@ describe("vault browser", () => {
   it("lists items with prod badges, role chips and TTL rings for session items", async () => {
     open();
     const list = await screen.findByRole("listbox", { name: "Items" });
-    expect(rows()).toHaveLength(12);
+    expect(rows()).toHaveLength(13);
     expect(within(list).getAllByText("prod")).toHaveLength(2);
     expect(within(list).getAllByRole("img", { name: /time left/ }).length).toBe(2);
-    expect(screen.getByText("12 items in all workspaces")).toBeInTheDocument();
+    expect(screen.getByText("13 items in all workspaces")).toBeInTheDocument();
   });
 
   it("has no axe violations in the ready state (list and grid)", async () => {
@@ -81,7 +81,7 @@ describe("vault browser", () => {
     await userEvent.type(screen.getByRole("searchbox"), "zzzz");
     expect(await screen.findByRole("heading", { name: "No items match these filters" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    await waitFor(() => expect(rows()).toHaveLength(12));
+    await waitFor(() => expect(rows()).toHaveLength(13));
   });
 
   it("moves the selection with the arrow keys and opens the details", async () => {
@@ -138,7 +138,7 @@ describe("vault browser", () => {
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
     await userEvent.click(within(dialog).getByRole("button", { name: "Delete item" }));
     await waitFor(() => expect(fake.calls.deleted).toEqual(["it-user"]));
-    await waitFor(() => expect(rows()).toHaveLength(11));
+    await waitFor(() => expect(rows()).toHaveLength(12));
   });
 
   it("viewer: no New item, no Edit or Delete, values denied, no reveal call", async () => {
@@ -182,6 +182,63 @@ describe("vault browser", () => {
   it("loading state is announced", async () => {
     open({ mode: "slow" });
     expect(await screen.findByRole("status", { name: "Loading items" })).toHaveAttribute("aria-busy", "true");
+  });
+
+  describe("RustDesk item", () => {
+    const LINK = "rustdesk://123456789?key=FAKE%2BKEY%2FFAKE%3D";
+    const openLaptop = async (options: VaultMockOptions & { role?: OperatorRole } = {}) => {
+      const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      const view = open(options);
+      await screen.findByRole("listbox", { name: "Items" });
+      await userEvent.click(screen.getByRole("option", { name: /Build laptop \(RustDesk\)/ }));
+      await screen.findByRole("heading", { name: "Build laptop (RustDesk)" });
+      return { ...view, writeText };
+    };
+
+    it("shows what to share without the password, with no axe violations", async () => {
+      const { container, writeText } = await openLaptop();
+      const card = screen.getByRole("region", { name: "Connection" });
+      expect(within(card).getByText("123456789")).toBeInTheDocument();
+      expect(within(card).getByText("rd.example.test:21117")).toBeInTheDocument();
+      expect(within(card).getByText(LINK)).toBeInTheDocument();
+      await userEvent.click(within(card).getByRole("button", { name: "Copy the RustDesk link" }));
+      await userEvent.click(within(card).getByRole("button", { name: "Copy all" }));
+      expect(writeText.mock.calls.map(([text]) => text)).toEqual([
+        LINK,
+        ["RustDesk ID: 123456789", "ID server: rd.example.test", "Relay server: rd.example.test:21117", "Key: FAKE+KEY/FAKE=", `Link: ${LINK}`].join("\n"),
+      ]);
+      expect(writeText.mock.calls.flat().join("")).not.toContain("fake-rd-password");
+      expect(await axe(container)).toHaveNoViolations();
+    });
+
+    it("connects and copies the password through the backend, with a toast", async () => {
+      const { fake, writeText } = await openLaptop();
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await waitFor(() => expect(fake.calls.connected).toEqual([{ item: "it-laptop", copyPassword: true }]));
+      expect(await screen.findByText("Password copied — paste it in RustDesk")).toBeInTheDocument();
+      expect(screen.getByText("RustDesk is opening 123456789.")).toBeInTheDocument();
+      expect(writeText).not.toHaveBeenCalled();
+      // The password row uses the backend copy with auto-clear, as for every other secret.
+      await userEvent.click(screen.getByRole("button", { name: "Copy: Password" }));
+      await waitFor(() => expect(fake.calls.copied).toEqual([{ item: "it-laptop", field: "password" }]));
+    });
+
+    it("viewer: connects without asking for the password", async () => {
+      const { fake } = await openLaptop({ role: "viewer" });
+      expect(screen.getByText("Opens RustDesk on this ID. Your role cannot copy the password.")).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await waitFor(() => expect(fake.calls.connected).toEqual([{ item: "it-laptop", copyPassword: false }]));
+      expect(await screen.findByText("RustDesk is opening 123456789.")).toBeInTheDocument();
+    });
+
+    it("says how to get RustDesk when it is not installed", async () => {
+      const { fake } = await openLaptop({ rustdesk: "missing" });
+      expect(await screen.findByText("RustDesk was not found on this computer")).toBeInTheDocument();
+      expect(screen.getByText(/Install it from rustdesk.com/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+      expect(fake.calls.connected).toEqual([]);
+    });
   });
 
   it("locked: a lock while the list is open leaves the screen", async () => {

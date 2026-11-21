@@ -36,7 +36,7 @@ async fn migration_up_from_empty_sets_the_schema() {
         .await
         .unwrap();
     assert_eq!(version, schema_version());
-    assert_eq!(version, 1);
+    assert_eq!(version, 2);
     assert_eq!(app_id, 0x4342_5256);
     assert_eq!(auto_vacuum, 2, "INCREMENTAL");
     assert_eq!(journal, "wal");
@@ -98,7 +98,7 @@ async fn open_refuses_a_newer_schema() {
             error,
             StoreError::TooNew {
                 found: 99,
-                supported: 1
+                supported: 2
             }
         ),
         "{error:?}"

@@ -70,6 +70,7 @@ pub struct VaultId(pub [u8; 16]);
 pub enum ItemKind {
     WebLogin, ApiKey, SshKey, SessionToken, BrowserSession,
     Database, Cloud, Certificate, EnvBundle, Note,
+    Rustdesk, // DEC-RD-1
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
@@ -225,6 +226,9 @@ pub enum SecretPayloadWire {
     Certificate { cert_pem: String, key_pem: Option<WireSecret>, chain_pem: Option<String> },
     EnvBundle { vars: std::collections::BTreeMap<String, WireSecret> },
     Note { text: WireSecret },
+    // DEC-RD-1: the four plain fields are item metadata (`custom`); create stores them there, a read fills them in.
+    Rustdesk { rustdesk_id: Option<String>, id_server: Option<String>, relay_server: Option<String>,
+               server_key: Option<String>, password: Option<WireSecret> },
 }
 
 /// Input payload for creates. Same shape as `SecretPayloadWire`, plus the TOTP seed for web logins.
@@ -935,6 +939,8 @@ pub mod items {
         Certificate { cert_pem: String, key_pem: Option<cerberus_crypto::SecretString>, chain_pem: Option<String> },
         EnvBundle { vars: std::collections::BTreeMap<String, cerberus_crypto::SecretString> },
         Note { text: cerberus_crypto::SecretString },
+        // DEC-RD-1: ID, servers and key are in `custom` (`rustdesk_id`, `id_server`, `relay_server`, `server_key`).
+        Rustdesk { password: Option<cerberus_crypto::SecretString> },
     }
     pub struct TotpSeed { pub secret: cerberus_crypto::SecretString, pub algorithm: TotpAlgorithm, pub digits: u8, pub period: u32 }
     #[derive(Clone, Copy, Debug)]

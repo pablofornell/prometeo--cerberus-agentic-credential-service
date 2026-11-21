@@ -8,6 +8,10 @@ import type { FormState } from "./model";
 import { PasswordGenerator } from "./PasswordGenerator";
 import { TotpPreview } from "./TotpPreview";
 
+/** Kinds whose whole secret panel is replaced by `KeptSecretPanel` while an edited item keeps its secret. SSH and
+ * RustDesk have their own panels: their metadata stays editable then. */
+export type SecretPanelKind = Exclude<ItemKind, "ssh_key" | "rustdesk">;
+
 export interface PanelProps {
   state: FormState;
   patch: (patch: Partial<FormState>) => void;
@@ -30,7 +34,7 @@ function Group({ legend, children }: { legend: string; children: ReactNode }) {
   );
 }
 
-const LEGEND: Record<Exclude<ItemKind, "ssh_key">, keyof typeof messages> = {
+const LEGEND: Record<SecretPanelKind, keyof typeof messages> = {
   web_login: "web.legend",
   api_key: "api.legend",
   session_token: "session.legend",
@@ -43,7 +47,7 @@ const LEGEND: Record<Exclude<ItemKind, "ssh_key">, keyof typeof messages> = {
 };
 
 /** An edited item keeps its secret. The form never reads it, so this stands in for the secret fields until "Replace". */
-export function KeptSecretPanel({ kind, onReplace }: { kind: Exclude<ItemKind, "ssh_key">; onReplace: () => void }) {
+export function KeptSecretPanel({ kind, onReplace }: { kind: SecretPanelKind; onReplace: () => void }) {
   const tr = useScreenT(messages);
   return (
     <Group legend={tr(LEGEND[kind])}>

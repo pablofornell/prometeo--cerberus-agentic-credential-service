@@ -9,7 +9,7 @@ use zeroize::Zeroizing;
 use super::guard::guard_cell;
 use super::totp_text::seed_uri;
 use crate::error::CoreError;
-use crate::items::{Payload, RevealedItem};
+use crate::items::{Payload, RevealedItem, RustdeskMeta};
 
 /// The columns of the export, in order. A Cerberus export imports again as `Generic`.
 pub const EXPORT_COLUMNS: [&str; 14] = [
@@ -53,6 +53,7 @@ fn json_extra(pairs: Vec<(&str, Option<String>)>) -> Result<Cell, CoreError> {
 }
 
 /// The value columns of one payload: `username`, `password`, `url`, `secret`, `totp`, `extra`.
+/// `custom` is the item metadata: a RustDesk item keeps its ID and servers there (DEC-RD-1).
 struct Values {
     url: Cell,
     username: Cell,
@@ -62,7 +63,7 @@ struct Values {
     extra: Cell,
 }
 
-fn values(payload: &Payload) -> Result<Values, CoreError> {
+fn values(payload: &Payload, custom: &BTreeMap<String, String>) -> Result<Values, CoreError> {
     let mut v = Values {
         url: cell(""),
         username: cell(""),
@@ -198,6 +199,16 @@ fn values(payload: &Payload) -> Result<Values, CoreError> {
                 Zeroizing::new(serde_json::to_string(&plain).map_err(|_| CoreError::Corrupt)?);
         }
         Payload::Note { text } => v.secret = cell(sec(text)),
+        Payload::Rustdesk { password } => {
+            v.password = cell(password.as_ref().map_or("", sec));
+            let meta = RustdeskMeta::from_custom(|k| custom.get(k).map(String::as_str));
+            v.extra = json_extra(vec![
+                ("rustdesk_id", meta.rustdesk_id),
+                ("id_server", meta.id_server),
+                ("relay_server", meta.relay_server),
+                ("server_key", meta.server_key),
+            ])?;
+        }
     }
     Ok(v)
 }
@@ -213,7 +224,7 @@ fn row_of(workspace: &str, item: &RevealedItem) -> Result<Vec<Cell>, CoreError> 
         .ok()
         .and_then(|v| v.as_str().map(str::to_owned))
         .ok_or(CoreError::Corrupt)?;
-    let v = values(&item.payload)?;
+    let v = values(&item.payload, &s.custom)?;
     let url = if v.url.is_empty() {
         cell(s.target.as_deref().unwrap_or(""))
     } else {
@@ -552,6 +563,35 @@ mod tests {
             },
         ));
         assert_eq!(row["secret"], "fake note");
+    }
+
+    #[test]
+    fn a_rustdesk_row_has_the_password_and_the_connection_from_the_metadata() {
+        let (workspace, mut item) = revealed(
+            ItemKind::Rustdesk,
+            Payload::Rustdesk {
+                password: Some(secret("fake-rd-password")),
+            },
+        );
+        item.summary.custom = RustdeskMeta {
+            rustdesk_id: Some("123456789".to_owned()),
+            id_server: Some("rd.example.test".to_owned()),
+            relay_server: None,
+            server_key: Some("fakekey=".to_owned()),
+        }
+        .into_custom();
+        let row = one_row((workspace, item));
+        assert_eq!(row["kind"], "rustdesk");
+        assert_eq!(row["password"], "fake-rd-password");
+        assert_eq!(row["secret"], "");
+        assert_eq!(
+            extra(&row),
+            serde_json::json!({
+                "rustdesk_id": "123456789",
+                "id_server": "rd.example.test",
+                "server_key": "fakekey=",
+            })
+        );
     }
 
     #[test]

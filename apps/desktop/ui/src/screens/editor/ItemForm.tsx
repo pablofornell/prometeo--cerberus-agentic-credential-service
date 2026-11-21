@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
 import { useLocation } from "wouter";
-import type { ItemKind, WorkspaceView } from "../../bindings";
+import type { WorkspaceView } from "../../bindings";
 import { useScreenT } from "../../i18n";
 import { ipc, isIpcFailure } from "../../ipc/client";
 import { useSettings } from "../../ipc/queries";
@@ -13,7 +13,8 @@ import { WorkspaceDialog } from "../vault/WorkspaceDialog";
 import { RoleChips } from "./fields";
 import { messages } from "./messages";
 import { type FormState, isInline, localProblems, normalizeField, toInput, withKind } from "./model";
-import { ApiKeyPanel, BrowserSessionPanel, CertificatePanel, CloudPanel, DatabasePanel, EnvBundlePanel, KeptSecretPanel, NotePanel, SessionTokenPanel, WebLoginPanel, type PanelProps } from "./panels";
+import { ApiKeyPanel, BrowserSessionPanel, CertificatePanel, CloudPanel, DatabasePanel, EnvBundlePanel, KeptSecretPanel, NotePanel, SessionTokenPanel, WebLoginPanel, type PanelProps, type SecretPanelKind } from "./panels";
+import { RustdeskPanel } from "./RustdeskPanel";
 import { SshPanel } from "./SshPanel";
 
 interface Props {
@@ -29,6 +30,7 @@ const LOCAL_TEXT: Record<string, keyof typeof messages> = {
   title: "f.title.problem",
   workspace: "f.workspace.problem",
   key: "ssh.keyProblem",
+  rustdeskId: "rd.idProblem",
   date: "f.expires.date.problem",
 };
 
@@ -41,7 +43,7 @@ const SECONDS_LABEL: Record<number, keyof typeof messages> = {
   2592000: "ttl.30d",
 };
 
-const PANELS: Record<Exclude<ItemKind, "ssh_key">, (props: PanelProps) => ReactElement> = {
+const PANELS: Record<SecretPanelKind, (props: PanelProps) => ReactElement> = {
   web_login: WebLoginPanel,
   api_key: ApiKeyPanel,
   session_token: SessionTokenPanel,
@@ -153,6 +155,7 @@ export function ItemForm({ initial, itemId, workspaces }: Props) {
   const panelProps: PanelProps = { state, patch, problems };
   const secretPanel = (() => {
     if (state.kind === "ssh_key") return <SshPanel state={state} patch={patch} problems={problems} />;
+    if (state.kind === "rustdesk") return <RustdeskPanel state={state} patch={patch} problems={problems} editing={editing} />;
     if (state.keepSecret) return <KeptSecretPanel kind={state.kind} onReplace={() => patch({ keepSecret: false })} />;
     const Panel_ = PANELS[state.kind];
     return (

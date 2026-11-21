@@ -235,6 +235,7 @@ fn field_text(payload: &Payload, field: &str) -> Option<String> {
         (Payload::Certificate { key_pem, .. }, "key_pem" | "secret") => opt(key_pem),
         (Payload::EnvBundle { vars }, name) => vars.get(name).and_then(text),
         (Payload::Note { text: note }, "text" | "secret") => text(note),
+        (Payload::Rustdesk { password }, "password" | "secret") => opt(password),
         _ => None,
     }
 }

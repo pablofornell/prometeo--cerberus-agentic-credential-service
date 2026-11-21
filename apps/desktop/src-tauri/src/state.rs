@@ -57,6 +57,15 @@ pub trait Shell: Send + Sync {
     fn pick_file(&self, _title: Option<&str>, _extensions: &[String]) -> Option<PathBuf> {
         None
     }
+    /// Starts `program` with `args`: no shell, no wait, the arguments as they are. The desktop app
+    /// uses it to open the RustDesk client (DEC-RD-3). The default starts nothing, so a shell
+    /// that does not say otherwise (every test shell) never runs a program.
+    ///
+    /// # Errors
+    /// `unavailable` when the program cannot be started.
+    fn launch(&self, _program: &Path, _args: &[String]) -> IpcResult<()> {
+        Err(IpcError::unavailable("this shell cannot start programs"))
+    }
 }
 
 /// What stays in the backend and never goes to the UI as a plain value.

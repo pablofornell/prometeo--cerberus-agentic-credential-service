@@ -14,8 +14,9 @@ export const KINDS: readonly ItemKind[] = [
   "certificate",
   "env_bundle",
   "note",
+  "rustdesk",
 ];
 export const DAYS: readonly DayOfWeek[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 /** Built-in categories (PLAN section 3). The person may add more; a grant matches the text. */
-export const CATEGORIES: readonly string[] = ["Web login", "API key", "SSH", "Session", "Database", "Cloud", "Certificate", "Other"];
+export const CATEGORIES: readonly string[] = ["Web login", "API key", "SSH", "Session", "Database", "Cloud", "Certificate", "Remote desktop", "Other"];
 export const ROLE_LABELS: readonly string[] = ["admin", "normal user", "read-only", "SAI user"];

@@ -20,7 +20,7 @@ const saveButton = () => screen.getByRole("button", { name: "Save item" });
 
 describe("item editor: new item", () => {
   // One axe run per test: four runs in one test passed the time limit on a busy machine.
-  it.each(["Web login", "SSH key", "Database", "Env bundle"])("has no axe violations (%s)", async (kind) => {
+  it.each(["Web login", "SSH key", "Database", "Env bundle", "RustDesk"])("has no axe violations (%s)", async (kind) => {
     const { container } = open("/editor/new");
     await form();
     await userEvent.click(screen.getByRole("radio", { name: kind }));
@@ -224,6 +224,52 @@ describe("item editor: ssh key", () => {
     await pickWorkspace();
     await userEvent.click(saveButton());
     expect(await screen.findByText("Add a key: drop a file, choose one, or generate a new one.")).toBeInTheDocument();
+  });
+});
+
+describe("item editor: RustDesk", () => {
+  it("saves the connection as metadata and the password as the payload", async () => {
+    const { fake } = open("/editor/new");
+    await form();
+    await userEvent.click(screen.getByRole("radio", { name: "RustDesk" }));
+    expect(screen.getByLabelText("Category")).toHaveValue("Remote desktop");
+    await userEvent.type(screen.getByLabelText("Title"), "Home laptop");
+    await pickWorkspace("build-infra");
+    await userEvent.type(screen.getByLabelText("RustDesk ID"), "12345");
+    await userEvent.click(saveButton());
+    expect(await screen.findByText("Add the RustDesk ID: 9 to 20 digits.")).toBeInTheDocument();
+    expect(fake.calls.created).toEqual([]);
+    await userEvent.type(screen.getByLabelText("RustDesk ID"), "6 789");
+    await userEvent.type(screen.getByLabelText("ID server (optional)"), " rd.example.test ");
+    await userEvent.type(screen.getByLabelText("Permanent password (optional)"), "fake-rd-password");
+    await userEvent.click(saveButton());
+    await waitFor(() => expect(fake.calls.created).toHaveLength(1));
+    expect(fake.calls.created[0]).toMatchObject({
+      category: "Remote desktop",
+      custom: { rustdesk_id: "123456789", id_server: "rd.example.test" },
+      payload: { kind: "rustdesk", password: "fake-rd-password" },
+    });
+    expect(fake.calls.created[0]?.custom).not.toHaveProperty("relay_server");
+  });
+
+  it("edits the connection and keeps the password it never reads", async () => {
+    const { fake } = open("/editor/it-laptop");
+    expect(await screen.findByLabelText("RustDesk ID")).toHaveValue("123456789");
+    expect(screen.getByText(/The password is unchanged/)).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText("Relay server (optional)"));
+    await userEvent.click(saveButton());
+    await waitFor(() => expect(fake.calls.updated).toHaveLength(1));
+    expect(fake.calls.updated[0]?.input).toMatchObject({ custom: { rustdesk_id: "123456789", id_server: "rd.example.test" }, payload: { kind: "keep" } });
+    expect(fake.calls.updated[0]?.input.custom).not.toHaveProperty("relay_server");
+    expect(fake.calls.revealed).toEqual([]);
+  });
+
+  it("removes the password with an empty replacement", async () => {
+    const { fake } = open("/editor/it-laptop");
+    await userEvent.click(await screen.findByRole("button", { name: "Replace password" }));
+    await userEvent.click(saveButton());
+    await waitFor(() => expect(fake.calls.updated).toHaveLength(1));
+    expect(fake.calls.updated[0]?.input.payload).toEqual({ kind: "rustdesk", password: null });
   });
 });
 

@@ -79,6 +79,8 @@ export const commands = {
 	uiActivity: (options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("ui_activity", undefined, options)),
 	clipboardCopyOnce: (kind: OneTimeKind, options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("clipboard_copy_once", { kind }, options)),
 	filePickOpen: (title: string | null, extensions: string[], options?: InvokeOptions) => typedError<string | null, IpcError_Serialize>(__TAURI_INVOKE("file_pick_open", { title, extensions }, options)),
+	rustdeskStatus: (options?: InvokeOptions) => typedError<RustdeskStatusView_Serialize, IpcError_Serialize>(__TAURI_INVOKE("rustdesk_status", undefined, options)),
+	rustdeskConnect: (item: string, copyPassword: boolean, options?: InvokeOptions) => typedError<RustdeskConnectView, IpcError_Serialize>(__TAURI_INVOKE("rustdesk_connect", { item, copyPassword }, options)),
 };
 
 /** Events */
@@ -1064,7 +1066,7 @@ export type ItemInputView_Serialize = {
 };
 
 /**  Kind of an item. */
-export type ItemKind = "web_login" | "api_key" | "ssh_key" | "session_token" | "browser_session" | "database" | "cloud" | "certificate" | "env_bundle" | "note";
+export type ItemKind = "web_login" | "api_key" | "ssh_key" | "session_token" | "browser_session" | "database" | "cloud" | "certificate" | "env_bundle" | "note" | "rustdesk";
 
 /**  Metadata of an item. It has no field that can hold a secret. */
 export type ItemSummaryView = ItemSummaryView_Serialize | ItemSummaryView_Deserialize;
@@ -1101,7 +1103,8 @@ export type ItemSummaryView_Deserialize = {
 	has_totp: boolean,
 	/**
 	 *  Extra facts by name. Metadata only: a secret value is in the payload, not here. SSH items
-	 *  use `machine`, `host`, `port` and `user`.
+	 *  use `machine`, `host`, `port` and `user`; RustDesk items use `rustdesk_id`, `id_server`,
+	 *  `relay_server` and `server_key`.
 	 */
 	custom: { [key in string]: string },
 };
@@ -1138,7 +1141,8 @@ export type ItemSummaryView_Serialize = {
 	has_totp: boolean,
 	/**
 	 *  Extra facts by name. Metadata only: a secret value is in the payload, not here. SSH items
-	 *  use `machine`, `host`, `port` and `user`.
+	 *  use `machine`, `host`, `port` and `user`; RustDesk items use `rustdesk_id`, `id_server`,
+	 *  `relay_server` and `server_key`.
 	 */
 	custom: { [key in string]: string },
 };
@@ -1389,7 +1393,9 @@ export type PayloadView_Deserialize = { kind: "web_login"; username: string; pas
  *  Leave the stored secret as it is. Input of `item_update` only: a metadata-only update
  *  (DEC-INT10-6). `item_create` refuses it.
  */
-{ kind: "keep" } | { kind: "session_token"; token: string; token_type?: string | null; header_name?: string | null } | { kind: "browser_session"; storage_state: string; origin: string } | { kind: "database"; url?: string | null; engine?: string | null; host?: string | null; port?: number | null; database?: string | null; username?: string | null; password?: string | null; params: { [key in string]: string } } | { kind: "cloud"; provider: string; access_key_id?: string | null; secret_access_key?: string | null; session_token?: string | null; region?: string | null; extra: { [key in string]: string } } | { kind: "certificate"; cert_pem: string; key_pem?: string | null; chain_pem?: string | null } | { kind: "env_bundle"; vars: { [key in string]: string } } | { kind: "note"; text: string };
+{ kind: "keep" } | { kind: "session_token"; token: string; token_type?: string | null; header_name?: string | null } | { kind: "browser_session"; storage_state: string; origin: string } | { kind: "database"; url?: string | null; engine?: string | null; host?: string | null; port?: number | null; database?: string | null; username?: string | null; password?: string | null; params: { [key in string]: string } } | { kind: "cloud"; provider: string; access_key_id?: string | null; secret_access_key?: string | null; session_token?: string | null; region?: string | null; extra: { [key in string]: string } } | { kind: "certificate"; cert_pem: string; key_pem?: string | null; chain_pem?: string | null } | { kind: "env_bundle"; vars: { [key in string]: string } } | { kind: "note"; text: string } | 
+/**  A RustDesk connection. The ID, the servers and the key are in `custom` (DEC-RD-1). */
+{ kind: "rustdesk"; password?: string | null };
 
 /**
  *  The secret part of an item, by kind. The same shape goes in (`item_create`, `item_update`) and
@@ -1405,7 +1411,9 @@ export type PayloadView_Serialize = { kind: "web_login"; username: string; passw
  *  Leave the stored secret as it is. Input of `item_update` only: a metadata-only update
  *  (DEC-INT10-6). `item_create` refuses it.
  */
-{ kind: "keep" } | { kind: "session_token"; token: string; token_type: string | null; header_name: string | null } | { kind: "browser_session"; storage_state: string; origin: string } | { kind: "database"; url: string | null; engine: string | null; host: string | null; port: number | null; database: string | null; username: string | null; password: string | null; params: { [key in string]: string } } | { kind: "cloud"; provider: string; access_key_id: string | null; secret_access_key: string | null; session_token: string | null; region: string | null; extra: { [key in string]: string } } | { kind: "certificate"; cert_pem: string; key_pem: string | null; chain_pem: string | null } | { kind: "env_bundle"; vars: { [key in string]: string } } | { kind: "note"; text: string };
+{ kind: "keep" } | { kind: "session_token"; token: string; token_type: string | null; header_name: string | null } | { kind: "browser_session"; storage_state: string; origin: string } | { kind: "database"; url: string | null; engine: string | null; host: string | null; port: number | null; database: string | null; username: string | null; password: string | null; params: { [key in string]: string } } | { kind: "cloud"; provider: string; access_key_id: string | null; secret_access_key: string | null; session_token: string | null; region: string | null; extra: { [key in string]: string } } | { kind: "certificate"; cert_pem: string; key_pem: string | null; chain_pem: string | null } | { kind: "env_bundle"; vars: { [key in string]: string } } | { kind: "note"; text: string } | 
+/**  A RustDesk connection. The ID, the servers and the key are in `custom` (DEC-RD-1). */
+{ kind: "rustdesk"; password: string | null };
 
 /**  Number of access requests that wait for a person. The tray badge and the approval window use it. */
 export type PendingCountChanged = {
@@ -1487,6 +1495,63 @@ export type RowProblemView_Serialize = {
 	code: ProblemCode,
 	/**  The item field at fault, for `invalid_value`. */
 	field: string | null,
+};
+
+/**  Where the RustDesk client was found. */
+export type RustdeskClientKind = 
+/**  The program chosen in Settings. */
+"custom" | 
+/**  `rustdesk` on the search path. */
+"path" | 
+/**  A standard install location. */
+"installed" | 
+/**  The Flatpak app `com.rustdesk.RustDesk`. */
+"flatpak";
+
+/**  The RustDesk client that `rustdesk_connect` starts. */
+export type RustdeskClientView = {
+	/**  Where it was found. */
+	kind: RustdeskClientKind,
+	/**  The program that runs: the client itself, or `flatpak` for the Flatpak app. */
+	program: string,
+};
+
+/**  Result of `rustdesk_connect`. */
+export type RustdeskConnectView = {
+	/**  The client that was started. */
+	client: RustdeskClientView,
+	/**  What happened to the password. */
+	password: RustdeskPasswordCopy,
+};
+
+/**  What `rustdesk_connect` did with the password of the item. */
+export type RustdeskPasswordCopy = 
+/**  On the clipboard. It is cleared after 30 seconds if it is still there. */
+"copied" | 
+/**  The item has no password. */
+"not_stored" | 
+/**  The password could not be read or copied (for example the role cannot reveal). */
+"not_copied" | 
+/**  The caller did not ask for it. */
+"skipped";
+
+/**  Result of `rustdesk_status`. */
+export type RustdeskStatusView = RustdeskStatusView_Serialize | RustdeskStatusView_Deserialize;
+
+/**  Result of `rustdesk_status`. */
+export type RustdeskStatusView_Deserialize = {
+	/**  The program chosen in Settings, if any. When it is set, nothing else is looked for. */
+	custom_path?: string | null,
+	/**  The client `rustdesk_connect` would start. `None`: RustDesk was not found. */
+	client?: RustdeskClientView | null,
+};
+
+/**  Result of `rustdesk_status`. */
+export type RustdeskStatusView_Serialize = {
+	/**  The program chosen in Settings, if any. When it is set, nothing else is looked for. */
+	custom_path: string | null,
+	/**  The client `rustdesk_connect` would start. `None`: RustDesk was not found. */
+	client: RustdeskClientView | null,
 };
 
 /**  Scope of an agent key. */

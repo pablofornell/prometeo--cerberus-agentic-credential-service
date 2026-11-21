@@ -79,6 +79,8 @@ fn every_documented_command_exists_and_nothing_is_undocumented_but_the_added_one
         [
             "clipboard_copy_once",
             "file_pick_open",
+            "rustdesk_connect",
+            "rustdesk_status",
             "vault_recover_stranded"
         ],
         "added commands"
@@ -149,7 +151,7 @@ fn capability_files_match_the_label_guard() {
 fn every_command_checks_its_window_label_first() {
     let mut sources = String::new();
     for file in [
-        "vault", "items", "agents", "policy", "restore", "system", "csv",
+        "vault", "items", "agents", "policy", "restore", "system", "csv", "rustdesk",
     ] {
         sources.push_str(&read(&format!("src/ops/{file}.rs")));
     }

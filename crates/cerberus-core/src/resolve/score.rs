@@ -24,7 +24,7 @@ const ROLE_CLASSES: [&[&str]; 3] = [
     &["read-only", "readonly", "ro", "viewer", "read"],
 ];
 
-const ALL_KINDS: [ItemKind; 10] = [
+const ALL_KINDS: [ItemKind; 11] = [
     ItemKind::WebLogin,
     ItemKind::ApiKey,
     ItemKind::SshKey,
@@ -35,6 +35,7 @@ const ALL_KINDS: [ItemKind; 10] = [
     ItemKind::Certificate,
     ItemKind::EnvBundle,
     ItemKind::Note,
+    ItemKind::Rustdesk,
 ];
 
 const ALL_ENVIRONMENTS: [Environment; 4] = [

@@ -2,7 +2,7 @@
 // permissions) and by the crate (`guard.rs`), so it has no `use` and no docs lint here.
 
 /// Every IPC command, in the order of `docs/interfaces.md` section 9, then the added ones.
-pub const ALL_COMMANDS: [&str; 69] = [
+pub const ALL_COMMANDS: [&str; 71] = [
     "vault_status",
     "vault_list_operators",
     "vault_create",
@@ -75,6 +75,9 @@ pub const ALL_COMMANDS: [&str; 69] = [
     "file_pick_open",
     // Added by T27-G: puts back a vault that a failed restore left at `<vault>.pre-restore-*`.
     "vault_recover_stranded",
+    // Added by RD (DEC-RD-3): find the RustDesk client and start it on a `rustdesk` item.
+    "rustdesk_status",
+    "rustdesk_connect",
 ];
 
 /// The commands the approval window may call. Every other command is for the main window only.

@@ -151,6 +151,7 @@ export const messages = defineMessages({
   "kind.certificate": "Certificate",
   "kind.env_bundle": "Env bundle",
   "kind.note": "Note",
+  "kind.rustdesk": "RustDesk",
 
   "day.monday": "Mon",
   "day.tuesday": "Tue",

@@ -726,28 +726,42 @@ mod tests {
         }
     }
 
+    /// A directory with the migrations of this build up to `version`, and `extra` as the next one.
+    fn migrations_dir(version: i64, extra: Option<&str>) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        for entry in std::fs::read_dir(&source).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_str().unwrap().to_owned();
+            let number: i64 = name.split('_').next().unwrap().parse().unwrap();
+            if number <= version {
+                std::fs::copy(&path, dir.path().join(&name)).unwrap();
+            }
+        }
+        if let Some(sql) = extra {
+            let next = version + 1;
+            std::fs::write(dir.path().join(format!("{next:04}_extra.sql")), sql).unwrap();
+        }
+        dir
+    }
+
     #[tokio::test]
     async fn older_schema_is_migrated_after_a_pre_migrate_copy() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("vault.cerberus");
         let clock = Arc::new(ManualClock::new(t0()));
+        let ours = schema_version();
         Store::open(options(&path, true), clock.clone())
             .await
             .unwrap()
             .close()
             .await;
 
-        let migrations = tempfile::tempdir().unwrap();
-        let first = std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations/0001_initial.sql"),
-        )
-        .unwrap();
-        std::fs::write(migrations.path().join("0001_initial.sql"), first).unwrap();
-        std::fs::write(
-            migrations.path().join("0002_extra.sql"),
-            "CREATE TABLE extra (id INTEGER PRIMARY KEY) STRICT;\nPRAGMA user_version = 2;",
-        )
-        .unwrap();
+        let next = ours + 1;
+        let extra = format!(
+            "CREATE TABLE extra (id INTEGER PRIMARY KEY) STRICT;\nPRAGMA user_version = {next};"
+        );
+        let migrations = migrations_dir(ours, Some(&extra));
         let newer = Migrator::new(migrations.path()).await.unwrap();
         let store = Store::open_with(options(&path, false), clock.clone(), &newer)
             .await
@@ -756,28 +770,153 @@ mod tests {
             .fetch_one(&store.pool)
             .await
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, next);
         store.close().await;
 
-        let copy = path.with_file_name("vault.cerberus.pre-migrate-v1");
+        let copy = path.with_file_name(format!("vault.cerberus.pre-migrate-v{ours}"));
         assert_eq!(
             probe(&copy).await.unwrap().user_version,
-            1,
+            ours,
             "the copy keeps the old schema"
         );
 
-        // This build (one migration) now refuses the version 2 file.
+        // This build now refuses the newer file.
         let error = Store::open(options(&path, false), clock).await.unwrap_err();
         assert!(
-            matches!(
-                error,
-                StoreError::TooNew {
-                    found: 2,
-                    supported: 1
-                }
-            ),
+            matches!(error, StoreError::TooNew { found, supported } if found == next && supported == ours),
             "{error:?}"
         );
+    }
+
+    async fn count(pool: &SqlitePool, sql: &'static str) -> i64 {
+        sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()
+    }
+
+    /// DEC-RD-2: migration 0002 rebuilds `items` to allow the kind `rustdesk`. Every item row (with
+    /// its rowid) and every row that points at one stays, foreign keys work again afterwards, and a
+    /// second run of the file changes nothing.
+    #[tokio::test]
+    async fn migration_0002_allows_rustdesk_and_keeps_every_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault.cerberus");
+        let clock = Arc::new(ManualClock::new(t0()));
+        let first = migrations_dir(1, None);
+        let v1 = Migrator::new(first.path()).await.unwrap();
+        let store = Store::open_with(options(&path, true), clock.clone(), &v1)
+            .await
+            .unwrap();
+        for (rowid, id, kind, expires) in [
+            (7_i64, "item-a", "web_login", None),
+            (9, "item-b", "session_token", Some(5_000_i64)),
+        ] {
+            sqlx::query(
+                "INSERT INTO items (rowid, id, kind, expires_at, created_at, updated_at, \
+                 current_version, meta_ct) VALUES (?, ?, ?, ?, 1, 2, 1, x'0102')",
+            )
+            .bind(rowid)
+            .bind(id)
+            .bind(kind)
+            .bind(expires)
+            .execute(&store.pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO item_versions (item_id, version, created_at, wrapped_dek, \
+                 payload_ct, meta_ct) VALUES (?, 1, 1, x'aa', x'bb', x'cc')",
+            )
+            .bind(id)
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        }
+        let refused = sqlx::query(
+            "INSERT INTO items (id, kind, created_at, updated_at, current_version, meta_ct) \
+             VALUES ('item-c', 'rustdesk', 1, 1, 1, x'00')",
+        )
+        .execute(&store.pool)
+        .await;
+        assert!(refused.is_err(), "version 1 has no rustdesk kind");
+        store.close().await;
+
+        let store = Store::open(options(&path, false), clock).await.unwrap();
+        let pool = &store.pool;
+        assert_eq!(count(pool, "PRAGMA user_version").await, 2);
+        assert_eq!(count(pool, "PRAGMA foreign_keys").await, 1);
+        assert_eq!(count(pool, "SELECT count(*) FROM item_versions").await, 2);
+        assert_eq!(
+            count(
+                pool,
+                "SELECT count(*) FROM items WHERE (rowid, id, kind) IN \
+                 (VALUES (7, 'item-a', 'web_login'), (9, 'item-b', 'session_token'))"
+            )
+            .await,
+            2
+        );
+        assert_eq!(
+            count(
+                pool,
+                "SELECT count(*) FROM sqlite_master WHERE type = 'index' \
+                 AND name = 'items_expires_at' AND tbl_name = 'items'"
+            )
+            .await,
+            1
+        );
+        assert_eq!(
+            count(
+                pool,
+                "SELECT count(*) FROM sqlite_master WHERE name = 'items_new'"
+            )
+            .await,
+            0
+        );
+        assert!(
+            path.with_file_name("vault.cerberus.pre-migrate-v1")
+                .exists(),
+            "the copy of version 1 is written first"
+        );
+
+        sqlx::query(
+            "INSERT INTO items (id, kind, created_at, updated_at, current_version, meta_ct) \
+             VALUES ('item-c', 'rustdesk', 1, 1, 1, x'00')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        let bogus = sqlx::query(
+            "INSERT INTO items (id, kind, created_at, updated_at, current_version, meta_ct) \
+             VALUES ('item-d', 'bogus', 1, 1, 1, x'00')",
+        )
+        .execute(pool)
+        .await;
+        assert!(bogus.is_err(), "the kind is still checked");
+        let orphan = sqlx::query(
+            "INSERT INTO item_versions (item_id, version, created_at, wrapped_dek, payload_ct, \
+             meta_ct) VALUES ('no-such-item', 1, 1, x'aa', x'bb', x'cc')",
+        )
+        .execute(pool)
+        .await;
+        assert!(orphan.is_err(), "foreign keys are enforced again");
+        sqlx::query("DELETE FROM items WHERE id = 'item-a'")
+            .execute(pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            count(pool, "SELECT count(*) FROM item_versions").await,
+            1,
+            "the cascade points at the new table"
+        );
+
+        // A second run (a crash before the bookkeeping row) keeps the data as it is.
+        let again = MIGRATOR.iter().find(|m| m.version == 2).unwrap();
+        let mut conn = pool.acquire().await.unwrap();
+        sqlx::raw_sql(again.sql.clone())
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        drop(conn);
+        assert_eq!(count(pool, "SELECT count(*) FROM items").await, 2);
+        assert_eq!(count(pool, "SELECT count(*) FROM item_versions").await, 1);
+        store.close().await;
     }
 
     /// AUD-10: the check of a backup reads only the main file. A `-wal` file that appears next to
@@ -816,13 +955,17 @@ mod tests {
             .unwrap();
         let seen = crate::backup::read_backup_file(&path).await.unwrap();
         assert_eq!(
-            seen.schema_version, 1,
+            seen.schema_version,
+            schema_version(),
             "the check must not read the -wal file"
         );
-        sqlx::query("PRAGMA user_version = 1")
-            .execute(&mut *conn)
-            .await
-            .unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "PRAGMA user_version = {}",
+            schema_version()
+        )))
+        .execute(&mut *conn)
+        .await
+        .unwrap();
     }
 
     #[test]

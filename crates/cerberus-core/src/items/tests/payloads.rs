@@ -115,6 +115,10 @@ fn valid_payloads_of_every_kind_pass() {
         Payload::Note {
             text: secret("a fake note"),
         },
+        Payload::Rustdesk {
+            password: Some(secret("fake-rd-password")),
+        },
+        Payload::Rustdesk { password: None },
     ];
     for payload in &valid {
         assert!(
@@ -125,7 +129,7 @@ fn valid_payloads_of_every_kind_pass() {
     }
     let kinds: std::collections::BTreeSet<_> =
         valid.iter().map(|p| format!("{:?}", p.kind())).collect();
-    assert_eq!(kinds.len(), 10, "every kind is covered");
+    assert_eq!(kinds.len(), 11, "every kind is covered");
 }
 
 #[test]
@@ -413,6 +417,36 @@ fn ssh_custom_port_is_checked() {
     assert!(fields.contains(&"custom.port".to_owned()), "{fields:?}");
     item.custom.insert("port".into(), "22".into());
     assert!(validate_item(&item).is_ok());
+}
+
+#[test]
+fn a_rustdesk_item_needs_its_id_in_the_metadata() {
+    let mut item = input(
+        cerberus_types::WorkspaceId::generate(),
+        "My laptop",
+        Payload::Rustdesk {
+            password: Some(secret("fake-rd-password")),
+        },
+    );
+    let fields = |item: &crate::items::ItemInput| -> Vec<String> {
+        validate_item(item)
+            .err()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|p| p.field)
+            .collect()
+    };
+    assert_eq!(fields(&item), ["custom.rustdesk_id"]);
+    item.custom.insert("rustdesk_id".into(), "12345".into());
+    assert_eq!(fields(&item), ["custom.rustdesk_id"]);
+    item.custom.insert("rustdesk_id".into(), "123456789".into());
+    item.custom
+        .insert("id_server".into(), "rd.example.test:21116".into());
+    assert!(fields(&item).is_empty());
+    item.payload = Payload::Rustdesk {
+        password: Some(secret("")),
+    };
+    assert_eq!(fields(&item), ["payload.password"]);
 }
 
 #[test]

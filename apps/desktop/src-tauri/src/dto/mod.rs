@@ -9,6 +9,7 @@ mod audit;
 mod items;
 mod network;
 mod policy;
+mod rustdesk;
 mod vault;
 
 use std::str::FromStr;
@@ -23,6 +24,7 @@ pub use audit::*;
 pub use items::*;
 pub use network::*;
 pub use policy::*;
+pub use rustdesk::*;
 pub use vault::*;
 
 use crate::error::{IpcError, IpcResult};
@@ -107,7 +109,8 @@ pub use csv::*;
 mirror_enum! {
     /// Kind of an item.
     ItemKind (cerberus_types::ItemKind) {
-        WebLogin, ApiKey, SshKey, SessionToken, BrowserSession, Database, Cloud, Certificate, EnvBundle, Note
+        WebLogin, ApiKey, SshKey, SessionToken, BrowserSession, Database, Cloud, Certificate, EnvBundle, Note,
+        Rustdesk
     }
 }
 

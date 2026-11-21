@@ -14,7 +14,7 @@ use cerberus_core::agent_api::{
 };
 use cerberus_core::approvals::{AccessRequestView as CoreAccessRequest, CreateAccess};
 use cerberus_core::items::{
-    ItemSummary as CoreItemSummary, Payload, SshMeta, TotpAlgorithm, TotpSeed,
+    ItemSummary as CoreItemSummary, Payload, RustdeskMeta, SshMeta, TotpAlgorithm, TotpSeed,
 };
 use cerberus_core::leases::{LeaseView as CoreLease, ReleaseOutcome};
 use cerberus_core::resolve::{
@@ -26,9 +26,9 @@ use cerberus_types::wire::{
     CatalogPage, CertificateSecret, CloudSecret, CreateAccessRequest, CreateItemRequest,
     CreateSessionRequest, CreatedItem, DatabaseSecret, EnvBundleSecret, ItemSummary, LeaseView,
     NoteSecret, PendingResponse, ReleaseResponse, ResolveMode, ResolveRequest, RevealRequest,
-    Scope, SecretPayload, SecretResponse, SessionPayload, SessionTokenSecret, SshKeySecret,
-    StatusAgent, StatusResponse, TotpAlgorithmWire, TotpRequest, TotpResponse, TotpSeedInput,
-    WebLoginSecret, WireSecret,
+    RustdeskSecret, Scope, SecretPayload, SecretResponse, SessionPayload, SessionTokenSecret,
+    SshKeySecret, StatusAgent, StatusResponse, TotpAlgorithmWire, TotpRequest, TotpResponse,
+    TotpSeedInput, WebLoginSecret, WireSecret,
 };
 use cerberus_types::{ItemId, LeaseId, Permission, RequestId};
 
@@ -227,6 +227,7 @@ pub fn secret_response(result: SecretResult) -> Result<SecretResponse, ApiError>
         key.port = meta.port;
         key.user = meta.user;
     }
+    fill_rustdesk_meta(&mut secret, &result.item.custom);
     Ok(SecretResponse {
         handling: result.handling.into(),
         request_id: *request_id.as_uuid(),
@@ -234,6 +235,18 @@ pub fn secret_response(result: SecretResult) -> Result<SecretResponse, ApiError>
         secret,
         lease: lease_view(result.lease, request_id)?,
     })
+}
+
+/// Fills the ID, the servers and the key of a RustDesk secret from the item metadata, where they
+/// live (DEC-RD-1). Other kinds are left as they are.
+fn fill_rustdesk_meta(secret: &mut SecretPayload, custom: &BTreeMap<String, String>) {
+    if let SecretPayload::Rustdesk(rustdesk) = secret {
+        let meta = RustdeskMeta::from_custom(|key| custom.get(key).map(String::as_str));
+        rustdesk.rustdesk_id = meta.rustdesk_id;
+        rustdesk.id_server = meta.id_server;
+        rustdesk.relay_server = meta.relay_server;
+        rustdesk.server_key = meta.server_key;
+    }
 }
 
 /// The wire form of a TOTP result.
@@ -364,6 +377,13 @@ pub fn secret_payload(payload: &Payload) -> SecretPayload {
         Payload::Note { text } => SecretPayload::Note(NoteSecret {
             text: wire_secret(text),
         }),
+        Payload::Rustdesk { password } => SecretPayload::Rustdesk(RustdeskSecret {
+            rustdesk_id: None,
+            id_server: None,
+            relay_server: None,
+            server_key: None,
+            password: wire_secret_opt(password.as_ref()),
+        }),
     }
 }
 
@@ -452,6 +472,9 @@ fn core_payload_without_totp(payload: SecretPayload) -> Payload {
         SecretPayload::Note(note) => Payload::Note {
             text: core_secret(note.text),
         },
+        SecretPayload::Rustdesk(rustdesk) => Payload::Rustdesk {
+            password: rustdesk.password.map(core_secret),
+        },
     }
 }
 
@@ -503,6 +526,13 @@ pub fn create_item_input(req: CreateItemRequest) -> Result<AgentItemInput, CoreE
             host: key.host.clone(),
             port: key.port,
             user: key.user.clone(),
+        }
+        .into_custom(),
+        SecretPayload::Rustdesk(rustdesk) => RustdeskMeta {
+            rustdesk_id: rustdesk.rustdesk_id.clone(),
+            id_server: rustdesk.id_server.clone(),
+            relay_server: rustdesk.relay_server.clone(),
+            server_key: rustdesk.server_key.clone(),
         }
         .into_custom(),
         _ => BTreeMap::new(),
@@ -586,4 +616,52 @@ pub fn ssh_prepare_response(
         expires_at: ready.expires_at,
         lease: lease_view(ready.lease, request_id)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rustdesk_request() -> CreateItemRequest {
+        serde_json::from_value(serde_json::json!({
+            "workspace": "home", "title": "Laptop", "environment": "other",
+            "payload": {
+                "kind": "rustdesk", "rustdesk_id": "123456789",
+                "id_server": "rd.example.test", "password": "fake-rd-password"
+            }
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_rustdesk_create_keeps_the_connection_as_metadata_and_the_password_as_payload() {
+        let input = create_item_input(rustdesk_request()).unwrap();
+        assert_eq!(
+            input.custom,
+            BTreeMap::from([
+                ("id_server".to_owned(), "rd.example.test".to_owned()),
+                ("rustdesk_id".to_owned(), "123456789".to_owned()),
+            ])
+        );
+        let Payload::Rustdesk { password } = &input.payload else {
+            panic!("not a rustdesk payload");
+        };
+        assert_eq!(
+            password.as_ref().map(SecretString::expose_secret),
+            Some("fake-rd-password")
+        );
+    }
+
+    #[test]
+    fn a_rustdesk_read_gets_the_connection_back_from_the_metadata() {
+        let input = create_item_input(rustdesk_request()).unwrap();
+        let mut secret = secret_payload(&input.payload);
+        fill_rustdesk_meta(&mut secret, &input.custom);
+        let json = serde_json::to_value(&secret).unwrap();
+        assert_eq!(json["kind"], "rustdesk");
+        assert_eq!(json["rustdesk_id"], "123456789");
+        assert_eq!(json["id_server"], "rd.example.test");
+        assert_eq!(json["relay_server"], serde_json::Value::Null);
+        assert_eq!(json["password"], "fake-rd-password");
+    }
 }

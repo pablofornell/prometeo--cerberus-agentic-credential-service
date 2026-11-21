@@ -1,4 +1,8 @@
-//! The real [`Shell`]: clipboard, autostart and content protection through Tauri and its plugins.
+//! The real [`Shell`]: clipboard, autostart and content protection through Tauri and its plugins,
+//! and the start of a local program (the RustDesk client, DEC-RD-3).
+
+use std::path::Path;
+use std::process::{Command, Stdio};
 
 use tauri::{AppHandle, Manager, Wry};
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
@@ -66,6 +70,31 @@ impl Shell for TauriShell {
             dialog = dialog.add_filter("Files", &extensions);
         }
         dialog.blocking_pick_file()?.into_path().ok()
+    }
+
+    fn launch(&self, program: &Path, args: &[String]) -> IpcResult<()> {
+        let mut child = Command::new(program)
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|error| {
+                tracing::warn!(%error, program = %program.display(), "a program could not be started");
+                IpcError::unavailable("the program could not be started")
+            })?;
+        // Wait for the child on its own thread, so it does not stay a zombie once it exits.
+        let reaper = std::thread::Builder::new()
+            .name("launch-reaper".to_owned())
+            .spawn(move || {
+                if let Err(error) = child.wait() {
+                    tracing::warn!(%error, "waiting for a started program failed");
+                }
+            });
+        if let Err(error) = reaper {
+            tracing::warn!(%error, "no thread to wait for a started program");
+        }
+        Ok(())
     }
 
     fn set_content_protection(&self, enabled: bool) {

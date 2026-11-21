@@ -10,6 +10,7 @@ import { formatDateTime, isSessionKind, kindLabel } from "./kinds";
 import { HistoryDialog } from "./HistoryDialog";
 import { messages } from "./messages";
 import { invalidateItems, useItemDetail } from "./queries";
+import { RustdeskCard } from "./RustdeskCard";
 import { pickSecret, SECRET_FIELDS } from "./secrets";
 
 interface Props {
@@ -108,6 +109,8 @@ function DrawerBody({ item, canEdit, canReveal, agentNames, operatorNames, onClo
         </div>
         {item.description && <p className="secondary small">{item.description}</p>}
       </header>
+
+      {item.kind === "rustdesk" && <RustdeskCard item={item} canReveal={canReveal} />}
 
       <section className="sec" aria-labelledby="vb-d-secret">
         <h3 id="vb-d-secret">{tr("drawer.secret")}</h3>

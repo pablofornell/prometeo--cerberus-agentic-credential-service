@@ -160,6 +160,12 @@ pub enum Payload {
         /// The text.
         text: SecretString,
     },
+    /// A RustDesk connection. The ID, the servers and the server key are item metadata
+    /// (`custom`, DEC-RD-1); only the password is here.
+    Rustdesk {
+        /// Permanent password of the remote machine.
+        password: Option<SecretString>,
+    },
 }
 
 impl Payload {
@@ -177,6 +183,7 @@ impl Payload {
             Self::Certificate { .. } => ItemKind::Certificate,
             Self::EnvBundle { .. } => ItemKind::EnvBundle,
             Self::Note { .. } => ItemKind::Note,
+            Self::Rustdesk { .. } => ItemKind::Rustdesk,
         }
     }
 
@@ -347,6 +354,9 @@ enum Json {
     Note {
         text: Sec,
     },
+    Rustdesk {
+        password: Option<Sec>,
+    },
 }
 
 fn secrets_of(map: &BTreeMap<String, SecretString>) -> BTreeMap<String, Sec> {
@@ -463,6 +473,9 @@ impl Json {
             Payload::Note { text } => Self::Note {
                 text: Sec::of(text),
             },
+            Payload::Rustdesk { password } => Self::Rustdesk {
+                password: Sec::of_opt(password.as_ref()),
+            },
         }
     }
 
@@ -570,6 +583,9 @@ impl Json {
             },
             Self::Note { text } => Payload::Note {
                 text: text.into_secret(),
+            },
+            Self::Rustdesk { password } => Payload::Rustdesk {
+                password: password.map(Sec::into_secret),
             },
         }
     }

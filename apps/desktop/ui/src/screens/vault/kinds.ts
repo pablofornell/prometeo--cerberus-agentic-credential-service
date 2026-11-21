@@ -14,6 +14,7 @@ export const KIND_ORDER: readonly ItemKind[] = [
   "certificate",
   "env_bundle",
   "note",
+  "rustdesk",
 ];
 
 export const kindMessages = defineMessages({
@@ -27,6 +28,7 @@ export const kindMessages = defineMessages({
   "kind.certificate": "Certificate",
   "kind.env_bundle": "Env bundle",
   "kind.note": "Note",
+  "kind.rustdesk": "RustDesk",
 });
 
 export const kindLabel = (kind: ItemKind): string => kindMessages[`kind.${kind}`];
@@ -34,7 +36,7 @@ export const kindLabel = (kind: ItemKind): string => kindMessages[`kind.${kind}`
 export const ENVIRONMENTS: readonly Environment[] = ["dev", "staging", "prod", "other"];
 
 /** The built-in categories (PLAN section 3). The person can add more by typing a new name. */
-export const BUILTIN_CATEGORIES = ["Web login", "API key", "SSH", "Session", "Database", "Cloud", "Certificate", "Other"] as const;
+export const BUILTIN_CATEGORIES = ["Web login", "API key", "SSH", "Session", "Database", "Cloud", "Certificate", "Remote desktop", "Other"] as const;
 
 export const CATEGORY_ICON: Record<string, IconName> = {
   "Web login": "globe",
@@ -44,6 +46,7 @@ export const CATEGORY_ICON: Record<string, IconName> = {
   Database: "database",
   Cloud: "cloud",
   Certificate: "cert",
+  "Remote desktop": "monitor",
   Other: "note",
 };
 
@@ -61,6 +64,7 @@ export const DEFAULT_CATEGORY: Record<ItemKind, (typeof BUILTIN_CATEGORIES)[numb
   certificate: "Certificate",
   env_bundle: "Other",
   note: "Other",
+  rustdesk: "Remote desktop",
 };
 
 export const isSessionKind = (kind: ItemKind): boolean => kind === "session_token" || kind === "browser_session";

@@ -93,6 +93,7 @@ const SEEDS: Seed[] = [
   ["it-cloud", "Sandbox cloud keys", "cloud", "build-infra", "dev", null, "sandbox account", "Cloud", ["ci"]],
   ["it-ca", "Internal CA certificate", "certificate", "build-infra", "other", null, "ca.internal", "Certificate", []],
   ["it-runbook", "Release runbook", "note", "build-infra", "other", null, null, "Other", []],
+  ["it-laptop", "Build laptop (RustDesk)", "rustdesk", "build-infra", "other", null, null, "Remote desktop", [], { custom: { rustdesk_id: "123456789", id_server: "rd.example.test", relay_server: "rd.example.test:21117", server_key: "FAKE+KEY/FAKE=" } }],
 ];
 
 /** Every item, metadata only. Session items end soon, so the "expires soon" lists have rows. */
@@ -215,6 +216,7 @@ export const fixtureSettings = (): Record<string, Value> => ({
   approval_timeout_seconds: 120,
   autostart: false,
   content_protection: false,
+  rustdesk_path: null,
 });
 
 export const LOCAL_CA_PIN = "sha256/DEMOPINDEMOPINDEMOPINDEMOPIN0000000000000=";

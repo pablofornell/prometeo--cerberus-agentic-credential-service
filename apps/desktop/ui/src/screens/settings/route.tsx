@@ -8,12 +8,13 @@ import { AboutSection } from "./AboutSection";
 import { AppearanceSection } from "./AppearanceSection";
 import { BackupSection } from "./BackupSection";
 import { NetworkSection } from "./NetworkSection";
+import { RemoteSection } from "./RemoteSection";
 import { SecuritySection } from "./SecuritySection";
 import { useSetSetting } from "./queries";
 import { messages } from "./messages";
 import "./settings.css";
 
-const SECTIONS = ["security", "network", "appearance", "backup", "about"] as const;
+const SECTIONS = ["security", "network", "remote", "appearance", "backup", "about"] as const;
 type SectionId = (typeof SECTIONS)[number];
 
 /** Screen 11: settings. Opens only with the vault open (route guard); the backend checks every role again. */
@@ -103,6 +104,15 @@ export default function SettingsScreen() {
           }}
         />
         <NetworkSection can={can} />
+        <RemoteSection
+          values={values}
+          can={can}
+          pending={pending}
+          onSet={(key, value) => {
+            setSaveError(null);
+            mutation.mutate({ key, value });
+          }}
+        />
         <AppearanceSection />
         <BackupSection can={can} />
         <AboutSection status={status.data} />

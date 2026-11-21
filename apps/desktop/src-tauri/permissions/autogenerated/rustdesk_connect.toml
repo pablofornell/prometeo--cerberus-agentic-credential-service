@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-rustdesk-connect"
+description = "Enables the rustdesk_connect command without any pre-configured scope."
+commands.allow = ["rustdesk_connect"]
+
+[[permission]]
+identifier = "deny-rustdesk-connect"
+description = "Denies the rustdesk_connect command without any pre-configured scope."
+commands.deny = ["rustdesk_connect"]

@@ -111,7 +111,7 @@ CREATE TABLE items (
     id               TEXT    PRIMARY KEY,
     kind             TEXT    NOT NULL CHECK (kind IN ('web_login', 'api_key', 'ssh_key', 'session_token',
                                                       'browser_session', 'database', 'cloud', 'certificate',
-                                                      'env_bundle', 'note')),
+                                                      'env_bundle', 'note', 'rustdesk')),  -- 'rustdesk': migration 0002 (DEC-RD-2)
     expires_at       INTEGER,                                  -- NULL = no expiry. Sweeper uses it while locked.
     created_at       INTEGER NOT NULL,
     updated_at       INTEGER NOT NULL,

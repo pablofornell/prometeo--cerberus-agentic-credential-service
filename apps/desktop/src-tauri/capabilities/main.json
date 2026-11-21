@@ -80,6 +80,8 @@
     "allow-ui-activity",
     "allow-clipboard-copy-once",
     "allow-file-pick-open",
-    "allow-vault-recover-stranded"
+    "allow-vault-recover-stranded",
+    "allow-rustdesk-status",
+    "allow-rustdesk-connect"
   ]
 }

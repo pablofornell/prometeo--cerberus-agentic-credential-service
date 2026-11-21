@@ -25,6 +25,7 @@ export const SECRET_FIELDS: Record<ItemKind, readonly SecretFieldDef[]> = {
   certificate: [f("key_pem")],
   env_bundle: [f("vars", false)],
   note: [f("text")],
+  rustdesk: [f("password")],
 };
 
 /** The text of one field. Env bundles show `NAME=value` pairs. A field that is not set reads as "Not set". */

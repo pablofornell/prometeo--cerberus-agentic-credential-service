@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde::de::IgnoredAny;
 
 use super::payload::Payload;
+use super::rustdesk;
 use super::service::ItemInput;
 use super::ssh;
 use super::totp;
@@ -191,8 +192,10 @@ pub(crate) fn validate_fields<P>(input: &ItemInput<P>, kind: ItemKind) -> Vec<Fi
     if input.max_uses == Some(0) {
         p.add("max_uses", "must be at least 1");
     }
-    if kind == ItemKind::SshKey {
-        ssh::check_custom(&input.custom, &mut p.0);
+    match kind {
+        ItemKind::SshKey => ssh::check_custom(&input.custom, &mut p.0),
+        ItemKind::Rustdesk => rustdesk::check_custom(&input.custom, &mut p.0),
+        _ => {}
     }
     p.0
 }
@@ -357,6 +360,7 @@ fn check_payload(payload: &Payload, p: &mut Problems) {
             }
         }
         Payload::Note { text } => p.secret("text", text, 65_000),
+        Payload::Rustdesk { password } => p.opt_secret("password", password.as_ref(), 1_024),
     }
 }
 

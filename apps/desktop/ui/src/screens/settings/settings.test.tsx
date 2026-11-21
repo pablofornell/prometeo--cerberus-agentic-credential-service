@@ -88,6 +88,41 @@ describe("settings", () => {
     await waitFor(() => expect(calls.settings_set).toEqual([{ key: "autostart", value: true }]));
   });
 
+  it("shows the RustDesk client it found and saves a chosen program, then goes back to finding it", async () => {
+    const user = userEvent.setup();
+    let custom: string | null = null;
+    const { calls } = renderSettings({
+      spy: ["settings_set"],
+      extra: {
+        rustdesk_status: () => ({
+          custom_path: custom,
+          client: custom ? { kind: "custom", program: custom } : { kind: "flatpak", program: "/usr/bin/flatpak" },
+        }),
+      },
+    });
+    await ready();
+    const remote = section("Remote desktop");
+    expect(await within(remote).findByText(/Connect starts \/usr\/bin\/flatpak \(the Flatpak app com.rustdesk.RustDesk\)/)).toBeInTheDocument();
+    custom = "/opt/RustDesk.AppImage";
+    await user.type(within(remote).getByLabelText("Program"), custom);
+    await user.click(within(remote).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls.settings_set).toEqual([{ key: "rustdesk_path", value: "/opt/RustDesk.AppImage" }]));
+    expect(await within(remote).findByText(/Connect starts \/opt\/RustDesk.AppImage \(chosen here\)/)).toBeInTheDocument();
+    custom = null;
+    await user.click(within(remote).getByRole("button", { name: "Find automatically" }));
+    await waitFor(() => expect(calls.settings_set?.at(-1)).toEqual({ key: "rustdesk_path", value: null }));
+    expect(await within(remote).findByText(/the Flatpak app/)).toBeInTheDocument();
+  });
+
+  it("says how to install RustDesk when it is not found, and a viewer cannot change the program", async () => {
+    renderSettings({ role: "viewer", extra: { rustdesk_status: () => ({ custom_path: null, client: null }) } });
+    await ready();
+    const remote = section("Remote desktop");
+    expect(await within(remote).findByText(/RustDesk was not found. Install it from rustdesk.com/)).toBeInTheDocument();
+    expect(within(remote).getByLabelText("Program")).toBeDisabled();
+    expect(within(remote).getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
   it("shows a save error with the code line and leaves the value alone", async () => {
     const user = userEvent.setup();
     renderSettings({

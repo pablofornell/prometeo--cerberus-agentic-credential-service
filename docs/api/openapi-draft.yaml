@@ -697,7 +697,7 @@ components:
     # ---------------------------------------------------------------- enums
     ItemKind:
       type: string
-      enum: [web_login, api_key, ssh_key, session_token, browser_session, database, cloud, certificate, env_bundle, note]
+      enum: [web_login, api_key, ssh_key, session_token, browser_session, database, cloud, certificate, env_bundle, note, rustdesk]
     Environment:
       type: string
       enum: [dev, staging, prod, other]
@@ -874,6 +874,7 @@ components:
         - $ref: '#/components/schemas/CertificateSecret'
         - $ref: '#/components/schemas/EnvBundleSecret'
         - $ref: '#/components/schemas/NoteSecret'
+        - $ref: '#/components/schemas/RustdeskSecret'
       discriminator:
         propertyName: kind
         mapping:
@@ -887,6 +888,7 @@ components:
           certificate: '#/components/schemas/CertificateSecret'
           env_bundle: '#/components/schemas/EnvBundleSecret'
           note: '#/components/schemas/NoteSecret'
+          rustdesk: '#/components/schemas/RustdeskSecret'
     WebLoginSecret:
       type: object
       additionalProperties: false
@@ -978,6 +980,19 @@ components:
       required: [text]
       properties:
         text: { $ref: '#/components/schemas/SecretString' }
+    RustdeskSecret:
+      description: |
+        A RustDesk connection (DEC-RD-1). `rustdesk_id`, `id_server`, `relay_server` and `server_key` are item
+        metadata: on create they are stored as such, and a read fills them in. Only the password is secret.
+        `rustdesk_id` is required on create.
+      type: object
+      additionalProperties: false
+      properties:
+        rustdesk_id: { type: [string, 'null'], pattern: '^[0-9]{9,20}$' }
+        id_server: { type: [string, 'null'], description: "host or host:port of a self-hosted ID server." }
+        relay_server: { type: [string, 'null'], description: "host or host:port of a self-hosted relay server." }
+        server_key: { type: [string, 'null'], description: "Public key of the self-hosted server. Not a secret." }
+        password: { oneOf: [ { $ref: '#/components/schemas/SecretString' }, { type: 'null' } ] }
     TotpAlgorithmWire:
       type: string
       enum: [SHA1, SHA256, SHA512]

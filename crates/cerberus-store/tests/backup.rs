@@ -49,7 +49,7 @@ async fn backup_then_restore_gives_an_equal_vault() {
 
     let info = Store::inspect_backup(&backup).await.unwrap();
     assert_eq!(info.vault_id, fx.vault_id);
-    assert_eq!(info.schema_version, 1);
+    assert_eq!(info.schema_version, cerberus_store::schema_version());
     assert_eq!(info.slots, fx.store.key_slots().await.unwrap());
 
     // Change the live vault after the backup, then restore over it.
@@ -166,7 +166,7 @@ async fn bad_backups_are_refused_and_the_vault_is_left_alone() {
         Store::inspect_backup(&backup).await,
         Err(StoreError::TooNew {
             found: 7,
-            supported: 1
+            supported: 2
         })
     ));
 }

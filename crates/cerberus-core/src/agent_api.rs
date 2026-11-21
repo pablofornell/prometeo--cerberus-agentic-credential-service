@@ -346,6 +346,7 @@ const fn default_category(kind: ItemKind) -> &'static str {
         ItemKind::Certificate => "Certificate",
         ItemKind::EnvBundle => "Environment",
         ItemKind::Note => "Note",
+        ItemKind::Rustdesk => "Remote desktop",
     }
 }
 

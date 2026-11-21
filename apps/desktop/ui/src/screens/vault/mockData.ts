@@ -28,12 +28,21 @@ export interface VaultMockOptions {
   mode?: "normal" | "empty" | "error" | "slow";
   /** Seconds a session item has left at the start. */
   now?: () => number;
+  /** `missing`: `rustdesk_status` finds no RustDesk client and `rustdesk_connect` fails. */
+  rustdesk?: "found" | "missing";
 }
 
 export interface VaultMock {
   handlers: MockHandlers;
   /** What the handlers saw, for the tests. Item IDs and field names only. */
-  calls: { revealed: string[]; copied: { item: string; field: string }[]; created: ItemInput[]; updated: { item: string; input: ItemInput }[]; deleted: string[] };
+  calls: {
+    revealed: string[];
+    copied: { item: string; field: string }[];
+    created: ItemInput[];
+    updated: { item: string; input: ItemInput }[];
+    deleted: string[];
+    connected: { item: string; copyPassword: boolean }[];
+  };
 }
 
 const FAKE_PEM_MARK = "FAKE-KEY-FOR-TESTS";
@@ -62,6 +71,8 @@ function payloadFor(kind: ItemKind): Payload {
       return { kind, vars: { API_URL: "https://api.shop.example", FEATURE_FLAG: "fake-flag" } };
     case "note":
       return { kind, text: "Fake runbook text." };
+    case "rustdesk":
+      return { kind, password: "fake-rd-password" };
   }
 }
 
@@ -77,6 +88,7 @@ function validate(input: ItemInput): { field: string; problem: string }[] {
   if (p.kind === "web_login" && (p.password ?? "") === "") problems.push({ field: "payload.password", problem: "must be 1..1024 characters" });
   if (p.kind === "api_key" && (p.key ?? "") === "") problems.push({ field: "payload.key", problem: "must be 1..8192 characters" });
   if (input.custom.port !== undefined && !/^\d+$/.test(input.custom.port)) problems.push({ field: "custom.port", problem: "must be a port number 1..65535" });
+  if (p.kind === "rustdesk" && !/^\d{9,20}$/.test(input.custom.rustdesk_id ?? "")) problems.push({ field: "custom.rustdesk_id", problem: "must be a RustDesk ID of 9 to 20 digits" });
   return problems;
 }
 
@@ -84,7 +96,8 @@ function validate(input: ItemInput): { field: string; problem: string }[] {
 export function createVaultMock(options: VaultMockOptions = {}): VaultMock {
   const mode = options.mode ?? "normal";
   const now = options.now ?? (() => Date.now());
-  const calls: VaultMock["calls"] = { revealed: [], copied: [], created: [], updated: [], deleted: [] };
+  const calls: VaultMock["calls"] = { revealed: [], copied: [], created: [], updated: [], deleted: [], connected: [] };
+  const rustdesk = options.rustdesk ?? "found";
   const drafts = new Map<string, SshKeyDraft>();
   let counter = 100;
 
@@ -262,6 +275,20 @@ export function createVaultMock(options: VaultMockOptions = {}): VaultMock {
       };
       drafts.set(draft.draft_id, draft);
       return draft;
+    },
+    rustdesk_status: () => ({
+      custom_path: null,
+      client: rustdesk === "found" ? { kind: "path", program: "/usr/bin/rustdesk" } : null,
+    }),
+    rustdesk_connect: (args) => {
+      const s = need(String(args?.item));
+      if (s.summary.kind !== "rustdesk") throw mockError("validation_failed", "validation failed", { fields: [{ field: "item_id", problem: "is not a RustDesk item" }] });
+      if (rustdesk === "missing") throw mockError("unavailable", "RustDesk was not found on this computer");
+      const copyPassword = Boolean(args?.copyPassword);
+      calls.connected.push({ item: s.summary.id, copyPassword });
+      const stored = s.payload.kind === "rustdesk" && s.payload.password !== null;
+      if (copyPassword) s.use_count += 1;
+      return { client: { kind: "path", program: "/usr/bin/rustdesk" }, password: !copyPassword ? "skipped" : stored ? "copied" : "not_stored" };
     },
     ssh_key_import: (args) => {
       const source = args?.source as { kind: "path"; path: string } | { kind: "pem"; pem: string };

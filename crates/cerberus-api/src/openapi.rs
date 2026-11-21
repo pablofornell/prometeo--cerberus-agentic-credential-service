@@ -8,8 +8,8 @@ use crate::routes;
 use cerberus_types::wire::{
     ApiKeySecret, BrowserSessionSecret, CandidatesBody, CertificateSecret, CloudSecret,
     DatabaseSecret, EnvBundleSecret, ErrorBody, ErrorCode, ErrorDetails, ErrorResponse,
-    FieldProblem, NoMatchHints, NoteSecret, SessionPayload, SessionTokenSecret, SshKeySecret,
-    TotpSeedInput, WebLoginSecret, WireSecret,
+    FieldProblem, NoMatchHints, NoteSecret, RustdeskSecret, SessionPayload, SessionTokenSecret,
+    SshKeySecret, TotpSeedInput, WebLoginSecret, WireSecret,
 };
 
 struct BearerAuth;
@@ -54,7 +54,7 @@ impl Modify for BearerAuth {
     components(schemas(
         WireSecret, WebLoginSecret, ApiKeySecret, SshKeySecret, SessionTokenSecret,
         BrowserSessionSecret, DatabaseSecret, CloudSecret, CertificateSecret, EnvBundleSecret,
-        NoteSecret, SessionPayload, TotpSeedInput, CandidatesBody, ErrorResponse, ErrorBody,
+        NoteSecret, RustdeskSecret, SessionPayload, TotpSeedInput, CandidatesBody, ErrorResponse, ErrorBody,
         ErrorCode, ErrorDetails, FieldProblem, NoMatchHints
     )),
     modifiers(&BearerAuth)

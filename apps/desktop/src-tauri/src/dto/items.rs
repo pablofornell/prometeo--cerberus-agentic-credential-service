@@ -167,6 +167,11 @@ pub enum PayloadView {
         #[specta(type = String)]
         text: WireSecret,
     },
+    /// A RustDesk connection. The ID, the servers and the key are in `custom` (DEC-RD-1).
+    Rustdesk {
+        #[specta(type = Option<String>)]
+        password: Option<WireSecret>,
+    },
 }
 
 /// What a payload view turns into: a core payload, or the ID of a backend draft to look up.
@@ -290,6 +295,9 @@ impl PayloadView {
                 vars: vars.into_iter().map(|(k, v)| (k, secret(v))).collect(),
             },
             Self::Note { text } => Payload::Note { text: secret(text) },
+            Self::Rustdesk { password } => Payload::Rustdesk {
+                password: opt_secret(password),
+            },
         };
         PayloadSource::Payload(payload)
     }
@@ -394,6 +402,9 @@ impl PayloadView {
                 vars: vars.iter().map(|(k, v)| (k.clone(), wire(v))).collect(),
             },
             Payload::Note { text } => Self::Note { text: wire(text) },
+            Payload::Rustdesk { password } => Self::Rustdesk {
+                password: opt_wire(password.as_ref()),
+            },
         }
     }
 }
@@ -515,7 +526,8 @@ pub struct ItemSummaryView {
     /// True when the item has a TOTP seed.
     pub has_totp: bool,
     /// Extra facts by name. Metadata only: a secret value is in the payload, not here. SSH items
-    /// use `machine`, `host`, `port` and `user`.
+    /// use `machine`, `host`, `port` and `user`; RustDesk items use `rustdesk_id`, `id_server`,
+    /// `relay_server` and `server_key`.
     pub custom: BTreeMap<String, String>,
 }
 

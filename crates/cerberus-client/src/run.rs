@@ -167,6 +167,13 @@ fn fields(payload: &SecretPayload) -> Vec<Field> {
             .map(|(key, value)| secret(key, Some(value)))
             .collect(),
         SecretPayload::Note(p) => vec![secret("text", Some(&p.text))],
+        SecretPayload::Rustdesk(p) => vec![
+            text("rustdesk_id", p.rustdesk_id.as_ref()),
+            text("id_server", p.id_server.as_ref()),
+            text("relay_server", p.relay_server.as_ref()),
+            text("server_key", p.server_key.as_ref()),
+            secret("password", p.password.as_ref()),
+        ],
     };
     all.into_iter().flatten().collect()
 }
@@ -329,6 +336,22 @@ pub fn env_for(payload: &SecretPayload, by_agent: bool) -> Result<Vec<EnvVar>, C
             }
         }
         SecretPayload::Note(_) => out.push(var("CERBERUS_NOTE", pick(&mut all, "text"))),
+        SecretPayload::Rustdesk(_) => {
+            out.push(var("CERBERUS_RUSTDESK_ID", pick(&mut all, "rustdesk_id")));
+            out.push(var(
+                "CERBERUS_RUSTDESK_PASSWORD",
+                pick(&mut all, "password"),
+            ));
+            out.push(var(
+                "CERBERUS_RUSTDESK_ID_SERVER",
+                pick(&mut all, "id_server"),
+            ));
+            out.push(var(
+                "CERBERUS_RUSTDESK_RELAY_SERVER",
+                pick(&mut all, "relay_server"),
+            ));
+            out.push(var("CERBERUS_RUSTDESK_KEY", pick(&mut all, "server_key")));
+        }
         SecretPayload::SshKey(_) => {
             return Err(ClientError::Config(
                 "an SSH key cannot go into an environment: use ssh-prepare".to_owned(),
@@ -1013,6 +1036,24 @@ mod tests {
             ["CERBERUS_USERNAME", "CERBERUS_PASSWORD", "CERBERUS_URL"]
         );
         assert!(vars[0].secret && !vars[2].secret);
+    }
+
+    #[test]
+    fn rustdesk_defaults_hold_the_id_and_the_password_only_as_secret() {
+        let payload: SecretPayload = serde_json::from_str(
+            r#"{"kind":"rustdesk","rustdesk_id":"123456789","server_key":"fakekey=","password":"fake-rd-pass"}"#,
+        )
+        .unwrap();
+        let vars = env_for(&payload, false).unwrap();
+        let named: Vec<_> = vars.iter().map(|v| (v.name.as_str(), v.secret)).collect();
+        assert_eq!(
+            named,
+            [
+                ("CERBERUS_RUSTDESK_ID", false),
+                ("CERBERUS_RUSTDESK_PASSWORD", true),
+                ("CERBERUS_RUSTDESK_KEY", false)
+            ]
+        );
     }
 
     #[test]

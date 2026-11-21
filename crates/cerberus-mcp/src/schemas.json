@@ -20,7 +20,8 @@
     "cloud",
     "certificate",
     "env_bundle",
-    "note"
+    "note",
+    "rustdesk"
    ]
   },
   "Environment": {

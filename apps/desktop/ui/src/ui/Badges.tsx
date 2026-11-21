@@ -69,6 +69,7 @@ const KIND_ICONS: Record<ItemKind, IconName> = {
   certificate: "cert",
   env_bundle: "braces",
   note: "note",
+  rustdesk: "monitor",
 };
 
 /** 30 px square with the icon of the item kind. A prod item gets a red border. */

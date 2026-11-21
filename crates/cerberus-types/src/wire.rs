@@ -139,6 +139,7 @@ mirror_enum!(
         Certificate => crate::ItemKind::Certificate,
         EnvBundle => crate::ItemKind::EnvBundle,
         Note => crate::ItemKind::Note,
+        Rustdesk => crate::ItemKind::Rustdesk,
     }
 );
 
@@ -838,6 +839,30 @@ pub struct NoteSecret {
     pub text: WireSecret,
 }
 
+/// A RustDesk connection (DEC-RD-1). The ID, the servers and the server key are item metadata:
+/// on create they are stored as such, and a read fills them in from it. Only the password is
+/// secret.
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(deny_unknown_fields)]
+pub struct RustdeskSecret {
+    /// RustDesk ID of the remote machine: 9 to 20 digits. Required on create.
+    #[serde(default)]
+    pub rustdesk_id: Option<String>,
+    /// ID server (`host` or `host:port`) of a self-hosted RustDesk server.
+    #[serde(default)]
+    pub id_server: Option<String>,
+    /// Relay server (`host` or `host:port`) of a self-hosted RustDesk server.
+    #[serde(default)]
+    pub relay_server: Option<String>,
+    /// Public key of the self-hosted server. Not a secret.
+    #[serde(default)]
+    pub server_key: Option<String>,
+    /// Permanent password of the remote machine.
+    #[serde(default)]
+    pub password: Option<WireSecret>,
+}
+
 /// The secret of an item, typed by kind (ADR-0027). The kind is in the `kind` field.
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -863,6 +888,8 @@ pub enum SecretPayload {
     EnvBundle(EnvBundleSecret),
     /// A note.
     Note(NoteSecret),
+    /// A RustDesk connection.
+    Rustdesk(RustdeskSecret),
 }
 
 /// The payload of a session: a session token or a browser session.

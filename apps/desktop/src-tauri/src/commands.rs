@@ -10,9 +10,10 @@ use crate::dto::{
     CreatedVaultView, CsvImportRequest, GrantInputView, GrantView, ImportPreviewView, ImportReport,
     IssuedClientCert, ItemDetailView, ItemFilterView, ItemInputView, ItemSummaryView,
     ItemVersionView, KdfParamsView, KdfTuningView, LeaseDetailView, LeaseView, NetworkView,
-    OneTimeKind, OperatorPublic, OperatorRole, RestoreUnlockInput, RevealedSecretView, Secret,
-    SessionView, SettingsView, SimulationRow, Snippets, SshKeyDraft, StrengthView, TotpView,
-    VaultStatusView, WorkspaceInputView, WorkspaceView,
+    OneTimeKind, OperatorPublic, OperatorRole, RestoreUnlockInput, RevealedSecretView,
+    RustdeskConnectView, RustdeskStatusView, Secret, SessionView, SettingsView, SimulationRow,
+    Snippets, SshKeyDraft, StrengthView, TotpView, VaultStatusView, WorkspaceInputView,
+    WorkspaceView,
 };
 use crate::error::IpcResult;
 use crate::ops::{self, CharClass, SshKeySource};
@@ -106,6 +107,8 @@ ipc!(csv_preview(request: CsvImportRequest) -> ImportPreviewView);
 ipc!(csv_import(request: CsvImportRequest) -> ImportReport);
 ipc!(csv_export(dest: String, workspace_id: Option<String>) -> u64);
 ipc!(file_pick_open(title: Option<String>, extensions: Vec<String>) -> Option<String>);
+ipc!(rustdesk_status() -> RustdeskStatusView);
+ipc!(rustdesk_connect(item: String, copy_password: bool) -> RustdeskConnectView);
 
 /// `kdf_benchmark`.
 #[tauri::command]

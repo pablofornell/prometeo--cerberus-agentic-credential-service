@@ -55,6 +55,7 @@ Each item has a kind:
 | Certificate | Certificate, key and chain in PEM |
 | Env bundle | Named values for environment variables |
 | Note | Free text |
+| RustDesk | A remote machine: its RustDesk ID, optional self-hosted servers and key, and an optional permanent password |
 
 Give each item a role label such as `admin`, `normal user` or `read-only`, and an environment (`dev`, `staging`,
 `prod` or `other`). Agents search by these fields.
@@ -76,6 +77,43 @@ as it is, with its passphrase. Its bcrypt cost must be at most 1024 rounds.
 the seed.
 
 **Password generator.** The editor can make a password for you.
+
+### RustDesk connections
+
+A RustDesk item stores how to reach a machine with [RustDesk](https://rustdesk.com), for example your laptop.
+
+1. On the machine, open RustDesk and note its **ID** (9 or more digits) and, if you set one, its **permanent
+   password**.
+2. In Cerberus, choose **New item** and the kind **RustDesk**. Type the ID (spaces are removed). If you run your own
+   RustDesk server, also type the **ID server**, the **relay server** and the **server key** (its public key, not a
+   secret). Leave them empty for the public RustDesk servers. The password is optional.
+3. Save. The ID, the servers and the key are item metadata: the details show them, and a search for the ID finds the
+   item. Only the password is secret.
+
+In the item details, the **Connection** card has:
+
+- **Connect.** Opens the RustDesk client of this computer on the ID, and copies the password to the clipboard. Paste
+  it in RustDesk when it asks. The clipboard is cleared after 30 seconds. The password is never put on a command line.
+  A viewer can connect, but the password is not copied.
+- **Link.** `rustdesk://<ID>`, with `?key=<server key>` when there is a key. Copy it and open it on another computer
+  with RustDesk installed.
+- **To share** and **Copy all.** The ID, the servers, the key and the link as text, to send to someone who adds the
+  connection to their own RustDesk client. The link and the text never hold the password. Send the password another
+  way.
+- The **Password** row works like every other secret: hold to reveal, copy with a 30 second clear.
+
+Cerberus looks for the RustDesk client in this order: `rustdesk` on the search path, the standard install folder
+(`/usr/bin`, `/usr/local/bin`, `/usr/share/rustdesk` on Linux; `/Applications/RustDesk.app` on macOS;
+`Program Files\RustDesk` on Windows), then the Flatpak app `com.rustdesk.RustDesk`. If it is somewhere else, for
+example an AppImage, choose its program in **Settings, Remote desktop**. The file name must start with `rustdesk`
+(any case). When a program is chosen there, Cerberus starts only that one. If RustDesk is not found, the card says so
+and **Connect** is off; install RustDesk from rustdesk.com or Flathub.
+
+Agents get a RustDesk item like any other item: with a grant that allows `read`, the read answer holds the ID, the
+servers, the key and the password (fields `rustdesk_id`, `id_server`, `relay_server`, `server_key`, `password`).
+`cerberus run` sets `CERBERUS_RUSTDESK_ID`, `CERBERUS_RUSTDESK_PASSWORD`, `CERBERUS_RUSTDESK_ID_SERVER`,
+`CERBERUS_RUSTDESK_RELAY_SERVER` and `CERBERUS_RUSTDESK_KEY`. A CSV export writes the password in the `password`
+column and the connection in `extra`; a CSV import does not make RustDesk items.
 
 ## 4. Agents
 
@@ -154,6 +192,7 @@ Export writes the events to a file.
 | Items | Session time to live (default 3600 s, maximum 86400 s), number of versions kept | Owner |
 | Policy | Approval wait, deny cooldown, auto lease length, request and read limits | Owner |
 | Network | Bind addresses, port, client certificate rules, CA export, custom certificate | Owner |
+| Remote desktop | The RustDesk client program that **Connect** starts (empty: found automatically). A setting of this computer | Owner or operator |
 | Operators | Add or remove operators, change roles | Owner |
 | Backup and restore | Make a backup, restore one | Owner (restore), owner or operator (backup) |
 | Import and export | CSV import (preview first), CSV export | Import: owner or operator. Export: owner |
