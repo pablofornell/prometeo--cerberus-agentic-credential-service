@@ -31,7 +31,7 @@ function Slot({ label, values, options, any, multiLabel, disabled, onChange, sel
   return (
     <>
       <label className="sr-only" htmlFor={id}>{label}</label>
-      <select id={id} ref={selectRef} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value === "" || e.target.value === MULTI ? [] : [e.target.value])}>
+      <select className="input select" id={id} ref={selectRef} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value === "" || e.target.value === MULTI ? [] : [e.target.value])}>
         {any && <option value="">{any}</option>}
         {values.length > 1 && <option value={MULTI} disabled>{multiLabel}</option>}
         {options.map((o) => (
@@ -142,6 +142,7 @@ export function GrantBuilder({ agent, workspaces, draft, setDraft, canEdit, focu
           <label className="sr-only" htmlFor="slot-permission">{s("builder.permission")}</label>
           <select
             id="slot-permission"
+            className="input select"
             value={permValue}
             disabled={disabled}
             onChange={(e) => e.target.value !== MULTI && set({ permissions: [e.target.value as Permission] })}

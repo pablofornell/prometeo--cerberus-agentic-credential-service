@@ -35,9 +35,26 @@ main.content:focus { outline: none; }
 main.content:focus-visible { outline: none; }
 
 .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin 0.9s linear infinite; flex: none; }
-.input.select { appearance: none; padding-right: 36px; cursor: pointer;
-  background-image: linear-gradient(45deg, transparent 50%, var(--c-text-muted) 50%), linear-gradient(135deg, var(--c-text-muted) 50%, transparent 50%);
-  background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
+/* Select: the one shared look (Form.tsx Select, and the inline selects of the policy sentence). The native popup stays; only the
+   closed control is drawn. The chevron is lucide chevron-down as a background image. A data URI cannot read a CSS variable,
+   so each theme sets its own stroke: --c-text-muted at rest, --c-text-primary on hover and focus (same switch as tokens.css). */
+:root, :root[data-theme="dark"] { --select-chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238F8F8F' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); --select-chev-hot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23EDEDED' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --select-chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); --select-chev-hot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23171717' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); } }
+:root[data-theme="light"] { --select-chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); --select-chev-hot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23171717' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+select.input {
+  -webkit-appearance: none; appearance: none; cursor: pointer; text-overflow: ellipsis;
+  padding-right: calc(var(--s-2_5) + 16px + var(--s-2)); /* edge gap + chevron + gap, so text never runs under it */
+  background-image: var(--select-chev); background-repeat: no-repeat; background-size: 16px 16px; background-position: right var(--s-2_5) center;
+}
+select.input:hover, select.input:focus-visible { background-image: var(--select-chev-hot); }
+select.input:disabled { opacity: 0.6; cursor: not-allowed; background-color: var(--c-bg-sunken); border-color: var(--hair-ctl); }
+select.input:disabled:hover { background-image: var(--select-chev); }
+select.input.sm { height: var(--ctl-sm); }
+/* The popup list: opaque theme colours, so the options read in dark mode (WebKitGTK paints them from these, not from the page). */
+select.input option, select.input optgroup { background-color: var(--c-bg-surface); color: var(--c-text-primary); }
+select.input option:disabled { color: var(--c-text-muted); }
+select.input option:checked { background-color: var(--c-bg-selected); }
+@media (forced-colors: active) { select.input { -webkit-appearance: auto; appearance: auto; background-image: none; padding-right: var(--s-2_5); } }
 .kind-ico.prod { border-color: var(--c-danger-fg); color: var(--c-danger-fg); }
 .right.num { font-variant-numeric: tabular-nums; }
 

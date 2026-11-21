@@ -38,7 +38,7 @@ main.content:has(> .vb-browser) { padding: 0; gap: 0; }
 .vb-search { grid-column: 1 / -1; position: relative; display: block; }
 .vb-search .icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--c-text-muted); pointer-events: none; }
 .vb-search input { padding-left: var(--s-8); }
-.vb-toolbar select.input { width: 100%; min-width: 0; height: var(--ctl-sm); font-size: var(--t-body-sm-size); padding-left: var(--s-2); padding-right: var(--s-6); text-overflow: ellipsis; background-position: calc(100% - 16px) 50%, calc(100% - 10px) 50%; background-size: 6px 6px, 6px 6px; }
+.vb-toolbar select.input { width: 100%; min-width: 0; height: var(--ctl-sm); font-size: var(--t-body-sm-size); padding-left: var(--s-2); }
 /* The view switch sits on the status strip below, so the filters keep one tidy row. */
 .vb-toolbar .seg { position: absolute; right: 20px; top: calc(100% + 7px); z-index: 1; }
 .vb-count { display: flex; align-items: center; min-height: 50px; padding: 0 172px 0 var(--s-4); font-size: var(--t-body-sm-size); color: var(--c-text-muted); font-variant-numeric: tabular-nums; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }

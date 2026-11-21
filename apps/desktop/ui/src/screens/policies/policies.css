@@ -3,19 +3,14 @@
 
 /* The builder is a sentence: plain secondary words, input-like controls for the choices. */
 .sentence { font-size: var(--t-body-lg-size); line-height: 52px; font-weight: 400; letter-spacing: -0.01em; color: var(--c-text-secondary); }
-.sentence select, .sentence .slot {
+/* Inline controls sit on the text baseline. The selects take the shared look (styles/extras.css, class "input select"); here only
+   the sentence-sized details. The same margin on every control keeps the word gaps even, and a wrapped line keeps its height. */
+.sentence select.input, .sentence .slot {
   font-family: var(--font-sans); font-size: var(--t-body-size); font-weight: 500; letter-spacing: var(--t-body-track); color: var(--c-text-primary);
-  background-color: var(--c-bg-canvas); border: 1px solid var(--c-border-default); border-radius: var(--r-sm);
-  padding: 0 var(--s-2_5); height: var(--ctl-md); line-height: calc(var(--ctl-md) - 2px); vertical-align: baseline; margin: 0 var(--s-0_5);
+  height: var(--ctl-md); line-height: calc(var(--ctl-md) - 2px); vertical-align: baseline; margin: 0 var(--s-0_5);
 }
-.sentence select { appearance: none; padding-right: 34px; cursor: pointer;
-  background-image: linear-gradient(45deg, transparent 50%, var(--c-text-muted) 50%), linear-gradient(135deg, var(--c-text-muted) 50%, transparent 50%);
-  background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat;
-  transition: border-color var(--d-fast) var(--ease-standard), box-shadow var(--d-fast) var(--ease-standard); }
-.sentence select:hover { border-color: var(--c-border-strong); }
-.sentence select:focus-visible { outline: 2px solid transparent; outline-offset: 0; border-color: transparent; box-shadow: var(--sh-focus); }
-.sentence select:disabled { opacity: 0.6; cursor: not-allowed; }
-.sentence .slot { display: inline-block; background-color: var(--c-bg-sunken); border-color: var(--hair-ctl); }
+.sentence select.input { width: auto; max-width: 100%; }
+.sentence .slot { display: inline-block; padding: 0 var(--s-2_5); border: 1px solid var(--hair-ctl); border-radius: var(--r-sm); background-color: var(--c-bg-sunken); }
 
 /* Approval mode: a small segmented control. The chosen mode is solid ink, block is solid danger. */
 .modes { display: inline-flex; gap: var(--s-0_5); padding: var(--s-0_5); vertical-align: baseline; flex-wrap: wrap; border-radius: var(--r-sm); background: var(--c-bg-sunken); border: 1px solid var(--hair-ctl); }
