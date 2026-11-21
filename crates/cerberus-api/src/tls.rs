@@ -33,6 +33,8 @@ const CA_DAYS: i64 = 3650;
 const LEAF_DAYS: i64 = 90;
 /// Lifetime of an agent client certificate.
 const CLIENT_DAYS: i64 = 365;
+/// Lifetime of an admin client certificate of an enrolled desktop (ADR-0034 point 3.2).
+pub const ADMIN_CLIENT_DAYS: i64 = 90;
 /// A leaf with less time left than this is renewed (ADR-0023 point 5).
 const RENEW_BEFORE_DAYS: i64 = 30;
 /// Certificates start this long before `now`, so a small clock difference does not break them.
@@ -288,6 +290,32 @@ impl LocalCa {
         params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
         params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
         let not_after = validity(&mut params, now, CLIENT_DAYS)?;
+        let cert = params.signed_by(&key, &self.issuer).map_err(cert_error)?;
+        Ok(IssuedCert {
+            cert_der: cert.der().to_vec(),
+            key_der: SecretBytes::new(key.serialize_der()),
+            not_after,
+        })
+    }
+
+    /// Signs the client certificate of an enrolled desktop for the admin API (ADR-0034 point
+    /// 3.2): ECDSA P-256, `CN = cerberus-admin <enrolment>`, EKU clientAuth, 90 days. Being
+    /// signed by the CA is not enough to pass the admin routes: its [`IssuedCert::sha256`] must
+    /// also be in the admin registry (DEC-RM-3).
+    ///
+    /// # Errors
+    /// [`ServerError::Cert`] when signing fails.
+    pub fn issue_admin_client(
+        &self,
+        enrolment: &str,
+        now: Timestamp,
+    ) -> Result<IssuedCert, ServerError> {
+        let key = KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).map_err(cert_error)?;
+        let mut params = CertificateParams::default();
+        params.distinguished_name = dn(&format!("cerberus-admin {enrolment}"));
+        params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+        params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
+        let not_after = validity(&mut params, now, ADMIN_CLIENT_DAYS)?;
         let cert = params.signed_by(&key, &self.issuer).map_err(cert_error)?;
         Ok(IssuedCert {
             cert_der: cert.der().to_vec(),
@@ -942,26 +970,35 @@ pub fn server_config(
         .map_err(|e| ServerError::Tls(e.to_string()))?;
     let builder = match client_ca {
         None => builder.with_no_client_auth(),
-        Some(ca_der) => {
-            let mut roots = rustls::RootCertStore::empty();
-            roots
-                .add(CertificateDer::from(ca_der.to_vec()))
-                .map_err(|e| ServerError::Tls(e.to_string()))?;
-            let mut verifier =
-                WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider);
-            if !require_client_cert {
-                verifier = verifier.allow_unauthenticated();
-            }
-            builder.with_client_cert_verifier(
-                verifier
-                    .build()
-                    .map_err(|e| ServerError::Tls(e.to_string()))?,
-            )
-        }
+        Some(ca_der) => builder.with_client_cert_verifier(client_verifier(
+            ca_der,
+            require_client_cert,
+            provider,
+        )?),
     };
     let mut config = builder.with_cert_resolver(resolver);
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     Ok(Arc::new(config))
+}
+
+/// The client certificate check of [`server_config`]: signed by the CA in `ca_der`, EKU
+/// clientAuth, in its validity time.
+fn client_verifier(
+    ca_der: &[u8],
+    require_client_cert: bool,
+    provider: Arc<rustls::crypto::CryptoProvider>,
+) -> Result<Arc<dyn rustls::server::danger::ClientCertVerifier>, ServerError> {
+    let mut roots = rustls::RootCertStore::empty();
+    roots
+        .add(CertificateDer::from(ca_der.to_vec()))
+        .map_err(|e| ServerError::Tls(e.to_string()))?;
+    let mut verifier = WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider);
+    if !require_client_cert {
+        verifier = verifier.allow_unauthenticated();
+    }
+    verifier
+        .build()
+        .map_err(|e| ServerError::Tls(e.to_string()))
 }
 
 /// Makes the CA when a vault is created, and the first leaf next to it (ADR-0023, DEC-T05-1).
@@ -1111,5 +1148,56 @@ mod tests {
         assert!(parsed.subject().to_string().contains(&agent.to_string()));
         let eku = parsed.extended_key_usage().expect("eku").expect("ext");
         assert!(eku.value.client_auth && !eku.value.server_auth);
+    }
+
+    fn unix_time(at: Timestamp) -> rustls::pki_types::UnixTime {
+        rustls::pki_types::UnixTime::since_unix_epoch(std::time::Duration::from_secs(
+            u64::try_from(at.as_second()).expect("after 1970"),
+        ))
+    }
+
+    #[test]
+    fn an_admin_client_cert_has_its_cn_client_auth_90_days_and_passes_the_client_check() {
+        let now = SystemClock.now();
+        let ca = LocalCa::create(&VaultId::generate(), now).expect("ca");
+        let enrolment = "0190e0a0-0000-7000-8000-000000000001";
+        let cert = ca.issue_admin_client(enrolment, now).expect("cert");
+        let (_, parsed) = X509Certificate::from_der(&cert.cert_der).expect("parse");
+        let cn = parsed
+            .subject()
+            .iter_common_name()
+            .next()
+            .and_then(|cn| cn.as_str().ok())
+            .expect("cn");
+        assert_eq!(cn, format!("cerberus-admin {enrolment}"));
+        let eku = parsed.extended_key_usage().expect("eku").expect("ext");
+        assert!(eku.value.client_auth && !eku.value.server_auth);
+        assert!(!parsed.is_ca());
+        let days = (cert.not_after.as_second() - now.as_second()) / 86_400;
+        assert_eq!(days, ADMIN_CLIENT_DAYS);
+        assert!(cert.key_pem().starts_with("-----BEGIN PRIVATE KEY-----"));
+
+        let provider = Arc::new(ring_provider::default_provider());
+        let verifier =
+            client_verifier(ca.cert_der(), false, Arc::clone(&provider)).expect("verifier");
+        let der = CertificateDer::from(cert.cert_der.clone());
+        assert!(
+            verifier
+                .verify_client_cert(&der, &[], unix_time(now))
+                .is_ok()
+        );
+        let late = now + SignedDuration::from_hours(24 * (ADMIN_CLIENT_DAYS + 1));
+        assert!(
+            verifier
+                .verify_client_cert(&der, &[], unix_time(late))
+                .is_err()
+        );
+        let other = LocalCa::create(&VaultId::generate(), now).expect("other ca");
+        let foreign = client_verifier(other.cert_der(), true, provider).expect("verifier");
+        assert!(
+            foreign
+                .verify_client_cert(&der, &[], unix_time(now))
+                .is_err()
+        );
     }
 }

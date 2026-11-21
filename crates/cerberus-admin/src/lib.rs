@@ -12,9 +12,13 @@
 //! - [`remote`]: the remote allowlist and the admin protocol version.
 //! - [`rpc`]: the arguments of each remote command, the zeroizing JSON body, and the dispatch.
 //! - [`events`]: the live UI events as they go on the wire.
+//! - [`clients`]: the registry of enrolled desktops (`admin-clients.json`) of `cerberusd`.
+//! - [`bundle`]: the enrolment bundle that `cerberusd admin enroll` writes and the desktop reads.
 
 #![forbid(unsafe_code)]
 
+pub mod bundle;
+pub mod clients;
 pub mod dto;
 pub mod error;
 pub mod events;

@@ -1384,6 +1384,24 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   pending row has no details); `session_open` and `client_enroll` give `Locked`, because the drain would count them as
   malformed rows. (`crates/cerberus-core/src/vault/custody.rs`, `integration.rs`, tests `vault/tests/admin_verify.rs`)
 
+- **DEC-RM-18** — RM — Admin certificate, registry and bundle, as built (plan step 4). (a) `LocalCa::issue_admin_client`
+  and `ADMIN_CLIENT_DAYS = 90` in `cerberus-api` `tls.rs`; the client check of `server_config` is now the private
+  `client_verifier`, so the test verifies the new certificate with the same verifier the listener uses. (b) Enrolment
+  IDs are a typed `EnrolmentId` (UUIDv7 via `uuid_id!`). (c) `admin-clients.json` carries a `version` (1) around the
+  entry list, so a later format change is detected instead of misread; `load` also refuses a link or other non-regular
+  file, more than 1 MiB, a hash that is not 64 lower-case hex digits, a bad label and two entries with the same ID or
+  certificate. Labels are 1 to 64 characters without control characters (as operator labels). (d) The bundle key is a
+  `cerberus_types::wire::WireSecret` rather than a bare `Zeroizing<String>`: same zeroizing and `[REDACTED]` `Debug`,
+  and it has serde, which `Zeroizing` has only with a feature the workspace does not turn on. (e)
+  `AdminBundle::read(path, now)` takes the time, because the client certificate is checked with the rustls client
+  verifier (CA, clientAuth, validity at `now`). Beyond the plan it also refuses a CN other than
+  `cerberus-admin <id>`, a `not_after` that differs from the certificate, more than one certificate in a PEM field, a
+  URL with a user, query, fragment or path, and a key that does not match the certificate. Errors never quote the file.
+  (f) New `cerberus-admin` dependencies, all already in the workspace: `rustls`, `x509-parser`, `sha2`,
+  `data-encoding`, `url`, `uuid`; `rcgen` for tests only. Residual: serde_json unescapes the key PEM through its own
+  scratch buffer, which is not zeroized (the same as every IPC secret). (`crates/cerberus-admin/src/clients.rs`,
+  `bundle.rs`)
+
 ## RD — RustDesk connections (2026-11-21)
 
 - **DEC-RD-1** — New item kind `rustdesk` (Rust `ItemKind::Rustdesk`, wire value `rustdesk`) for a machine reached with

@@ -222,6 +222,14 @@ version, pin mismatch.
 
 Done when: `cargo test -p cerberus-api --lib tls`, `cargo test -p cerberus-admin`.
 
+As built (DEC-RM-18): the enrolment ID is `clients::EnrolmentId` (`cerberus_types::uuid_id!`, UUIDv7); the registry
+file is `{ "version": 1, "clients": [...] }` and refuses links, sizes over 1 MiB, bad hashes and duplicates;
+`AdminClients` also has `get` and `live_count`. The bundle key is a `WireSecret` (zeroizing, redacted, with serde) and
+`AdminBundle::read(path, now)` takes the time for the chain check; `check` also wants the CN `cerberus-admin <id>`, the
+same `not_after` as the certificate, one certificate per PEM, and a key that matches the certificate.
+`ca_sha256_hex()` gives the fingerprint to compare with `cerberusd status`. `server_config`'s client check moved into
+`tls::client_verifier`, which the new test uses.
+
 ---
 
 ## Step 5 — Admin HTTP module in `cerberus-api`

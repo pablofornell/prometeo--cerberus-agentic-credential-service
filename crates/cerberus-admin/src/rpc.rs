@@ -125,8 +125,15 @@ impl io::Write for ZeroizingWriter {
 /// # Errors
 /// `internal` when the value cannot be written as JSON.
 pub fn to_body<T: Serialize + ?Sized>(value: &T) -> IpcResult<Zeroizing<Vec<u8>>> {
+    zeroizing_json(value).map_err(|error| IpcError::internal(&error))
+}
+
+/// Writes `value` as JSON into a zeroizing buffer that never leaves a grown copy behind.
+pub(crate) fn zeroizing_json<T: Serialize + ?Sized>(
+    value: &T,
+) -> serde_json::Result<Zeroizing<Vec<u8>>> {
     let mut out = ZeroizingWriter(Zeroizing::new(Vec::new()));
-    serde_json::to_writer(&mut out, value).map_err(|error| IpcError::internal(&error))?;
+    serde_json::to_writer(&mut out, value)?;
     Ok(out.0)
 }
 

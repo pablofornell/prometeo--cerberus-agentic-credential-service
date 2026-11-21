@@ -1,6 +1,6 @@
 [package]
 name = "cerberus-admin"
-description = "Cerberus admin contract: the IPC and admin DTOs and the IPC error, shared by the desktop and the daemon."
+description = "Cerberus admin contract: the IPC and admin DTOs, the IPC error, the remote allowlist and RPC, and the admin enrolment files."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,15 +15,23 @@ cerberus-core.workspace = true
 cerberus-crypto.workspace = true
 cerberus-store.workspace = true
 cerberus-types.workspace = true
+data-encoding.workspace = true
 ipnet.workspace = true
 jiff = { workspace = true, features = ["serde"] }
+rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 specta.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+url.workspace = true
+# `uuid_id!` (enrolment IDs) expands to uuid paths.
+uuid.workspace = true
+x509-parser.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
+rcgen.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
