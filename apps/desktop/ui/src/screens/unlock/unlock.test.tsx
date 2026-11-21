@@ -40,6 +40,8 @@ describe("unlock", () => {
     expect(await screen.findByRole("radio", { name: /Ana Ruiz/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: /Ben Ortiz/ })).not.toBeChecked();
     expect(screen.getByText("No failed tries.")).toBeInTheDocument();
+    // The head is the mark and the title only: no line about HTTP 423 under it.
+    expect(screen.queryByText(/HTTP 423/)).not.toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -69,6 +71,22 @@ describe("unlock", () => {
     expect(screen.getByLabelText("Master phrase")).toHaveValue("");
     expect(document.body.textContent).not.toContain(WRONG);
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("tabs from the operators to the phrase, then to Unlock, and only then to the recovery switch", async () => {
+    const user = userEvent.setup();
+    renderUnlock();
+    await user.click(await screen.findByRole("radio", { name: /Ben Ortiz/ }));
+    expect(screen.getByRole("radio", { name: /Ben Ortiz/ })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText("Master phrase")).toHaveFocus();
+    // A phrase with spaces stays in the field: the space never reaches the switch.
+    await user.keyboard("two words");
+    expect(screen.getByLabelText("Master phrase")).toHaveValue("two words");
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Unlock" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Use recovery key" })).toHaveFocus();
   });
 
   it("asks for a phrase before it calls the backend", async () => {
@@ -122,11 +140,16 @@ describe("unlock", () => {
     await user.click(screen.getByRole("button", { name: "Unlock" }));
     expect(await screen.findByRole("heading", { name: "Too many failed tries" })).toBeInTheDocument();
     expect(screen.getByRole("timer", { name: "Time to wait" })).toHaveTextContent(/0:0[12]/);
+    expect(screen.getByText("Wait before the next try. Restarting the app does not reset this timer.")).toBeInTheDocument();
+    // The timer is drawn over the operator list, which stays in place (so nothing moves) but cannot be used.
+    const ops = container.querySelector("fieldset.ops");
+    expect(ops).toHaveAttribute("inert");
     expect(screen.getByLabelText("Master phrase, disabled while you wait")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Unlock" })).toBeDisabled();
     expect(await axe(container)).toHaveNoViolations();
     expect(await screen.findByText("You can try again.", {})).toBeInTheDocument();
     expect(screen.getByLabelText("Master phrase")).toBeEnabled();
+    expect(container.querySelector("fieldset.ops")).not.toHaveAttribute("inert");
   });
 
   it("waits after five free tries (mock backend)", async () => {
@@ -164,6 +187,17 @@ describe("unlock", () => {
     expect(await screen.findByRole("heading", { name: "Too many failed tries" })).toBeInTheDocument();
     expect(screen.getByRole("timer", { name: "Time to wait" })).toHaveTextContent(/1:(29|30)/);
     expect(screen.getByText("6 failed tries in a row. Cerberus makes you wait between tries.")).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("draws the wait over the recovery key box, which stays disabled", async () => {
+    const user = userEvent.setup();
+    const { container } = renderUnlock({ vault_status: () => sealed({ failed_unlocks: 6, free_unlock_tries_left: 0, retry_after_seconds: 90 }) });
+    await user.click(await screen.findByRole("button", { name: "Use recovery key" }));
+    const timer = screen.getByRole("timer", { name: "Time to wait" });
+    // Inside the field, over the key box and its hint (unlock.css), so the card keeps its height.
+    expect(timer.closest(".field")).toHaveClass("waiting");
+    expect(screen.getByLabelText("Recovery key")).toBeDisabled();
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -215,6 +249,17 @@ describe("unlock", () => {
     await user.click(screen.getByRole("button", { name: "Unlock" }));
     await waitFor(() => expect(mock.state).toBe("unlocked"));
     await waitFor(() => expect(location.history?.at(-1)).toBe("/dashboard"));
+  });
+
+  it("says it is opening the vault on the footer status line, under the same head", async () => {
+    const user = userEvent.setup();
+    // The unlock succeeds but the status stays sealed, so the screen stays on "opening".
+    renderUnlock({ vault_unlock: () => ({ operator_id: "op-ana", role: "owner", unlocked_at: new Date().toISOString(), via_recovery: false }) });
+    await user.type(await screen.findByLabelText("Master phrase"), MOCK_PHRASE);
+    await user.click(screen.getByRole("button", { name: "Unlock" }));
+    expect(await screen.findByText("Unlocked. Opening the vault.")).toHaveAttribute("role", "status");
+    expect(screen.getByRole("heading", { level: 1, name: "Cerberus is locked" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use recovery key" })).toBeDisabled();
   });
 
   it("uses the recovery key: a format error is not a failed try", async () => {

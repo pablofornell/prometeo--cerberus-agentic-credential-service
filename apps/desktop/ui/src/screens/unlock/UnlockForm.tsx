@@ -143,30 +143,24 @@ export function UnlockForm() {
         ? t("tries.wait", { n: failedTries })
         : t(failedTries === 1 ? "tries.one" : "tries.some", { n: failedTries, left: triesLeft });
   const isWait = waiting;
+  const warnTries = failedTries > 0 && !busy && !opening;
+  const waitBox = isWait && (
+    <div className="wait">
+      <div className="wait-time" role="timer" aria-live="off" aria-label={t("wait.timer")}>
+        {formatLeft(left ?? 0)}
+      </div>
+      <p className="wait-body">{t("wait.body")}</p>
+    </div>
+  );
 
   return (
     <form className={opening ? "unlock opening" : "unlock"} noValidate aria-busy={busy || undefined} onSubmit={(e) => void submit(e)}>
+      {/* The head is the mark and the title only; why the vault locked is its one line. The wait text sits in the timer
+          and the opening and deriving text in the footer, so the head keeps its height in every state. */}
       <Brand mode={opening ? "open" : busy ? "spin" : "locked"} title={isWait ? t("wait.title") : busy ? t("loading.title") : t("title")} headingRef={headingRef}>
-        {opening ? (
-          <p className="sub" role="status">{t("opening")}</p>
-        ) : isWait ? (
-          <p className="sub">{t("wait.body")}</p>
-        ) : (
-          <p className="sub">{t("sub")}</p>
-        )}
+        {lockReason && <p className="sub reason">{t(`reason.${lockReason}`)}</p>}
       </Brand>
-      {lockReason && !opening && (
-        <p className="reason">
-          <Icon name="lock" size={14} />
-          {t(`reason.${lockReason}`)}
-        </p>
-      )}
 
-      {isWait && (
-        <div className="wait" role="timer" aria-live="off" aria-label={t("wait.timer")}>
-          {formatLeft(left ?? 0)}
-        </div>
-      )}
       {waitedOut && !isWait && <Notice tone="ok" title={t("wait.over")} />}
 
       {kdfProblem && failure && (
@@ -180,24 +174,33 @@ export function UnlockForm() {
         </Notice>
       )}
 
-      {mode === "phrase" ? (
-        <>
-          {!isWait && list.length > 0 && (
-            <fieldset className="ops">
-              <legend>{t("who")}</legend>
-              <div className="ops-list">
-                {list.map((o) => (
-                  <label className="op" key={o.id}>
-                    <input type="radio" name="operator" value={o.id} checked={o.id === operator?.id} onChange={() => setSelected(o.id)} disabled={busy || opening} />
-                    <span className="avatar" aria-hidden="true">{initials(o.label)}</span>
-                    <span className="name">{o.label}</span>
-                    <span className="role">{t(`role.${o.role}`)}</span>
-                    <Icon name="check" size={16} className="tick" />
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          )}
+      {mode === "phrase" && list.length > 0 && (
+        // The timer is drawn over the hidden operator list (one grid cell, with room reserved for the timer), so the wait
+        // does not move the field.
+        <div className="ops-slot">
+          <fieldset className="ops" inert={isWait}>
+            <legend>{t("who")}</legend>
+            <div className="ops-list">
+              {list.map((o) => (
+                <label className="op" key={o.id}>
+                  <input type="radio" name="operator" value={o.id} checked={o.id === operator?.id} onChange={() => setSelected(o.id)} disabled={busy || opening || isWait} />
+                  <span className="avatar" aria-hidden="true">{initials(o.label)}</span>
+                  <span className="name">{o.label}</span>
+                  <span className="role">{t(`role.${o.role}`)}</span>
+                  <Icon name="check" size={16} className="tick" />
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {waitBox}
+        </div>
+      )}
+      {mode === "phrase" && list.length === 0 && waitBox}
+
+      {/* The field, the submit button and the other way in. The switch is drawn on the label row (like a "forgot
+          password" link) but comes last in the DOM, so Tab goes from the operators to the field and then to Unlock. */}
+      <div className="unlock-secret">
+        {mode === "phrase" ? (
           <Field label={t("phrase.label")} {...(problem ? { problem } : {})}>
             {(control) => (
               <input
@@ -218,42 +221,40 @@ export function UnlockForm() {
               />
             )}
           </Field>
-        </>
-      ) : (
-        <Field label={t("recovery.label")} hint={t("recovery.hint")} {...(problem ? { problem } : {})}>
-          {(control) => (
-            <textarea
-              {...control}
-              ref={recoveryRef}
-              className="input mono"
-              rows={3}
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-              placeholder={t("recovery.placeholder")}
-              disabled={isWait || opening || busy}
-              value={recovery}
-              onChange={(e) => {
-                setRecovery(e.target.value);
-                setProblem(null);
-              }}
-            />
-          )}
-        </Field>
-      )}
+        ) : (
+          <Field className={isWait ? "waiting" : undefined} label={t("recovery.label")} hint={t("recovery.hint")} {...(problem ? { problem } : {})}>
+            {(control) => (
+              <>
+                <textarea
+                  {...control}
+                  ref={recoveryRef}
+                  className="input mono"
+                  rows={3}
+                  autoFocus
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={t("recovery.placeholder")}
+                  disabled={isWait || opening || busy}
+                  value={recovery}
+                  onChange={(e) => {
+                    setRecovery(e.target.value);
+                    setProblem(null);
+                  }}
+                />
+                {/* In the recovery path the timer is drawn over the key box and its hint, so the wait moves nothing. */}
+                {waitBox}
+              </>
+            )}
+          </Field>
+        )}
 
-      <Button variant="primary" size="lg" type="submit" icon="unlock" loading={busy} disabled={isWait || opening} aria-disabled={isWait || opening}>
-        {t("submit")}
-      </Button>
-      <div className="tries">
-        {/* While the key is derived, this line says so, in the place of the tries (it is always a live region). */}
-        <span role="status" className={failedTries > 0 && !busy ? "warn" : undefined}>
-          {failedTries > 0 && !busy && <Icon name="alert" size={14} />}
-          {busy ? t("loading.body") : triesText}
-        </span>
+        <Button variant="primary" size="lg" type="submit" icon="unlock" loading={busy} disabled={isWait || opening} aria-disabled={isWait || opening}>
+          {t("submit")}
+        </Button>
         <Button
           size="sm"
           variant="ghost"
+          className="mode-switch"
           disabled={opening || busy}
           onClick={() => {
             setMode(mode === "phrase" ? "recovery" : "phrase");
@@ -265,6 +266,14 @@ export function UnlockForm() {
         >
           {mode === "phrase" ? t("recovery.use") : t("phrase.use")}
         </Button>
+      </div>
+      <div className="tries">
+        {/* While the key is derived, and once the vault opens, this line says so in the place of the tries (it is always a
+            live region). */}
+        <span role="status" className={warnTries ? "warn" : undefined}>
+          {warnTries && <Icon name="alert" size={14} />}
+          {opening ? t("opening") : busy ? t("loading.body") : triesText}
+        </span>
       </div>
     </form>
   );

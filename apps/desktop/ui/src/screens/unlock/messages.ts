@@ -2,7 +2,6 @@ import { defineMessages } from "../../i18n";
 
 export const messages = defineMessages({
   "title": "Cerberus is locked",
-  "sub": "Agents get HTTP 423 until you unlock.",
   "who": "Who is unlocking?",
   "role.owner": "Owner",
   "role.operator": "Operator",

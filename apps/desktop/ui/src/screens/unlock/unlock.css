@@ -2,16 +2,21 @@
    "+" marks each corner. No gradients, glows or halos. Only tokens and app.css classes.
    The card is centered on its real height (.solo is a column and the card takes the free space above and below it), so
    it has no height to guess. Taller than the window, it starts at the top under a small gutter and the page scrolls.
-   The error line and the tries footer have reserved space, so a failed try never changes the height (no jumps). */
+   The error line and the tries footer have reserved space, and the wait timer is drawn over the operator list (or over
+   the recovery key box), with room for it reserved, so a failed try, the wait, the key derivation and the opening
+   never change the height (no jumps). Only the "You can try again" notice after a wait, and the notices for a failure
+   other than a wrong secret, add height.
+   Sized as a compact login card: 400 px wide, a 40 px mark, the title size of the app, controls the same height as
+   the operator rows. Everything is in tokens or px, so the UI scale (a whole-window zoom) scales it as one. */
 .solo:has(.unlock-screen) {
   display: flex; flex-direction: column; align-items: center; overflow: hidden; overflow: clip;
   padding-block: var(--unlock-gutter);
   background: var(--c-bg-sunken);
   --unlock-gutter: var(--s-6);
 }
-.solo-wrap:has(.unlock-screen) { width: min(500px, 100%); margin-block: auto; }
-/* --op-h: one operator row = one large control plus the space above and below it, so it follows the density. */
-.unlock-screen { --unlock-mark: 60px; --unlock-gap: var(--s-5); --unlock-pad-y: var(--s-8); --op-h: calc(var(--ctl-lg) + var(--s-2)); }
+.solo-wrap:has(.unlock-screen) { width: min(400px, 100%); margin-block: auto; }
+/* --op-h: one operator row is as tall as one large control, so it follows the density. */
+.unlock-screen { --unlock-mark: 40px; --unlock-gap: var(--s-4); --unlock-pad: var(--s-6); --op-h: var(--ctl-lg); }
 
 /* ---------- The hairline frame ---------- */
 .unlock-screen { position: relative; isolation: isolate; --frame: var(--c-line-hair); --plus: var(--c-text-muted); }
@@ -32,7 +37,7 @@
 
 /* ---------- The card ---------- */
 .unlock-screen .unlock {
-  position: relative; display: grid; gap: var(--unlock-gap); justify-items: stretch; padding: var(--unlock-pad-y) var(--s-8);
+  position: relative; display: grid; gap: var(--unlock-gap); justify-items: stretch; padding: var(--unlock-pad);
   background: var(--c-bg-canvas); border: 1px solid var(--frame);
 }
 /* The "+" at each corner of the card: a 15 px cross made of two 1 px bars, centered on the corner. */
@@ -55,26 +60,25 @@
   opacity: 0.9;
 }
 
-/* ---------- Head: the mark on top, then the title and one line, all centered ---------- */
-.unlock-screen .unlock-brand { display: grid; justify-items: center; text-align: center; gap: var(--s-4); }
+/* ---------- Head: the mark on top, then the title and an optional line, all centered ---------- */
+.unlock-screen .unlock-brand { display: grid; justify-items: center; text-align: center; gap: var(--s-3); }
 .unlock-screen .unlock-brand > .gate-mark { flex: none; width: var(--unlock-mark); height: var(--unlock-mark); }
-.unlock-screen .brand-text { min-width: 0; display: grid; justify-items: center; gap: var(--s-1_5); }
-.unlock-screen h1 { font-size: var(--t-display-sm-size); line-height: var(--t-display-sm-line); font-weight: 600; letter-spacing: -0.04em; text-wrap: balance; }
+.unlock-screen .brand-text { min-width: 0; display: grid; justify-items: center; gap: var(--s-1); }
+.unlock-screen h1 { font-size: var(--t-title-size); line-height: var(--t-title-line); font-weight: 600; letter-spacing: -0.03em; text-wrap: balance; }
 .unlock-screen h1:focus { outline: none; }
-.unlock-screen .sub { font-size: var(--t-body-size); line-height: var(--t-body-line); color: var(--c-text-muted); text-wrap: balance; }
-/* Why the vault is locked: a quiet line with an icon, not another box. */
-.unlock-screen .reason { display: flex; align-items: flex-start; gap: var(--s-2); font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); color: var(--c-text-secondary); margin: calc(var(--s-1) * -1) 0 0; }
-.unlock-screen .reason .icon { flex: none; margin-top: calc((var(--t-body-sm-line) - var(--icon)) / 2); color: var(--c-text-muted); }
+.unlock-screen .sub { font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); color: var(--c-text-muted); text-wrap: balance; }
+/* Why the vault is locked: the one line under the title, a step brighter than other context lines. */
+.unlock-screen .sub.reason { color: var(--c-text-secondary); }
 
 /* ---------- Operator picker: one hairline list, the chosen row filled ---------- */
-.unlock-screen .ops { display: grid; gap: var(--s-2); border: 0; padding: 0; margin: 0; min-width: 0; }
+.unlock-screen .ops { display: grid; gap: 0; border: 0; padding: 0; margin: 0; min-width: 0; }
 .unlock-screen .ops legend,
 .unlock-screen .field > label { font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); font-weight: 500; color: var(--c-text-secondary); padding: 0; }
-.unlock-screen .ops legend { margin-bottom: var(--s-2); }
+.unlock-screen .ops legend { margin-bottom: var(--s-1_5); }
 /* Three rows and a half show at once (the half row says there is more); the rest scrolls inside the list. */
 .unlock-screen .ops-list { border: 1px solid var(--c-line-mid); border-radius: var(--r-sm); overflow: hidden auto; max-height: calc(3.5 * var(--op-h)); }
 .unlock-screen .op {
-  position: relative; display: flex; align-items: center; gap: var(--s-3); height: var(--op-h); padding: 0 var(--s-3_5); cursor: pointer;
+  position: relative; display: flex; align-items: center; gap: var(--s-2_5); height: var(--op-h); padding: 0 var(--s-3); cursor: pointer;
   background: var(--c-bg-canvas);
   transition: background-color var(--d-fast) var(--ease-standard);
 }
@@ -91,7 +95,7 @@
   font-size: var(--t-micro-size); line-height: 1; font-weight: 600; letter-spacing: 0;
 }
 .unlock-screen .op .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--c-text-primary); }
-.unlock-screen .op .role { flex: none; font-size: var(--t-body-sm-size); color: var(--c-text-muted); }
+.unlock-screen .op .role { flex: none; font-size: var(--t-caption-size); color: var(--c-text-muted); }
 /* The tick shows on the chosen row, and only where there is a choice to make. */
 .unlock-screen .op .tick { flex: none; color: var(--c-text-primary); visibility: hidden; margin-right: -2px; }
 .unlock-screen .op:has(input:checked) .tick { visibility: visible; }
@@ -104,38 +108,58 @@
 }
 
 /* ---------- Fields ---------- */
-/* Under the control sit the hint (recovery) and the problem. The problem row is reserved for two lines (a long operator
-   name wraps), so an error never moves the button. The field is pulled up so that a full two-line error ends --s-2_5
-   (12 px, 10 px compact) above the button, whatever the card gap is. */
+/* The field, the Unlock button and the mode switch share one block. Under the control sit the hint (recovery) and the
+   problem, in the caption size of every other field. The problem row is reserved for two lines (a long operator name
+   wraps), so an error never moves the button; a full two-line error ends --s-2_5 (12 px, 10 px compact) above it. */
+.unlock-screen .unlock-secret { position: relative; display: grid; gap: var(--s-2_5); }
+.unlock-screen .unlock-secret > .btn.lg { width: 100%; }
+/* The other way in. It is last in the DOM (Tab: field, Unlock, then this) but drawn on the right of the label row,
+   centered on the label line, its padding hung out to the edge. */
+.unlock-screen .unlock-secret > .mode-switch { position: absolute; z-index: 1; right: calc(var(--s-2) * -1); top: calc((var(--t-body-sm-line) - var(--ctl-sm)) / 2); }
+/* Every row is placed by hand, so the wait timer of the recovery path can sit over the control and the hint. */
 .unlock-screen .field {
   --msg: var(--s-1_5);                   /* space above a message line */
-  gap: 0; margin-bottom: calc(var(--s-2_5) - var(--unlock-gap));
-  grid-template-rows: auto auto auto minmax(calc(var(--msg) + 2 * var(--t-body-sm-line)), auto);
+  gap: 0;
+  grid-template-rows: auto auto auto minmax(calc(var(--msg) + 2 * var(--t-caption-line)), auto);
 }
-.unlock-screen .field > label { margin-bottom: var(--s-2); }
-.unlock-screen .field .hint { grid-row: 3; margin-top: var(--msg); font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); }
-.unlock-screen .field .problem { grid-row: 4; align-self: start; margin-top: var(--msg); font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); align-items: flex-start; }
-.unlock-screen .field .problem .icon { flex: none; margin-top: calc((var(--t-body-sm-line) - var(--icon)) / 2); }
+.unlock-screen .field > label { grid-row: 1; margin-bottom: var(--s-1_5); line-height: var(--t-body-sm-line); }
+.unlock-screen .field > .input { grid-row: 2; grid-column: 1; }
+.unlock-screen .field .hint { grid-row: 3; grid-column: 1; margin-top: var(--msg); line-height: var(--t-caption-line); }
+.unlock-screen .field .problem { grid-row: 4; align-self: start; margin-top: var(--msg); line-height: var(--t-caption-line); align-items: flex-start; }
+.unlock-screen .field > .wait { grid-row: 2 / 4; grid-column: 1; }
+.unlock-screen .field.waiting > .input,
+.unlock-screen .field.waiting > .hint { visibility: hidden; }
+/* Message icons match the caption text (svg.icon is --icon, sized for body text). */
+.unlock-screen { --msg-icon: 14px; }
+.unlock-screen .field .problem .icon { flex: none; width: var(--msg-icon); height: var(--msg-icon); margin-top: calc((var(--t-caption-line) - var(--msg-icon)) / 2); }
 .unlock-screen .input.lg.mono { letter-spacing: 0.02em; }
-.unlock-screen .unlock > .btn.lg { width: 100%; }
 .unlock-screen .center { justify-content: center; }
 
-/* ---------- Footer: tries on the left, the other way in on the right, under a hairline ---------- */
-.unlock-screen .tries { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); --tries-pad: var(--s-4); padding-top: var(--tries-pad); min-height: calc(1px + var(--tries-pad) + 2 * var(--t-body-sm-line)); border-top: 1px solid var(--frame); font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); color: var(--c-text-muted); }
+/* ---------- Footer: one status line under a hairline (tries, then deriving, then opening), two lines reserved ---------- */
+.unlock-screen .tries { --tries-pad: var(--s-3_5); padding-top: var(--tries-pad); min-height: calc(1px + var(--tries-pad) + 2 * var(--t-caption-line)); border-top: 1px solid var(--frame); font-size: var(--t-caption-size); line-height: var(--t-caption-line); color: var(--c-text-muted); }
 .unlock-screen .tries > span { display: flex; align-items: flex-start; gap: var(--s-1_5); min-width: 0; }
-.unlock-screen .tries .icon { flex: none; margin-top: calc((var(--t-body-sm-line) - var(--icon)) / 2); }
+.unlock-screen .tries .icon { flex: none; width: var(--msg-icon); height: var(--msg-icon); margin-top: calc((var(--t-caption-line) - var(--msg-icon)) / 2); }
 .unlock-screen .tries .warn { color: var(--c-warning-fg); }
-.unlock-screen .tries > .btn { flex: none; margin-right: calc(var(--s-2) * -1); }
 .unlock-screen .actions { display: grid; gap: var(--s-2_5); justify-content: stretch; }
 .unlock-screen .actions > .btn { width: 100%; }
-.unlock-screen .foot { font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); color: var(--c-text-muted); padding-top: var(--s-4); border-top: 1px solid var(--frame); }
+.unlock-screen .foot { font-size: var(--t-caption-size); line-height: var(--t-caption-line); color: var(--c-text-muted); padding-top: var(--s-3_5); border-top: 1px solid var(--frame); }
 
-/* The wait: one tabular timer on a flat warning tint, in the place of the operator list. */
+/* The wait: the tabular timer and its line side by side on a flat warning tint. With operators it is drawn over the
+   hidden list (both in one grid cell); the cell keeps room for the timer (--wait-h: three caption lines and the
+   padding, what the line takes in a 400 px card), so the height is the same with one operator or many. In the recovery
+   path it is drawn over the key box and its hint, which are taller. */
+.unlock-screen { --wait-pad: var(--s-2_5); --wait-h: calc(2 * var(--wait-pad) + 3 * var(--t-caption-line) + 2px); }
+.unlock-screen .ops-slot { display: grid; min-height: var(--wait-h); }
+.unlock-screen .ops-slot > * { grid-area: 1 / 1; }
+.unlock-screen .ops-slot > .ops[inert],
+.unlock-screen .ops-slot > .ops[inert] .op .tick { visibility: hidden; }
 .unlock-screen .wait {
-  text-align: center; font-size: var(--t-display-size); line-height: var(--t-display-line); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
-  color: var(--c-warning-fg); background: var(--c-warning-tint); border: 1px solid color-mix(in srgb, var(--c-warning-fg) 30%, transparent);
-  border-radius: var(--r-sm); padding: var(--s-3) 0;
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--s-3); min-height: var(--wait-h);
+  background: var(--c-warning-tint); border: 1px solid color-mix(in srgb, var(--c-warning-fg) 30%, transparent);
+  border-radius: var(--r-sm); padding: var(--wait-pad) var(--s-3_5);
 }
+.unlock-screen .wait-time { font-size: var(--t-display-size); line-height: var(--t-display-line); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--c-warning-fg); }
+.unlock-screen .wait-body { font-size: var(--t-caption-size); line-height: var(--t-caption-line); color: var(--c-text-secondary); }
 .unlock-screen .code { font-family: var(--font-mono); font-size: var(--t-caption-size); color: var(--c-text-muted); }
 .unlock-screen .stack .code { text-align: left; padding: var(--s-2) var(--s-2_5); border: 1px solid var(--c-line-mid); border-radius: var(--r-sm); background: var(--c-bg-sunken); overflow-wrap: anywhere; color: var(--c-text-secondary); }
 .unlock-screen .stack > .label { font-size: var(--t-body-sm-size); font-weight: 500; color: var(--c-text-secondary); }
@@ -144,20 +168,18 @@
 .unlock-screen .state-block { padding: 0; max-width: none; justify-items: start; text-align: left; }
 
 @media (max-width: 480px) {
-  .unlock-screen { --unlock-pad-y: var(--s-6); }
-  .unlock-screen .unlock { padding-inline: var(--s-5); }
+  .unlock-screen { --unlock-pad: var(--s-5); }
 }
-/* Short windows (up to 860 px high, so 1280 x 800 too): a tighter card, so it fits next to the window edges. */
-@media (max-height: 860px) {
-  .unlock-screen { --unlock-mark: 52px; --unlock-gap: var(--s-4_5); --unlock-pad-y: var(--s-6); }
-  .unlock-screen .unlock-brand { gap: var(--s-3); }
-}
-/* Very short windows (about 600 px high): smaller still. */
+/* Short windows (about 600 px high, or a larger UI scale): smaller still, so the card fits between the window edges. */
 @media (max-height: 680px) {
   .solo:has(.unlock-screen) { --unlock-gutter: var(--s-3); }
-  .unlock-screen { --unlock-mark: 44px; --unlock-gap: var(--s-3_5); --unlock-pad-y: var(--s-3_5); --op-h: min(calc(var(--ctl-lg) + var(--s-2)), 48px); --unlock-ctl: min(var(--ctl-lg), 42px); }
+  .unlock-screen { --unlock-mark: 32px; --unlock-gap: var(--s-3); --unlock-pad: var(--s-4); --unlock-ctl: min(var(--ctl-lg), 42px); --op-h: var(--unlock-ctl); }
   .unlock-screen .field { --msg: var(--s-1); }
-  .unlock-screen .unlock-brand { gap: var(--s-2_5); }
-  .unlock-screen .tries { --tries-pad: var(--s-3); }
+  .unlock-screen .unlock-brand { gap: var(--s-2); }
+  .unlock-screen .tries { --tries-pad: var(--s-2_5); }
   .unlock-screen .unlock .btn.lg, .unlock-screen .unlock .input.lg { height: var(--unlock-ctl); }
+}
+/* Shorter still (600 px at a 110 % scale, 800 px at 150 %): tighter gaps, so the card still fits without a scroll. */
+@media (max-height: 560px) {
+  .unlock-screen { --unlock-gap: var(--s-2_5); --unlock-pad: var(--s-3_5); }
 }
