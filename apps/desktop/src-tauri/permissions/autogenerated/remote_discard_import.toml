@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remote-discard-import"
+description = "Enables the remote_discard_import command without any pre-configured scope."
+commands.allow = ["remote_discard_import"]
+
+[[permission]]
+identifier = "deny-remote-discard-import"
+description = "Denies the remote_discard_import command without any pre-configured scope."
+commands.deny = ["remote_discard_import"]

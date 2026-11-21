@@ -238,6 +238,11 @@ impl Daemon {
     /// Makes a vault, starts the daemon (`[admin] enabled = admin`) and unlocks it through the
     /// socket, as `cerberusd unlock` does.
     pub async fn start(admin: bool) -> Self {
+        Self::start_with(admin, "").await
+    }
+
+    /// As [`Self::start`], with extra lines in the `[admin]` table (session limits).
+    pub async fn start_with(admin: bool, admin_extra: &str) -> Self {
         let dir = tempfile::tempdir().expect("tempdir");
         let data = dir.path().join("data");
         let seed = make_vault(&data).await;
@@ -248,7 +253,7 @@ impl Daemon {
             attempt += 1;
             let port = free_port();
             let text = format!(
-                "data_dir = {:?}\nbind = [\"127.0.0.1\"]\nport = {port}\n[admin]\nenabled = {admin}\n",
+                "data_dir = {:?}\nbind = [\"127.0.0.1\"]\nport = {port}\n[admin]\nenabled = {admin}\n{admin_extra}",
                 data.display().to_string()
             );
             std::fs::write(&path, text).expect("write config");
@@ -432,10 +437,19 @@ impl Daemon {
 pub async fn remote_desktop(
     bundle_path: &Path,
 ) -> (DesktopState, tempfile::TempDir, Arc<FakeShell>) {
+    remote_desktop_with(bundle_path, StateOptions::default()).await
+}
+
+/// As [`remote_desktop`], with state options (a manual clock).
+pub async fn remote_desktop_with(
+    bundle_path: &Path,
+    options: StateOptions,
+) -> (DesktopState, tempfile::TempDir, Arc<FakeShell>) {
     let dir = tempfile::tempdir().expect("tempdir");
     let paths = AppPaths::new(dir.path().to_path_buf());
     let profile =
-        remote::profile::import(&paths, bundle_path, SystemClock.now()).expect("import bundle");
+        remote::profile::stage(&paths, bundle_path, SystemClock.now()).expect("stage bundle");
+    remote::profile::commit(&paths, &profile.id).expect("store profile");
     Prefs {
         port: 0,
         remote: RemotePrefs {
@@ -447,7 +461,7 @@ pub async fn remote_desktop(
     .save(&paths)
     .expect("prefs");
     let shell = Arc::new(FakeShell::default());
-    let state = DesktopState::open(paths, shell.clone(), StateOptions::default())
+    let state = DesktopState::open(paths, shell.clone(), options)
         .await
         .expect("open in remote mode");
     (state, dir, shell)

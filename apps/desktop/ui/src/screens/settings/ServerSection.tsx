@@ -46,12 +46,25 @@ export function ServerSection({ status }: { status: VaultStatusView }) {
     }
   };
 
-  // The local vault is open here (Settings needs an unlocked vault), so a switch to a server locks it first.
-  const activate = (id: string | null) =>
-    run(`use:${id ?? "local"}`, async () => {
-      if (!remote) await ipc.vaultLock();
-      await ipc.remoteActivate(id);
-    });
+  // The local vault is open here (Settings needs an unlocked vault). The backend locks it only after every check of the
+  // switch passed, in the same call, so a refused switch leaves this screen up with its error. A failure is also a
+  // toast, which outlives this screen if the lock went through before a later step failed (DEC-RM-26).
+  const activate = async (id: string | null) => {
+    const key = `use:${id ?? "local"}`;
+    setBusy(key);
+    setError(null);
+    try {
+      await ipc.remoteActivate(id, !remote);
+    } catch (failure) {
+      const ui = isIpcFailure(failure) ? failure.error : null;
+      setError(ui);
+      toast.push({ tone: "error", title: t("srv.fail"), detail: ui ? errorText(ui) : undefined });
+    } finally {
+      setBusy(null);
+      void queryClient.invalidateQueries({ queryKey: qk.vault.remote() });
+      void queryClient.invalidateQueries({ queryKey: qk.vault.status() });
+    }
+  };
 
   const testConnection = async () => {
     setBusy("test");

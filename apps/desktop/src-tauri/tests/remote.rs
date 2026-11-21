@@ -125,10 +125,11 @@ async fn bundle_import_and_the_mode_switch_in_local_mode() {
     assert_eq!(view.ca_sha256, bundle.ca_sha256_hex().expect("sha"));
     assert_eq!(view.operator_id, bundle.operator_id.to_string());
     assert!(!view.active);
-    // The key is stored privately and never in the preferences.
+    // Staged: the key waits privately in the stage, and nothing is a profile yet.
     let key = dir
         .path()
         .join("remote")
+        .join("pending")
         .join(&view.id)
         .join(remote::profile::KEY_FILE);
     use std::os::unix::fs::PermissionsExt;
@@ -147,14 +148,14 @@ async fn bundle_import_and_the_mode_switch_in_local_mode() {
     let prefs_text =
         std::fs::read_to_string(dir.path().join("desktop-prefs.json")).expect("prefs file");
     assert!(!prefs_text.contains("PRIVATE KEY"));
-    // A second import of the same enrolment replaces the profile.
+    // A second import of the same enrolment replaces the stage.
     ops::remote_import_bundle(&state, MAIN, picked)
         .await
         .expect("again");
     let overview = ops::remote_status(&state, MAIN).await.expect("status");
     assert_eq!(overview.mode, BackendMode::Local);
     assert_eq!(overview.active, None);
-    assert_eq!(overview.profiles.len(), 1);
+    assert!(overview.profiles.is_empty(), "staged, not stored");
     assert_eq!(overview.remote_commands.len(), 25);
 
     // An unlocked local vault: the switch is refused until it is locked.
@@ -170,20 +171,46 @@ async fn bundle_import_and_the_mode_switch_in_local_mode() {
         .await
         .expect("local vault");
     assert_eq!(
-        code(ops::remote_activate(&state, MAIN, Some(view.id.clone())).await),
+        code(ops::remote_activate(&state, MAIN, Some(view.id.clone()), false).await),
         "conflict"
     );
-    ops::vault_lock(&state, MAIN).await.expect("lock");
+    // "Lock and connect" checks everything before it locks: a refused switch leaves the local
+    // vault unlocked, so the screen that asked still shows the error (DEC-RM-26).
     assert_eq!(
-        code(ops::remote_activate(&state, MAIN, Some("nope".to_owned())).await),
+        code(ops::remote_activate(&state, MAIN, Some("nope".to_owned()), true).await),
         "not_found"
     );
+    assert_eq!(
+        state.core().expect("core").state(),
+        cerberus_types::VaultStateKind::Unlocked
+    );
+    assert!(state.prefs().remote.profiles.is_empty());
     assert!(
-        ops::remote_activate(&state, MAIN, Some(view.id.clone()))
+        ops::remote_activate(&state, MAIN, Some(view.id.clone()), true)
             .await
-            .expect("activate"),
+            .expect("lock and connect"),
         "a switch needs a restart"
     );
+    assert_eq!(
+        state.core().expect("core").state(),
+        cerberus_types::VaultStateKind::Sealed
+    );
+    // Connecting stored the staged import.
+    assert_eq!(state.prefs().remote.profiles.len(), 1);
+    let stored_key = dir
+        .path()
+        .join("remote")
+        .join(&view.id)
+        .join(remote::profile::KEY_FILE);
+    assert_eq!(
+        std::fs::metadata(&stored_key)
+            .expect("stored key")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600
+    );
+    assert!(!dir.path().join("remote").join("pending").exists());
     assert_eq!(
         state.prefs().remote.active.as_deref(),
         Some(view.id.as_str())
@@ -194,7 +221,7 @@ async fn bundle_import_and_the_mode_switch_in_local_mode() {
     );
     // Back to local before the restart: nothing to restart for.
     assert!(
-        !ops::remote_activate(&state, MAIN, None)
+        !ops::remote_activate(&state, MAIN, None, false)
             .await
             .expect("local")
     );
@@ -206,6 +233,115 @@ async fn bundle_import_and_the_mode_switch_in_local_mode() {
     assert_eq!(
         code(ops::remote_disconnect(&state, MAIN).await),
         "unavailable"
+    );
+    state.shutdown().await;
+    daemon.stop().await;
+}
+
+/// A second import of an enrolment that is already stored, then Cancel: the stored profile, its
+/// files and its preferences stay as they were (DEC-RM-26). The bundle's URL is not signed, so a
+/// changed one is the case that matters: it must not replace the stored address before the
+/// person compared the pin and connected.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_reimport_waits_for_connect_and_a_cancel_keeps_the_stored_profile() {
+    use std::os::unix::fs::PermissionsExt;
+    let daemon = Daemon::start(true).await;
+    let bundle = daemon.enroll("laptop").await;
+    let file = daemon.bundle_file(&bundle, "laptop.cerberus-admin");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let paths = AppPaths::new(dir.path().to_path_buf());
+    Prefs {
+        port: 0,
+        ..Prefs::default()
+    }
+    .save(&paths)
+    .expect("prefs");
+    let shell = Arc::new(FakeShell::default());
+    let state = DesktopState::open(paths.clone(), shell.clone(), StateOptions::default())
+        .await
+        .expect("open");
+    let pick = |path: &std::path::Path| {
+        *shell.pick.lock().unwrap() = Some(path.to_path_buf());
+    };
+    pick(&file);
+    let picked = ops::file_pick_open(&state, MAIN, None, Vec::new())
+        .await
+        .expect("pick")
+        .expect("path");
+    let first = ops::remote_import_bundle(&state, MAIN, picked)
+        .await
+        .expect("import");
+    assert!(
+        ops::remote_activate(&state, MAIN, Some(first.id.clone()), false)
+            .await
+            .expect("connect")
+    );
+    let stored_dir = dir.path().join("remote").join(&first.id);
+    let stored_key = std::fs::read(stored_dir.join(remote::profile::KEY_FILE)).expect("key");
+
+    // The same enrolment again, with another URL in the (unsigned) JSON.
+    let mut json: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&file).expect("bundle")).expect("json");
+    json["url"] = serde_json::Value::String("https://localhost:9".to_owned());
+    let changed = daemon.dir.path().join("changed.cerberus-admin");
+    std::fs::write(&changed, serde_json::to_vec(&json).expect("json")).expect("write");
+    std::fs::set_permissions(&changed, std::fs::Permissions::from_mode(0o600)).expect("chmod");
+    pick(&changed);
+    let picked = ops::file_pick_open(&state, MAIN, None, Vec::new())
+        .await
+        .expect("pick")
+        .expect("path");
+    let staged = ops::remote_import_bundle(&state, MAIN, picked)
+        .await
+        .expect("stage");
+    assert_eq!(staged.id, first.id);
+    assert_eq!(staged.url, "https://localhost:9");
+    // Before the connect nothing of the stored profile changed.
+    let url = |state: &DesktopState| {
+        state
+            .prefs()
+            .remote
+            .profile(&first.id)
+            .map(|p| p.url.clone())
+    };
+    assert_eq!(url(&state).as_deref(), Some(first.url.as_str()));
+    assert_eq!(
+        std::fs::read(stored_dir.join(remote::profile::KEY_FILE)).expect("key"),
+        stored_key
+    );
+    // Cancel.
+    ops::remote_discard_import(&state, MAIN)
+        .await
+        .expect("discard");
+    assert_eq!(url(&state).as_deref(), Some(first.url.as_str()));
+    assert!(stored_dir.join(remote::profile::KEY_FILE).is_file());
+    assert!(!dir.path().join("remote").join("pending").exists());
+    // A connect after a cancel is to the stored profile, not to the dropped stage.
+    ops::remote_activate(&state, MAIN, Some(first.id.clone()), false)
+        .await
+        .expect("same choice");
+    assert_eq!(url(&state).as_deref(), Some(first.url.as_str()));
+
+    // Staged again and connected: now the new address is stored, its key file private.
+    pick(&changed);
+    let picked = ops::file_pick_open(&state, MAIN, None, Vec::new())
+        .await
+        .expect("pick")
+        .expect("path");
+    ops::remote_import_bundle(&state, MAIN, picked)
+        .await
+        .expect("stage");
+    ops::remote_activate(&state, MAIN, Some(first.id.clone()), false)
+        .await
+        .expect("connect");
+    assert_eq!(url(&state).as_deref(), Some("https://localhost:9"));
+    assert_eq!(
+        std::fs::metadata(stored_dir.join(remote::profile::KEY_FILE))
+            .expect("key")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600
     );
     state.shutdown().await;
     daemon.stop().await;
@@ -565,4 +701,215 @@ async fn remote_mode_proxies_the_allowlist_and_follows_the_server() {
 
 fn cerberusd_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
+}
+
+/// The session limits on the desktop's own clock (DEC-RM-26): background reads are not activity,
+/// a keep-alive is; the pump counts this session down (not the server's idle lock), and ends the
+/// session at its idle or absolute limit even though the server, on its own clock, would still
+/// take the token. Both ends are `VaultStateChanged { sealed }`, so the UI drops its data.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_session_limits_run_on_the_desktop_clock() {
+    let daemon = Daemon::start_with(
+        true,
+        "session_idle_seconds = 600\nsession_max_seconds = 900\n",
+    )
+    .await;
+    let bundle = daemon.enroll("laptop").await;
+    let file = daemon.bundle_file(&bundle, "laptop.cerberus-admin");
+    let clock =
+        cerberus_types::ManualClock::new(cerberus_types::Clock::now(&cerberus_types::SystemClock));
+    let (state, _dir, _shell) = common::remote_desktop_with(
+        &file,
+        StateOptions {
+            clock: Some(Arc::new(clock.clone())),
+            ..StateOptions::default()
+        },
+    )
+    .await;
+    let backend = Arc::clone(state.remote().expect("remote mode"));
+    let operator = bundle.operator_id.to_string();
+    let advance = |seconds: i64| clock.advance(jiff::SignedDuration::from_secs(seconds));
+    let idle_left = |state: DesktopState| async move {
+        ops::vault_status(&state, MAIN)
+            .await
+            .expect("status")
+            .idle_seconds_left
+    };
+    let (tx, mut events) = unbounded_channel();
+    let pump = tokio::spawn(remote::pump::drive(Arc::clone(&backend), tx));
+    ops::vault_unlock(
+        &state,
+        MAIN,
+        operator.clone(),
+        Secret::new(PHRASE.to_owned()),
+    )
+    .await
+    .expect("unlock");
+    wait_for(&mut events, |e| is_state(e, VaultState::Unlocked)).await;
+
+    // The rail counts down this session: 600 s idle, not the server's idle lock (off here).
+    let tick = wait_for(&mut events, |e| matches!(e, WireEvent::AutolockTick { .. })).await;
+    assert!(
+        matches!(tick, WireEvent::AutolockTick { seconds_left } if (590..=600).contains(&seconds_left)),
+        "{tick:?}"
+    );
+
+    // Reads that the UI makes after live events do not reset the idle limit; a keep-alive does.
+    advance(300);
+    let _: Vec<ItemSummaryView> = backend
+        .forward("item_list", &json!({ "filter": {} }))
+        .await
+        .expect("read");
+    let _: Vec<cerberus_desktop::dto::AgentView> = backend
+        .forward("agent_list", &json!({}))
+        .await
+        .expect("read");
+    let left = idle_left(state.clone()).await.expect("idle left");
+    assert!(
+        (295..=300).contains(&left),
+        "a read reset the idle limit: {left}"
+    );
+    let () = backend
+        .forward("ui_activity", &json!({}))
+        .await
+        .expect("keep-alive");
+    let left = idle_left(state.clone()).await.expect("idle left");
+    assert!((595..=600).contains(&left), "{left}");
+
+    // The absolute limit (900 s after the open) ends a session that stays active.
+    advance(500);
+    let () = backend
+        .forward("ui_activity", &json!({}))
+        .await
+        .expect("keep-alive");
+    advance(150);
+    wait_for(&mut events, |e| is_state(e, VaultState::Sealed)).await;
+    assert!(!backend.has_session());
+    assert_eq!(
+        ops::vault_status(&state, MAIN).await.expect("status").state,
+        VaultState::Sealed
+    );
+
+    // The idle limit ends a session with no activity, without asking the server.
+    ops::vault_unlock(&state, MAIN, operator, Secret::new(PHRASE.to_owned()))
+        .await
+        .expect("unlock again");
+    wait_for(&mut events, |e| is_state(e, VaultState::Unlocked)).await;
+    advance(601);
+    wait_for(&mut events, |e| is_state(e, VaultState::Sealed)).await;
+    assert!(!backend.has_session());
+    // A call after the end has no token to send: `vault_locked` with no network call.
+    assert_eq!(
+        code(
+            backend
+                .forward::<Vec<ItemSummaryView>, _>("item_list", &json!({ "filter": {} }))
+                .await
+        ),
+        "vault_locked"
+    );
+    pump.abort();
+    state.shutdown().await;
+    daemon.stop().await;
+}
+
+/// The code that `ipc!` generates for each command arm (`commands::Dispatch`, which the Tauri
+/// command only calls): an `@remote` command checks the window label first and then sends its
+/// typed arguments under their IPC names; a local-only command checks the label and refuses with
+/// `remote_unsupported`, without a network call; in local mode both call `ops` (DEC-RM-26).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_generated_command_arms_forward_check_the_label_and_refuse_local_only() {
+    use cerberus_desktop::commands::Dispatch;
+    use cerberus_desktop::dto::{ItemFilterView, WorkspaceInputView};
+
+    let daemon = Daemon::start(true).await;
+    let bundle = daemon.enroll("laptop").await;
+    let file = daemon.bundle_file(&bundle, "laptop.cerberus-admin");
+    let (state, _dir, _shell) = remote_desktop(&file).await;
+    let operator = bundle.operator_id.to_string();
+    let filter = || -> ItemFilterView { serde_json::from_value(json!({})).expect("filter") };
+
+    // Before a session: the label check comes first, then the missing session.
+    assert_eq!(
+        code(Dispatch::item_list(&state, "evil", filter()).await),
+        "window_not_allowed"
+    );
+    assert_eq!(
+        code(Dispatch::item_list(&state, MAIN, filter()).await),
+        "vault_locked"
+    );
+    let operators = Dispatch::vault_list_operators(&state, MAIN)
+        .await
+        .expect("pre-session command");
+    assert!(operators.iter().any(|o| o.id == operator));
+    Dispatch::vault_unlock(&state, MAIN, operator, Secret::new(PHRASE.to_owned()))
+        .await
+        .expect("unlock");
+
+    // `@remote`: the typed arguments reach the server under their names (one, several, optional).
+    let items = Dispatch::item_list(&state, MAIN, filter())
+        .await
+        .expect("item_list");
+    assert!(items.iter().any(|i| i.id == daemon.seed.item.to_string()));
+    let input: WorkspaceInputView = serde_json::from_value(
+        json!({ "slug": "ops", "name": "Ops", "description": "", "aliases": [] }),
+    )
+    .expect("workspace input");
+    let workspace = Dispatch::workspace_put(&state, MAIN, None, input)
+        .await
+        .expect("workspace_put");
+    assert_eq!(workspace.slug, "ops");
+    let grants = Dispatch::grant_list(&state, MAIN, None)
+        .await
+        .expect("grant_list");
+    assert_eq!(grants.len(), 1);
+    let detail = Dispatch::item_get(&state, MAIN, daemon.seed.item.to_string())
+        .await
+        .expect("item_get");
+    assert_eq!(detail.summary.id, daemon.seed.item.to_string());
+    // The approval window may decide, but not read items; the refusal comes before the server.
+    assert_eq!(
+        code(Dispatch::item_get(&state, "approval", daemon.seed.item.to_string()).await),
+        "window_not_allowed"
+    );
+    let unknown = Dispatch::request_deny(&state, "approval", "not-an-id".to_owned()).await;
+    assert_eq!(code(unknown), "validation_failed", "it reached the server");
+
+    // Local only: the label check, then `remote_unsupported`; nothing is sent.
+    assert_eq!(
+        code(Dispatch::item_versions(&state, "evil", daemon.seed.item.to_string()).await),
+        "window_not_allowed"
+    );
+    assert_eq!(
+        code(Dispatch::item_versions(&state, MAIN, daemon.seed.item.to_string()).await),
+        "remote_unsupported"
+    );
+    assert_eq!(
+        code(Dispatch::settings_get(&state, MAIN).await),
+        "remote_unsupported"
+    );
+    assert_eq!(
+        code(Dispatch::lease_revoke_all(&state, MAIN).await),
+        "remote_unsupported"
+    );
+    state.shutdown().await;
+
+    // Local mode: the same arms call `ops`.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let local = DesktopState::open(
+        AppPaths::new(dir.path().to_path_buf()),
+        Arc::new(FakeShell::default()),
+        StateOptions::default(),
+    )
+    .await
+    .expect("open");
+    assert_eq!(
+        code(Dispatch::item_list(&local, MAIN, filter()).await),
+        "no_vault"
+    );
+    assert_eq!(
+        code(Dispatch::item_versions(&local, MAIN, daemon.seed.item.to_string()).await),
+        "no_vault"
+    );
+    local.shutdown().await;
+    daemon.stop().await;
 }

@@ -1613,6 +1613,45 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   `version = "0.3.0"` (DEC-059), else `cargo deny` reports a wildcard; the desktop's entry from step 8 had none, so
   `just check` failed on `1a3da3c` and `94db05d` and passes from this commit on.
 
+- **DEC-RM-26** — RM — Fixes of the review of the desktop remote mode (`1a3da3c`, `94db05d`, `1de1918`). (a) **Activity**
+  (high): a session read counted as activity on both sides, and the UI refetches `agent_list` and `lease_list` after
+  live events, so an unattended remote desktop never reached its idle limit and kept the server vault's idle lock
+  alive. Now one shared rule, `cerberus_admin::remote::ACTIVITY_COMMANDS` / `counts_as_activity`: only `ui_activity`
+  and the actions of a person (lock, panic, writes, `item_reveal`, `item_totp_preview`, approve, deny, lease revoke)
+  reset the session idle limit and count as operator activity; reads never do. The server (`rpc_call`) and the
+  desktop (`RemoteBackend::call`, its local idle estimate) both use it. DEC-RM-19 (e) is replaced. Local mode is not
+  changed (OF-10). Tests: `g07_the_idle_limit_ends_a_session_without_a_lock` (reads every 150 s do not keep a session
+  alive), `the_session_limits_run_on_the_desktop_clock`. (b) **Local expiry** (medium): the session keeps the idle and
+  absolute limits of `SessionOpenedView` and the time it opened; `RemoteBackend::expire_if_due` ends it on the
+  desktop's own clock (before every token use, in `vault_status`, and on a 1 s tick of the pump), also when the server
+  cannot be reached. The link change makes the pump send `VaultStateChanged { sealed }`, so the UI drops its data as
+  at a local lock. (c) **Staged import** (medium): `remote_import_bundle` stages the files in
+  `<app_data_dir>/remote/pending/<id>/` and keeps the profile in memory; nothing of a stored profile changes.
+  `remote_activate(profile)` stores a staged import of that ID first (folder moved into place, the old one moved aside
+  and removed, put back on a failure); the new command `remote_discard_import` drops the stage (Cancel). A stage left by
+  an earlier run is removed at start. Test: `a_reimport_waits_for_connect_and_a_cancel_keeps_the_stored_profile`
+  (the bundle URL is not signed, so a changed URL is the case that matters). (d) **Failed lock keeps the binding**
+  (low): `rpc/vault_lock` and `vault_panic` still unbind the connection before the dispatch (the lock ends the
+  session at once, and the idle watcher would cut the answer, DEC-RM-23 k), but a failure binds it to its session
+  again, and a success answers with `Connection: close`, so no authenticated connection stays open without an owner.
+  Binding only after success, as the review proposed, would bring back the race of DEC-RM-23 during the dispatch.
+  Test: `g07_a_lock_answers_on_a_bound_connection_and_a_failed_one_keeps_the_binding` (keep-alive connection: a
+  failed panic, then a revoke closes it; a lock answers 200 on a bound connection with `Connection: close`). (e)
+  **0600 always** (low): `write_private` sets the mode on the open file before it writes, so an existing wider file is
+  narrowed. Test: `a_private_write_narrows_a_wider_existing_file_to_0600`. (f) **Lock and connect** (low):
+  `remote_activate(profile, lock_local)` locks an unlocked local vault itself, after every check passed and the staged
+  import was stored; the UI no longer locks first. A refused switch therefore leaves the vault unlocked and the screen
+  with its error; a failure is also a toast, which outlives the screen. Tests: `bundle_import_and_the_mode_switch_in_
+  local_mode` (`not_found` with `lock_local` leaves the vault unlocked), the vitest "Lock and connect is one call".
+  (g) **Countdown** (parity): the pump no longer passes the server's `AutolockTick` through; each tick sends this
+  session's own time left, and `vault_status.idle_seconds_left` is the same value in remote mode (OF-11). (h) **Command
+  arms under test**: `ipc!` now puts each command's work in `commands::Dispatch::<name>(state, window, args...)`, and
+  the `#[tauri::command]` only calls it, so tests run the generated code (the `Args` struct and its names, the label
+  check before anything else, the local-only refusal): `the_generated_command_arms_forward_check_the_label_and_
+  refuse_local_only`. Tauri's mock runtime was not used: the commands take `tauri::Window`, which is the Wry runtime.
+  (i) `ALL_COMMANDS` is 77, `bindings.ts` regenerated, `docs/interfaces.md` section 9 has the new command and the
+  `lock_local` argument. Open rows: OF-10 (local reads count as activity) and OF-11 (the countdown is the session's).
+
 ## RD — RustDesk connections (2026-11-21)
 
 - **DEC-RD-1** — New item kind `rustdesk` (Rust `ItemKind::Rustdesk`, wire value `rustdesk`) for a machine reached with

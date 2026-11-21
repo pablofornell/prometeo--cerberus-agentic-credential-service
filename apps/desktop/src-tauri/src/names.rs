@@ -2,7 +2,7 @@
 // permissions) and by the crate (`guard.rs`), so it has no `use` and no docs lint here.
 
 /// Every IPC command, in the order of `docs/interfaces.md` section 9, then the added ones.
-pub const ALL_COMMANDS: [&str; 76] = [
+pub const ALL_COMMANDS: [&str; 77] = [
     "vault_status",
     "vault_list_operators",
     "vault_create",
@@ -81,6 +81,7 @@ pub const ALL_COMMANDS: [&str; 76] = [
     // Added by RM (ADR-0034 point 7): remote profiles, the backend switch and the disconnect.
     "remote_status",
     "remote_import_bundle",
+    "remote_discard_import",
     "remote_activate",
     "remote_disconnect",
     "remote_forget",

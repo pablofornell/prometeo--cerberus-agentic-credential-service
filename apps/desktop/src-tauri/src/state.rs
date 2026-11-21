@@ -134,6 +134,9 @@ pub(crate) struct Inner {
     remote: Option<Arc<RemoteBackend>>,
     /// In remote mode: whether the OS sleep and screen-lock hook works (it ends the session).
     remote_os_hook_ok: AtomicBool,
+    /// A bundle import that waits for the person to compare the pin and connect (DEC-RM-26). Its
+    /// files are staged; nothing of a stored profile changes until `remote_activate`.
+    pending_import: Mutex<Option<crate::prefs::RemoteProfile>>,
     /// Test only: the next `open_service` fails, as if the file could not be opened.
     #[cfg(test)]
     pub(crate) fail_next_open: std::sync::atomic::AtomicBool,
@@ -215,6 +218,10 @@ impl DesktopState {
         options: StateOptions,
     ) -> IpcResult<Self> {
         let mut prefs = Prefs::load(&paths);
+        // An import staged by an earlier run was never confirmed.
+        if let Err(error) = remote::profile::discard(&paths) {
+            tracing::warn!(code = %error.code, "could not remove a staged remote import");
+        }
         let clock = options.clock.unwrap_or_else(|| Arc::new(SystemClock));
         let remote = remote_backend(&paths, &mut prefs, &clock);
         let state = Self {
@@ -240,6 +247,7 @@ impl DesktopState {
                 os_source: Mutex::new(None),
                 remote,
                 remote_os_hook_ok: AtomicBool::new(false),
+                pending_import: Mutex::new(None),
                 #[cfg(test)]
                 fail_next_open: AtomicBool::new(false),
                 #[cfg(test)]
@@ -491,6 +499,16 @@ impl DesktopState {
     /// The time of the vault clock.
     pub(crate) fn now(&self) -> jiff::Timestamp {
         self.inner.clock.now()
+    }
+
+    /// The staged bundle import, if one waits for the person.
+    pub(crate) fn pending_import(&self) -> Option<crate::prefs::RemoteProfile> {
+        locked(&self.inner.pending_import).clone()
+    }
+
+    /// Replaces the staged bundle import.
+    pub(crate) fn set_pending_import(&self, profile: Option<crate::prefs::RemoteProfile>) {
+        *locked(&self.inner.pending_import) = profile;
     }
 
     /// Whether the OS hook of remote mode works.

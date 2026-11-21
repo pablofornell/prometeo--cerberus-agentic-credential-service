@@ -61,18 +61,20 @@ describe("connect to a remote server (local mode)", () => {
     expect(mock.activated).toBe(MOCK_PROFILE.id);
   });
 
-  it("says when a file is not a bundle, and forgets a bundle that was imported and then cancelled", async () => {
+  it("says when a file is not a bundle; a cancel after an import drops the stage and keeps a stored profile", async () => {
     const user = userEvent.setup();
     let path = "/home/demo/notes.txt";
-    const { handlers, calls } = spy(["remote_forget"], {
+    const { handlers, calls } = spy(["remote_discard_import", "remote_forget"], {
       ...unlockHandlers,
       file_pick_open: () => path,
-      remote_forget: (_args, ctl) => {
-        ctl.profiles = [];
+      remote_discard_import: (_args, ctl) => {
+        ctl.staged = null;
         return null;
       },
     });
-    renderApp({ state: "sealed", path: "/unlock", handlers });
+    // The same enrolment is already stored: a re-import must not touch it before Connect (DEC-RM-26).
+    const stored = { ...MOCK_PROFILE, url: "https://vault.example.test:9443" };
+    const { mock } = renderApp({ state: "sealed", path: "/unlock", handlers, profiles: [stored] });
     await user.click(await screen.findByRole("button", { name: "Connect to a remote server" }));
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "Choose bundle file" }));
@@ -80,8 +82,12 @@ describe("connect to a remote server (local mode)", () => {
     path = "/home/demo/build-server.cerberus-admin";
     await user.click(within(dialog).getByRole("button", { name: "Choose bundle file" }));
     await within(dialog).findByText("Compare before you connect");
+    expect(mock.profiles).toEqual([stored]);
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(calls.remote_forget).toEqual([{ profile: MOCK_PROFILE.id }]));
+    await waitFor(() => expect(calls.remote_discard_import).toHaveLength(1));
+    expect(calls.remote_forget).toBeUndefined();
+    expect(mock.profiles).toEqual([stored]);
+    expect(mock.staged).toBeNull();
   });
 });
 
@@ -200,6 +206,23 @@ describe("remote server settings", () => {
     await user.click(within(section).getByRole("button", { name: "Disconnect" }));
     await waitFor(() => expect(calls.remote_disconnect).toHaveLength(1));
     expect(calls.vault_lock).toBeUndefined();
+  });
+
+  it("Lock and connect is one call: a refused switch keeps the local vault open and says why", async () => {
+    const user = userEvent.setup();
+    const { handlers, calls } = spy(["vault_lock", "remote_activate"], {
+      remote_activate: () => {
+        throw mockError("unavailable", "a file of the remote profile is missing; import the bundle again");
+      },
+    });
+    const { mock } = renderApp({ state: "unlocked", path: "/settings", profiles: [MOCK_PROFILE_2], handlers });
+    const section = await screen.findByRole("region", { name: "Remote server" });
+    await user.click(await within(section).findByRole("button", { name: "Lock and connect" }));
+    await waitFor(() => expect(calls.remote_activate).toEqual([{ profile: MOCK_PROFILE_2.id, lockLocal: true }]));
+    // The backend locks only after its checks; the UI never locks first, so the screen and its error stay.
+    expect(calls.vault_lock).toBeUndefined();
+    expect(mock.state).toBe("unlocked");
+    expect((await screen.findAllByText("A file of the remote profile is missing; import the bundle again.")).length).toBeGreaterThan(0);
   });
 
   it("in local mode offers to connect and lists the imported servers", async () => {

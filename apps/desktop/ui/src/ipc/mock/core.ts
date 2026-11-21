@@ -47,6 +47,8 @@ export interface MockController {
   profiles: RemoteProfileView[];
   /** The last `remote_activate`: the profile the next start uses (`null` = local). The mock "restarts" at once. */
   activated: string | null | undefined;
+  /** A staged bundle import (`remote_import_bundle`), stored only by `remote_activate` of its ID. */
+  staged: RemoteProfileView | null;
   /** Changes the vault state and sends `vault-state-changed`, like the real backend. */
   setState: (state: VaultState) => Promise<void>;
   /** Sends one backend event by its name. */
@@ -82,6 +84,7 @@ export function installMock(options: MockOptions = {}): MockController {
     remote: options.remote ? remoteStatusOf(MOCK_PROFILE, options.remote === true ? {} : options.remote) : null,
     profiles: options.profiles ?? (options.remote ? [{ ...MOCK_PROFILE, active: true }] : []),
     activated: undefined,
+    staged: null,
     setState: async (state) => {
       ctl.state = state;
       await emit("vault-state-changed", { state });
@@ -132,15 +135,24 @@ export function installMock(options: MockOptions = {}): MockController {
     remote_import_bundle: (args, c) => {
       const path = String((args as { path?: string } | undefined)?.path ?? "");
       if (!path.endsWith(".cerberus-admin")) throw mockError("invalid_bundle", "the file is not a valid Cerberus admin bundle: not bundle JSON");
-      const profile = { ...MOCK_PROFILE, active: MOCK_PROFILE.id === c.remote?.profile_id };
-      c.profiles = [...c.profiles.filter((p) => p.id !== profile.id), profile];
-      return profile;
+      // Staged only: a stored profile of the same enrolment changes at `remote_activate`.
+      c.staged = { ...MOCK_PROFILE, active: false };
+      return c.staged;
+    },
+    remote_discard_import: (_args, c) => {
+      c.staged = null;
+      return null;
     },
     remote_activate: async (args, c) => {
-      const id = (args as { profile?: string | null } | undefined)?.profile ?? null;
-      const profile = id === null ? null : c.profiles.find((p) => p.id === id);
+      const { profile: id = null, lockLocal = false } = (args as { profile?: string | null; lockLocal?: boolean } | undefined) ?? {};
+      const staged = c.staged && c.staged.id === id ? c.staged : null;
+      const profile = id === null ? null : (staged ?? c.profiles.find((p) => p.id === id));
       if (profile === undefined) throw mockError("not_found", "no remote profile with this ID");
-      if (!c.remote && c.state === "unlocked") throw mockError("conflict", "lock the local vault before you switch to a remote server");
+      if (!c.remote && c.state === "unlocked" && !lockLocal) throw mockError("conflict", "lock the local vault before you switch to a remote server");
+      if (staged) {
+        c.profiles = [...c.profiles.filter((p) => p.id !== staged.id), staged];
+        c.staged = null;
+      }
       // The real app restarts here. The mock goes straight to the new backend, sealed.
       c.activated = id;
       c.remote = profile ? remoteStatusOf(profile) : null;

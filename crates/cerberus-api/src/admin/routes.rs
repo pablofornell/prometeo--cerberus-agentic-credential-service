@@ -17,7 +17,7 @@ use bytes::Bytes;
 use cerberus_admin::dto::{SessionView, VaultState};
 use cerberus_admin::error::IpcError;
 use cerberus_admin::events::from_core;
-use cerberus_admin::remote::{ADMIN_PROTOCOL, Gate, REMOTE_COMMANDS, gate};
+use cerberus_admin::remote::{ADMIN_PROTOCOL, Gate, REMOTE_COMMANDS, counts_as_activity, gate};
 use cerberus_admin::rpc::{self, VaultUnlockArgs};
 use cerberus_admin::wire::{
     EVENTS_PATH, HELLO_PATH, HelloView, RPC_PREFIX, SESSION_PATH, SessionOpenedView,
@@ -358,6 +358,7 @@ async fn rpc_call(
     let admin = admin_of(&state, id)?;
     let device = device_of(&req, id)?;
     let core = state.core().clone();
+    let mut ending = None;
     let (ctx, guard) = match gate(&command) {
         None => {
             return Err(AdminError::new(
@@ -377,20 +378,26 @@ async fn rpc_call(
         Some(Gate::PreSession) => (None, None),
         Some(Gate::Session) => {
             let session = session_of(&core, &admin, req.headers(), &device, id).await?;
-            // Calls of the person count as activity; the pending count that the desktop reads in
-            // the background does not, so an unattended desktop still reaches its idle limit.
-            if command != "request_list_pending" {
+            // Only the keep-alive and the actions of a person count as activity. Reads do not: the
+            // desktop makes them in the background too (after live events), and they must not keep
+            // an unattended desktop's session or the vault's idle lock alive (DEC-RM-26).
+            if counts_as_activity(&command) {
                 admin.touch(session.id, core.clock().now());
                 core.note_operator_activity();
             }
             // A lock ends every session, this one too: a connection bound to it would be closed
             // by the idle watcher while the answer is still on its way (DEC-RM-23). These calls
-            // mark the connection authenticated but leave it unbound.
+            // leave the connection unbound while they run (also one that an earlier call on this
+            // keep-alive connection bound); a failure binds it again, a success closes it after
+            // the answer (DEC-RM-26).
             let ends_session = matches!(command.as_str(), "vault_lock" | "vault_panic");
             let bound = (!ends_session).then_some(session.id);
             let guard = bind_connection(&state, &req, bound);
             if ends_session {
-                // An earlier call on this keep-alive connection may have bound it.
+                ending = req
+                    .extensions()
+                    .get::<ConnActivity>()
+                    .map(|activity| (Arc::clone(&activity.0), session.id));
                 unbind_connection(&state, &req, session.id);
             }
             (Some(session.ctx), guard)
@@ -403,11 +410,27 @@ async fn rpc_call(
         limits.body_default_bytes
     };
     let body = read_body(&state, req, limit, id).await?;
-    let answer = rpc::dispatch(&core, ctx.as_ref(), &command, &body)
-        .await
-        .map_err(|error| AdminError::new(id, error))?;
+    let answered = rpc::dispatch(&core, ctx.as_ref(), &command, &body).await;
     drop(body);
-    let response = json_answer(answer);
+    let answer = match answered {
+        Ok(answer) => answer,
+        Err(error) => {
+            // A lock or panic that failed ended nothing: the connection belongs to its session
+            // again, so a revoke or the session's end still closes it.
+            if let Some((activity, session)) = &ending {
+                state.owners().bind_admin(activity, *session);
+            }
+            return Err(AdminError::new(id, error));
+        }
+    };
+    let mut response = json_answer(answer);
+    if ending.is_some() {
+        // The session of this connection is gone: close it once the answer is sent, so it does
+        // not stay open without an owner until its idle deadline.
+        response
+            .headers_mut()
+            .insert(header::CONNECTION, HeaderValue::from_static("close"));
+    }
     Ok(match guard {
         Some(guard) => hold_until_sent(response, guard),
         None => response,

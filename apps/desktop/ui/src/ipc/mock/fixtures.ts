@@ -247,7 +247,7 @@ export const MOCK_REMOTE_COMMANDS = [
 ] as const;
 
 /** Commands that run on the desktop in both modes. */
-export const MOCK_DESKTOP_COMMANDS = ["remote_status", "remote_import_bundle", "remote_activate", "remote_disconnect", "remote_forget", "file_pick_open"] as const;
+export const MOCK_DESKTOP_COMMANDS = ["remote_status", "remote_import_bundle", "remote_discard_import", "remote_activate", "remote_disconnect", "remote_forget", "file_pick_open"] as const;
 
 /** A fake enrolment bundle: the pin and fingerprint are sample text, not of a real CA. */
 export const MOCK_PROFILE: RemoteProfileView = {

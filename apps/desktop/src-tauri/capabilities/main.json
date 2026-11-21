@@ -85,6 +85,7 @@
     "allow-rustdesk-connect",
     "allow-remote-status",
     "allow-remote-import-bundle",
+    "allow-remote-discard-import",
     "allow-remote-activate",
     "allow-remote-disconnect",
     "allow-remote-forget"

@@ -5,7 +5,7 @@ import { useScreenT } from "../i18n";
 import { ipc, isIpcFailure, type UiError } from "../ipc/client";
 import { openFile } from "../ipc/dialogs";
 import { qk } from "../ipc/keys";
-import { Button, Dialog, errorText, Notice } from "../ui";
+import { Button, Dialog, errorText, Notice, useToast } from "../ui";
 import { messages } from "./messages";
 import { ProfileFacts } from "./ProfileFacts";
 import "./remote.css";
@@ -28,8 +28,8 @@ const failureOf = (failure: unknown, command: string): UiError =>
 export function ConnectRemoteDialog({ open, onOpenChange, lockFirst = false }: ConnectRemoteDialogProps) {
   const t = useScreenT(messages);
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [profile, setProfile] = useState<RemoteProfileView | null>(null);
-  const [known, setKnown] = useState(false);
   const [busy, setBusy] = useState<"pick" | "connect" | null>(null);
   const [error, setError] = useState<UiError | null>(null);
   const chooseRef = useRef<HTMLButtonElement>(null);
@@ -37,14 +37,13 @@ export function ConnectRemoteDialog({ open, onOpenChange, lockFirst = false }: C
 
   const reset = () => {
     setProfile(null);
-    setKnown(false);
     setBusy(null);
     setError(null);
   };
 
   const close = () => {
-    // A bundle imported in this dialog and not used is not kept.
-    if (profile && !known) void ipc.remoteForget(profile.id).catch(() => undefined);
+    // The import is only staged: a cancel drops it, and a stored profile of the same enrolment stays as it was.
+    if (profile) void ipc.remoteDiscardImport().catch(() => undefined);
     reset();
     onOpenChange(false);
     void queryClient.invalidateQueries({ queryKey: qk.vault.remote() });
@@ -54,12 +53,10 @@ export function ConnectRemoteDialog({ open, onOpenChange, lockFirst = false }: C
     setBusy("pick");
     setError(null);
     try {
-      const before = await ipc.remoteStatus().catch(() => null);
       const path = await openFile({ title: t("connect.choose.title"), filters: [{ name: "Cerberus admin bundle", extensions: ["cerberus-admin", "json"] }] });
       if (path !== null) {
-        if (profile && !known) await ipc.remoteForget(profile.id).catch(() => undefined);
+        // A new import replaces the staged one.
         const view = await ipc.remoteImportBundle(path);
-        setKnown(before?.profiles.some((p) => p.id === view.id) ?? false);
         setProfile(view);
         queueMicrotask(() => connectRef.current?.focus());
       }
@@ -75,16 +72,20 @@ export function ConnectRemoteDialog({ open, onOpenChange, lockFirst = false }: C
     setBusy("connect");
     setError(null);
     try {
-      if (lockFirst) await ipc.vaultLock();
-      // The app restarts into remote mode now; the status follows.
-      await ipc.remoteActivate(profile.id);
+      // One call: the backend checks everything, then locks the local vault (lockFirst) and stores the import, so a
+      // refused switch changes nothing and this dialog is still there to say why. The app restarts after it.
+      await ipc.remoteActivate(profile.id, lockFirst);
       reset();
       onOpenChange(false);
       await queryClient.invalidateQueries({ queryKey: qk.vault.status() });
       await queryClient.invalidateQueries({ queryKey: qk.vault.remote() });
     } catch (failure) {
-      setError(failureOf(failure, "remote_activate"));
+      const ui = failureOf(failure, "remote_activate");
+      setError(ui);
       setBusy(null);
+      // If the lock went through before a later step failed, this dialog is gone with the unlocked screens: the toast
+      // outlives it.
+      toast.push({ tone: "error", title: t("connect.failedActivate"), detail: errorText(ui) });
     }
   };
 

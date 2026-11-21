@@ -83,11 +83,13 @@ export const commands = {
 	rustdeskConnect: (item: string, copyPassword: boolean, options?: InvokeOptions) => typedError<RustdeskConnectView, IpcError_Serialize>(__TAURI_INVOKE("rustdesk_connect", { item, copyPassword }, options)),
 	remoteStatus: (options?: InvokeOptions) => typedError<RemoteOverview_Serialize, IpcError_Serialize>(__TAURI_INVOKE("remote_status", undefined, options)),
 	remoteImportBundle: (path: string, options?: InvokeOptions) => typedError<RemoteProfileView, IpcError_Serialize>(__TAURI_INVOKE("remote_import_bundle", { path }, options)),
+	remoteDiscardImport: (options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remote_discard_import", undefined, options)),
 	/**
 	 *  `remote_activate`: chooses the backend (`None`: local mode) and restarts the app to use it.
-	 *  The quit work (lock, session close) runs before the restart. See `ops::remote_activate`.
+	 *  `lock_local` locks an unlocked local vault once every check passed ("Lock and connect"). The
+	 *  quit work (lock, session close) runs before the restart. See `ops::remote_activate`.
 	 */
-	remoteActivate: (profile: string | null, options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remote_activate", { profile }, options)),
+	remoteActivate: (profile: string | null, lockLocal: boolean, options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remote_activate", { profile, lockLocal }, options)),
 	remoteDisconnect: (options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remote_disconnect", undefined, options)),
 	remoteForget: (profile: string, options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remote_forget", { profile }, options)),
 };

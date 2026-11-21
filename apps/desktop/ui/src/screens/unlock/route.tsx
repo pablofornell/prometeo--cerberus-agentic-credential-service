@@ -139,7 +139,7 @@ function OtherBackend({ remote }: { remote: RemoteStatusView | null }) {
     setSwitching(true);
     try {
       // The app restarts in local mode.
-      await ipc.remoteActivate(null);
+      await ipc.remoteActivate(null, false);
       await queryClient.invalidateQueries({ queryKey: qk.vault.status() });
     } catch (failure) {
       toast.push({ tone: "error", title: r("local.use.failed"), detail: isIpcFailure(failure) ? errorText(failure.error) : undefined });

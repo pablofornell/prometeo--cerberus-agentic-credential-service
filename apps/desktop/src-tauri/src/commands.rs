@@ -37,31 +37,39 @@ use crate::state::DesktopState;
 ///   `remote_unsupported`; its arguments are never serialized.
 macro_rules! ipc {
     (@remote $name:ident ( $($arg:ident : $ty:ty),* $(,)? ) -> $ret:ty) => {
-        #[doc = concat!("IPC command `", stringify!($name), "` (remote allowlist). See `ops::", stringify!($name), "`.")]
-        #[tauri::command]
-        #[specta::specta]
-        pub async fn $name(
-            window: tauri::Window,
-            state: tauri::State<'_, DesktopState>,
-            $($arg: $ty),*
-        ) -> IpcResult<$ret> {
-            if let Some(remote) = state.remote() {
-                check(window.label(), stringify!($name))?;
-                /// The arguments as the server reads them: the IPC argument names.
-                #[derive(serde::Serialize)]
-                struct Args<'a> {
-                    $($arg: &'a $ty,)*
-                    #[serde(skip)]
-                    _borrow: std::marker::PhantomData<&'a ()>,
+        impl Dispatch {
+            #[doc = concat!("The work of `", stringify!($name), "` (remote allowlist): in remote mode the label check, then the arguments to the server; locally `ops::", stringify!($name), "`.")]
+            pub async fn $name(state: &DesktopState, window: &str $(, $arg: $ty)*) -> IpcResult<$ret> {
+                if let Some(remote) = state.remote() {
+                    check(window, stringify!($name))?;
+                    /// The arguments as the server reads them: the IPC argument names.
+                    #[derive(serde::Serialize)]
+                    struct Args<'a> {
+                        $($arg: &'a $ty,)*
+                        #[serde(skip)]
+                        _borrow: std::marker::PhantomData<&'a ()>,
+                    }
+                    let args = Args { $($arg: &$arg,)* _borrow: std::marker::PhantomData };
+                    return remote.forward::<$ret, _>(stringify!($name), &args).await;
                 }
-                let args = Args { $($arg: &$arg,)* _borrow: std::marker::PhantomData };
-                return remote.forward::<$ret, _>(stringify!($name), &args).await;
+                ops::$name(state, window $(, $arg)*).await
             }
-            ops::$name(&state, window.label() $(, $arg)*).await
         }
+
+        ipc!(@command $name ( $($arg : $ty),* ) -> $ret, "(remote allowlist)");
     };
     (@both $name:ident ( $($arg:ident : $ty:ty),* $(,)? ) -> $ret:ty) => {
-        #[doc = concat!("IPC command `", stringify!($name), "`. See `ops::", stringify!($name), "`.")]
+        impl Dispatch {
+            #[doc = concat!("The work of `", stringify!($name), "`: `ops::", stringify!($name), "`, which handles both modes.")]
+            pub async fn $name(state: &DesktopState, window: &str $(, $arg: $ty)*) -> IpcResult<$ret> {
+                ops::$name(state, window $(, $arg)*).await
+            }
+        }
+
+        ipc!(@command $name ( $($arg : $ty),* ) -> $ret, "(both modes)");
+    };
+    (@command $name:ident ( $($arg:ident : $ty:ty),* ) -> $ret:ty, $kind:literal) => {
+        #[doc = concat!("IPC command `", stringify!($name), "` ", $kind, ". See `Dispatch::", stringify!($name), "`.")]
         #[tauri::command]
         #[specta::specta]
         pub async fn $name(
@@ -69,26 +77,31 @@ macro_rules! ipc {
             state: tauri::State<'_, DesktopState>,
             $($arg: $ty),*
         ) -> IpcResult<$ret> {
-            ops::$name(&state, window.label() $(, $arg)*).await
+            Dispatch::$name(&state, window.label() $(, $arg)*).await
         }
     };
     ($name:ident ( $($arg:ident : $ty:ty),* $(,)? ) -> $ret:ty) => {
-        #[doc = concat!("IPC command `", stringify!($name), "` (local only). See `ops::", stringify!($name), "`.")]
-        #[tauri::command]
-        #[specta::specta]
-        pub async fn $name(
-            window: tauri::Window,
-            state: tauri::State<'_, DesktopState>,
-            $($arg: $ty),*
-        ) -> IpcResult<$ret> {
-            if state.remote().is_some() {
-                check(window.label(), stringify!($name))?;
-                return Err(remote::unsupported());
+        impl Dispatch {
+            #[doc = concat!("The work of `", stringify!($name), "` (local only): in remote mode the label check, then `remote_unsupported`; locally `ops::", stringify!($name), "`.")]
+            pub async fn $name(state: &DesktopState, window: &str $(, $arg: $ty)*) -> IpcResult<$ret> {
+                if state.remote().is_some() {
+                    check(window, stringify!($name))?;
+                    return Err(remote::unsupported());
+                }
+                ops::$name(state, window $(, $arg)*).await
             }
-            ops::$name(&state, window.label() $(, $arg)*).await
         }
+
+        ipc!(@command $name ( $($arg : $ty),* ) -> $ret, "(local only)");
     };
 }
+
+/// The work behind each `ipc!` command, without Tauri: the state and the label of the calling
+/// window, then the arguments. The `#[tauri::command]` of the same name only passes them on, so
+/// tests run exactly the code of each command arm (the remote forward, the label check order, the
+/// local-only refusal).
+#[derive(Debug)]
+pub struct Dispatch;
 
 ipc!(@both vault_status() -> VaultStatusView);
 ipc!(@remote vault_list_operators() -> Vec<OperatorPublic>);
@@ -166,11 +179,13 @@ ipc!(rustdesk_status() -> RustdeskStatusView);
 ipc!(rustdesk_connect(item: String, copy_password: bool) -> RustdeskConnectView);
 ipc!(@both remote_status() -> RemoteOverview);
 ipc!(@both remote_import_bundle(path: String) -> RemoteProfileView);
+ipc!(@both remote_discard_import() -> ());
 ipc!(@both remote_disconnect() -> ());
 ipc!(@both remote_forget(profile: String) -> ());
 
 /// `remote_activate`: chooses the backend (`None`: local mode) and restarts the app to use it.
-/// The quit work (lock, session close) runs before the restart. See `ops::remote_activate`.
+/// `lock_local` locks an unlocked local vault once every check passed ("Lock and connect"). The
+/// quit work (lock, session close) runs before the restart. See `ops::remote_activate`.
 #[tauri::command]
 #[specta::specta]
 pub async fn remote_activate(
@@ -178,8 +193,9 @@ pub async fn remote_activate(
     window: tauri::Window,
     state: tauri::State<'_, DesktopState>,
     profile: Option<String>,
+    lock_local: bool,
 ) -> IpcResult<()> {
-    if ops::remote_activate(&state, window.label(), profile).await? {
+    if ops::remote_activate(&state, window.label(), profile, lock_local).await? {
         if tokio::time::timeout(crate::QUIT_WAIT, state.shutdown())
             .await
             .is_err()

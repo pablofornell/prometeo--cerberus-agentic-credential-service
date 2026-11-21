@@ -153,7 +153,9 @@ impl Prefs {
     }
 }
 
-/// Writes `bytes` to `path` (made or emptied) with mode `0600`, and syncs it.
+/// Writes `bytes` to `path` (made or emptied) with mode `0600`, and syncs it. The mode applies
+/// to a file that existed with a wider one too (the create mode only covers a new file), before
+/// any byte is written (DEC-RM-26).
 pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
@@ -163,6 +165,11 @@ pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         options.mode(0o600);
     }
     let mut file = options.open(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    }
     file.write_all(bytes)?;
     file.sync_all()
 }
@@ -192,6 +199,20 @@ mod tests {
         assert_eq!(Prefs::load(&paths), prefs);
         std::fs::write(paths.prefs_file(), b"{ not json").expect("write");
         assert_eq!(Prefs::load(&paths), Prefs::default());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_private_write_narrows_a_wider_existing_file_to_0600() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("key.pem");
+        std::fs::write(&path, b"old").expect("write");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).expect("chmod");
+        write_private(&path, b"new").expect("private write");
+        let mode = std::fs::metadata(&path).expect("meta").permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        assert_eq!(std::fs::read(&path).expect("read"), b"new");
     }
 
     #[test]

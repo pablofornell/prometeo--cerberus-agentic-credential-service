@@ -1247,7 +1247,9 @@ Routes (paths in `cerberus_admin::wire`): `GET /admin/v1/hello` (`HelloView`), `
 (SSE, `event: <WireEvent::name()>`, `data: <WireEvent JSON>`, `: keep-alive` every 15 s). Errors are
 `AdminErrorBody { request_id, error: IpcError }`; `origin_refused` and `route_not_found` keep the ADR-0021 shape. The
 connection of a session request is bound to the session (`idle::ConnOwner::Admin`) and closes within about 1 s after
-the session ends. A sweeper task (started by `start`) ends sessions at every vault state change and every 15 s. Core
+the session ends; `vault_lock` and `vault_panic` run unbound, bind again when they fail, and answer with
+`Connection: close` when they succeed. Only `cerberus_admin::remote::ACTIVITY_COMMANDS` (`ui_activity` and the actions
+of a person, never a read) reset the session idle limit and count as operator activity (DEC-RM-26). A sweeper task (started by `start`) ends sessions at every vault state change and every 15 s. Core
 gained `VaultService::lock_epoch()` for the session binding.
 
 ---
@@ -1512,8 +1514,9 @@ before any network call (DEC-RM-11). The list is `cerberus_admin::remote::REMOTE
 | `csv_export` | `{ dest, workspace_id? } → u64` (T23; warns: plain secrets) | main | owner | local |
 | `ui_activity` | `() → ()` (resets the idle timer; rate-limited to 1/s) | main, approval | — | session |
 | `remote_status` | `() → RemoteOverview { mode: "local" \| "remote", active?, profiles: Vec<RemoteProfileView>, remote_commands }` | main | — | desktop |
-| `remote_import_bundle` | `{ path } → RemoteProfileView { id, label, url, ca_pin, ca_sha256, operator_id, not_after, active }` (a file from `file_pick_open`; stores the profile, no secret comes back) | main | — | desktop |
-| `remote_activate` | `{ profile? } → ()` (`null` = local mode; saves the choice and restarts the app; refused while a local vault is unlocked) | main | — | desktop |
+| `remote_import_bundle` | `{ path } → RemoteProfileView { id, label, url, ca_pin, ca_sha256, operator_id, not_after, active }` (a file from `file_pick_open`; stages the import, which `remote_activate` stores; no secret comes back) | main | — | desktop |
+| `remote_discard_import` | `() → ()` (drops a staged import; a stored profile of the same enrolment stays as it was) | main | — | desktop |
+| `remote_activate` | `{ profile?, lock_local } → ()` (`null` = local mode; stores a staged import of `profile` first; saves the choice and restarts the app; refused while a local vault is unlocked unless `lock_local`, which locks it after every check passed) | main | — | desktop |
 | `remote_disconnect` | `() → ()` (ends this desktop's admin session; the server vault stays as it is) | main | — | desktop |
 | `remote_forget` | `{ profile } → ()` (removes a stored profile and its files; refused for the one in use) | main | — | desktop |
 

@@ -73,7 +73,7 @@ fn bindings_file_is_up_to_date() {
 #[test]
 fn every_documented_command_exists_and_nothing_is_undocumented_but_the_added_ones() {
     let documented = documented_commands();
-    assert_eq!(documented.len(), 71, "interfaces.md lists 71 commands");
+    assert_eq!(documented.len(), 72, "interfaces.md lists 72 commands");
     let ours: BTreeSet<String> = ALL_COMMANDS.iter().map(|s| (*s).to_owned()).collect();
     let missing: Vec<_> = documented.difference(&ours).collect();
     assert!(missing.is_empty(), "missing commands: {missing:?}");
@@ -219,7 +219,7 @@ fn remote_arm_matches_the_allowlist() {
     assert!(plain.is_subset(&all), "{plain:?}");
     assert_eq!(
         plain.len() + forwarded.len() + both.len(),
-        71,
+        72,
         "every `ipc!` command is counted"
     );
 }

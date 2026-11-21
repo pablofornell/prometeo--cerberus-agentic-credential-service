@@ -524,15 +524,133 @@ async fn g06_a_token_over_another_enrolled_certificate_is_refused() {
 
 // ------------------------------------------------------------------------------------------ 7
 
+/// One request on a kept-alive connection (`sender`). `Err` when the connection is closed.
+async fn send_on(
+    sender: &mut hyper::client::conn::http1::SendRequest<common::http_body_util_lite::Full>,
+    client: &Client,
+    path: &str,
+    token: &str,
+    body: &str,
+) -> Result<(u16, hyper::HeaderMap, Vec<u8>), hyper::Error> {
+    sender.ready().await?;
+    let request = hyper::Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("host", format!("localhost:{}", client.addr.port()))
+        .header("authorization", format!("Bearer {token}"))
+        .header("content-type", "application/json")
+        .body(common::http_body_util_lite::Full::new(body))
+        .expect("request");
+    let response = sender.send_request(request).await?;
+    let (parts, incoming) = response.into_parts();
+    let bytes = common::http_body_util_lite::collect(incoming).await;
+    Ok((parts.status.as_u16(), parts.headers, bytes))
+}
+
+/// DEC-RM-23/26: a lock ends the session that a keep-alive connection is bound to. Its answer still
+/// arrives on that connection, which then closes. A lock or panic that fails ends nothing: the
+/// connection stays bound to its session, so a revoke still closes it within about a second.
+#[tokio::test]
+async fn g07_a_lock_answers_on_a_bound_connection_and_a_failed_one_keeps_the_binding() {
+    let (fx, id, admin) = admin_fixture(false).await;
+    let list = json!({ "filter": {} }).to_string();
+
+    // A failed panic (bad arguments) on a connection that an earlier call bound.
+    let token = session(&admin, &fx).await;
+    let mut sender = admin.connect().await.expect("connect");
+    let (status, _, _) = send_on(
+        &mut sender,
+        &admin,
+        "/admin/v1/rpc/item_list",
+        &token,
+        &list,
+    )
+    .await
+    .expect("bind");
+    assert_eq!(status, 200);
+    let (status, headers, _) = send_on(
+        &mut sender,
+        &admin,
+        "/admin/v1/rpc/vault_panic",
+        &token,
+        r#"{"unknown":1}"#,
+    )
+    .await
+    .expect("failed panic");
+    assert_eq!(status, 400);
+    assert!(headers.get("connection").is_none());
+    assert_eq!(fx.core.state(), VaultStateKind::Unlocked);
+    // The revoke of the enrolment closes the connection, as for any bound connection.
+    assert!(
+        fx.admin
+            .as_ref()
+            .expect("admin")
+            .revoke(&fx.core, id)
+            .await
+            .expect("revoke")
+    );
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    let after = send_on(
+        &mut sender,
+        &admin,
+        "/admin/v1/rpc/item_list",
+        &token,
+        &list,
+    )
+    .await;
+    assert!(
+        after.is_err(),
+        "the bound connection stayed open: {after:?}"
+    );
+
+    // A lock on a bound connection: the answer arrives there, then the connection closes.
+    let (_, admin) = enroll(&fx, fx.owner_label_id, "second");
+    let token = session(&admin, &fx).await;
+    let mut sender = admin.connect().await.expect("connect");
+    let (status, _, _) = send_on(
+        &mut sender,
+        &admin,
+        "/admin/v1/rpc/item_list",
+        &token,
+        &list,
+    )
+    .await
+    .expect("bind");
+    assert_eq!(status, 200);
+    let (status, headers, body) = send_on(
+        &mut sender,
+        &admin,
+        "/admin/v1/rpc/vault_lock",
+        &token,
+        "{}",
+    )
+    .await
+    .expect("the lock answer arrives");
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(
+        headers.get("connection").and_then(|v| v.to_str().ok()),
+        Some("close")
+    );
+    assert_eq!(fx.core.state(), VaultStateKind::Sealed);
+    fx.stop().await;
+}
+
 #[tokio::test]
 async fn g07_the_idle_limit_ends_a_session_without_a_lock() {
     let (fx, _, admin) = admin_fixture(true).await;
     let list = json!({ "filter": {} });
-    // Idle: 900 s without a call.
+    // Idle: 900 s without activity of the person.
     let token = session(&admin, &fx).await;
     advance(&fx, 899);
     assert_eq!(
-        rpc(&admin, "item_list", Some(&token), &list).await.status,
+        rpc(
+            &admin,
+            "item_reveal",
+            Some(&token),
+            &json!({ "item": fx.item.to_string() })
+        )
+        .await
+        .status,
         200
     );
     advance(&fx, 899);
@@ -553,16 +671,25 @@ async fn g07_the_idle_limit_ends_a_session_without_a_lock() {
         VaultStateKind::Unlocked,
         "expiry never locks"
     );
-    // The background pending count does not keep a session alive.
+    // Reads do not keep a session alive: the desktop makes them in the background too, after live
+    // events (DEC-RM-26), and an unattended desktop must still reach its idle limit.
     let token = session(&admin, &fx).await;
-    advance(&fx, 600);
-    assert_eq!(
-        rpc(&admin, "request_list_pending", Some(&token), &json!({}))
-            .await
-            .status,
-        200
-    );
-    advance(&fx, 400);
+    for read in [
+        ("request_list_pending", json!({})),
+        ("item_list", list.clone()),
+        ("agent_list", json!({})),
+        ("lease_list", json!({})),
+        ("audit_query", json!({ "query": { "limit": 5 } })),
+    ] {
+        advance(&fx, 150);
+        assert_eq!(
+            rpc(&admin, read.0, Some(&token), &read.1).await.status,
+            200,
+            "{}",
+            read.0
+        );
+    }
+    advance(&fx, 151);
     assert_admin_error(
         &rpc(&admin, "item_list", Some(&token), &list).await,
         401,

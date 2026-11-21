@@ -129,6 +129,7 @@ pub fn ipc_builder() -> Builder<Wry> {
             commands::rustdesk_connect,
             commands::remote_status,
             commands::remote_import_bundle,
+            commands::remote_discard_import,
             commands::remote_activate,
             commands::remote_disconnect,
             commands::remote_forget

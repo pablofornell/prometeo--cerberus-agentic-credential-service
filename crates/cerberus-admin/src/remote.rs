@@ -49,6 +49,34 @@ pub const REMOTE_COMMANDS: [(&str, Gate); REMOTE_COMMAND_COUNT] = [
     ("audit_query", Gate::Session),
 ];
 
+/// The session commands that count as activity of the person: they reset the idle limit of the admin session and
+/// the operator activity of the vault (ADR-0034 point 6.5). The keep-alive `ui_activity`, and the actions that change
+/// something or show a secret, which only a person starts. The reads (lists, `item_get`, `audit_query`,
+/// `request_list_pending`) do not count: the desktop also makes them in the background, after live events, so they
+/// must not keep an unattended desktop's session or the server's idle lock alive (DEC-RM-26). This is the local
+/// rule too, where only `ui_activity` and actions of the person count.
+pub const ACTIVITY_COMMANDS: [&str; 13] = [
+    "ui_activity",
+    "vault_lock",
+    "vault_panic",
+    "workspace_put",
+    "item_create",
+    "item_update",
+    "item_delete",
+    "item_reveal",
+    "item_totp_preview",
+    "grant_put",
+    "grant_delete",
+    "request_approve",
+    "request_deny",
+];
+
+/// True when a session call of `command` counts as activity of the person. See [`ACTIVITY_COMMANDS`].
+#[must_use]
+pub fn counts_as_activity(command: &str) -> bool {
+    ACTIVITY_COMMANDS.contains(&command)
+}
+
 /// The gate of a command. `None`: the command is not on the remote allowlist.
 #[must_use]
 pub fn gate(command: &str) -> Option<Gate> {
@@ -75,6 +103,29 @@ mod tests {
         assert_eq!(gate("vault_unlock"), Some(Gate::OpensSession));
         assert_eq!(gate("vault_status"), Some(Gate::PreSession));
         assert_eq!(gate("item_reveal"), Some(Gate::Session));
+    }
+
+    #[test]
+    fn activity_is_the_keep_alive_and_the_actions_of_a_person_never_a_read() {
+        for command in ACTIVITY_COMMANDS {
+            assert_eq!(gate(command), Some(Gate::Session), "{command}");
+        }
+        for read in [
+            "workspace_list",
+            "item_list",
+            "item_get",
+            "agent_list",
+            "grant_list",
+            "request_list_pending",
+            "lease_list",
+            "audit_query",
+            "vault_status",
+            "vault_list_operators",
+        ] {
+            assert!(!counts_as_activity(read), "{read}");
+        }
+        assert!(counts_as_activity("ui_activity"));
+        assert!(counts_as_activity("request_approve"));
     }
 
     #[test]

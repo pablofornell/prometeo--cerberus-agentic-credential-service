@@ -27,6 +27,21 @@ use crate::state::DesktopState;
 const FIRST_RETRY: Duration = Duration::from_secs(1);
 /// Longest wait before the stream is opened again.
 const MAX_RETRY: Duration = Duration::from_secs(30);
+/// How often the pump applies the session limits on the desktop's clock and sends the countdown.
+pub const TICK: Duration = Duration::from_secs(1);
+
+/// One tick while a session is held: the session ends when it passed its idle or absolute limit
+/// on this desktop's clock, also with the server out of reach; else the rail gets this session's
+/// countdown (DEC-RM-26). False when the receiver is gone.
+fn tick(backend: &RemoteBackend, out: &UnboundedSender<WireEvent>) -> bool {
+    if backend.expire_if_due() {
+        return !out.is_closed();
+    }
+    match backend.session_seconds_left() {
+        Some(seconds_left) => out.send(WireEvent::AutolockTick { seconds_left }).is_ok(),
+        None => !out.is_closed(),
+    }
+}
 
 /// Starts the pump of `backend` on the async runtime.
 pub fn spawn(app: AppHandle<Wry>, state: DesktopState, backend: Arc<RemoteBackend>) {
@@ -94,8 +109,16 @@ async fn recount(backend: &RemoteBackend, out: &UnboundedSender<WireEvent>) -> b
     }
 }
 
-/// Waits `wait`, or less when the session changes. False when the backend is gone.
-async fn pause(link: &mut watch::Receiver<Link>, session: u64, wait: Duration) -> bool {
+/// Waits `wait`, or less when the session changes, and keeps ticking. False when the backend or
+/// the receiver is gone.
+async fn pause(
+    backend: &RemoteBackend,
+    out: &UnboundedSender<WireEvent>,
+    ticker: &mut tokio::time::Interval,
+    link: &mut watch::Receiver<Link>,
+    session: u64,
+    wait: Duration,
+) -> bool {
     let deadline = tokio::time::Instant::now() + wait;
     if link.borrow_and_update().session != Some(session) {
         return true;
@@ -103,6 +126,11 @@ async fn pause(link: &mut watch::Receiver<Link>, session: u64, wait: Duration) -
     loop {
         tokio::select! {
             () = tokio::time::sleep_until(deadline) => return true,
+            _ = ticker.tick() => {
+                if !tick(backend, out) {
+                    return false;
+                }
+            }
             changed = link.changed() => {
                 if changed.is_err() {
                     return false;
@@ -156,6 +184,8 @@ async fn on_wire(
         }
         // The server never sends it; the count is ours.
         WireEvent::PendingCountChanged { .. } => true,
+        // The server's idle lock is not this desktop's: the rail counts down this session (`tick`).
+        WireEvent::AutolockTick { .. } => true,
         event => out.send(event).is_ok(),
     }
 }
@@ -166,6 +196,8 @@ pub async fn drive(backend: Arc<RemoteBackend>, out: UnboundedSender<WireEvent>)
     let mut link = backend.subscribe();
     let mut shown: Option<Option<u64>> = None;
     let mut retry = FIRST_RETRY;
+    let mut ticker = tokio::time::interval(TICK);
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         let session = link.borrow_and_update().session;
         if shown != Some(session) {
@@ -216,6 +248,11 @@ pub async fn drive(backend: Arc<RemoteBackend>, out: UnboundedSender<WireEvent>)
                             }
                             None => break,
                         },
+                        _ = ticker.tick() => {
+                            if !tick(&backend, &out) {
+                                return;
+                            }
+                        }
                         changed = link.changed() => {
                             if changed.is_err() {
                                 return;
@@ -227,13 +264,13 @@ pub async fn drive(backend: Arc<RemoteBackend>, out: UnboundedSender<WireEvent>)
                     }
                 }
                 // A stream that ends often means the session ended: the next open finds out.
-                if !pause(&mut link, serial, FIRST_RETRY).await {
+                if !pause(&backend, &out, &mut ticker, &mut link, serial, FIRST_RETRY).await {
                     return;
                 }
             }
             Err(error) => {
                 tracing::info!(code = %error.code, "the server event stream did not open");
-                if !pause(&mut link, serial, retry).await {
+                if !pause(&backend, &out, &mut ticker, &mut link, serial, retry).await {
                     return;
                 }
                 retry = (retry * 2).min(MAX_RETRY);

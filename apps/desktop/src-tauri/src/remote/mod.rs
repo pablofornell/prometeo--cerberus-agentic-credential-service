@@ -22,7 +22,7 @@ use std::time::Duration;
 use axum::http::Method;
 use cerberus_admin::dto::{RemoteStatusView, Secret, SessionView, VaultState, VaultStatusView, ts};
 use cerberus_admin::error::{IpcError, IpcResult};
-use cerberus_admin::remote::{ADMIN_PROTOCOL, Gate, REMOTE_COMMANDS, gate};
+use cerberus_admin::remote::{ADMIN_PROTOCOL, Gate, REMOTE_COMMANDS, counts_as_activity, gate};
 use cerberus_admin::rpc::{self, VaultStatusArgs, VaultUnlockArgs};
 use cerberus_admin::wire::{
     AdminErrorBody, EVENTS_PATH, HELLO_PATH, HelloView, RPC_PREFIX, SESSION_PATH, SessionOpenedView,
@@ -88,7 +88,39 @@ struct Session {
     serial: u64,
     token: Arc<WireSecret>,
     view: SessionView,
+    /// The idle and absolute limits the server gave at the open. The desktop applies them too, so a
+    /// session it cannot confirm (server out of reach) still ends on time (DEC-RM-26).
     idle_seconds: u32,
+    max_seconds: u32,
+    opened_ms: i64,
+}
+
+/// Why a session ends on the desktop's own clock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Expiry {
+    Idle,
+    Max,
+}
+
+impl Session {
+    /// The limit this session passed at `now`, given the last activity at `used`.
+    fn expiry(&self, now: i64, used: i64) -> Option<Expiry> {
+        if now.saturating_sub(used) >= i64::from(self.idle_seconds) * 1000 {
+            Some(Expiry::Idle)
+        } else if now.saturating_sub(self.opened_ms) >= i64::from(self.max_seconds) * 1000 {
+            Some(Expiry::Max)
+        } else {
+            None
+        }
+    }
+
+    /// Whole seconds until the first limit, at `now`.
+    fn seconds_left(&self, now: i64, used: i64) -> u32 {
+        let idle = (i64::from(self.idle_seconds) * 1000).saturating_sub(now.saturating_sub(used));
+        let max =
+            (i64::from(self.max_seconds) * 1000).saturating_sub(now.saturating_sub(self.opened_ms));
+        u32::try_from(idle.min(max).max(0) / 1000).unwrap_or(u32::MAX)
+    }
 }
 
 /// The desktop's client of one `cerberusd` admin API.
@@ -101,7 +133,8 @@ pub struct RemoteBackend {
     open_gate: AsyncMutex<()>,
     serial: AtomicU64,
     link: watch::Sender<Link>,
-    /// Last call that resets the server's idle limit of the session (ms since 1970).
+    /// Last activity of the person that the server saw (ms since 1970): the open, a keep-alive, an
+    /// action (`remote::counts_as_activity`). Reads do not count, as on the server.
     last_use_ms: AtomicI64,
     /// Last `ui_activity` sent to the server.
     last_keepalive_ms: AtomicI64,
@@ -225,6 +258,7 @@ impl RemoteBackend {
     }
 
     fn token(&self) -> Option<(u64, Arc<WireSecret>)> {
+        self.expire_if_due();
         locked(&self.session)
             .as_ref()
             .map(|s| (s.serial, Arc::clone(&s.token)))
@@ -232,6 +266,41 @@ impl RemoteBackend {
 
     fn now_ms(&self) -> i64 {
         self.clock.now().as_millisecond()
+    }
+
+    /// Ends the session when its idle or absolute limit passed on the desktop's clock, also when the
+    /// server cannot confirm it (DEC-RM-26). The link change makes the pump report `sealed`, so the
+    /// UI drops its data as at a local lock. True when a session was ended.
+    pub fn expire_if_due(&self) -> bool {
+        let now = self.now_ms();
+        let used = self.last_use_ms.load(Ordering::SeqCst);
+        let ended = {
+            let mut session = locked(&self.session);
+            match session.as_ref().and_then(|s| s.expiry(now, used)) {
+                Some(why) => session.take().map(|_| why),
+                None => None,
+            }
+        };
+        let Some(why) = ended else {
+            return false;
+        };
+        tracing::info!(
+            ?why,
+            "the remote admin session passed its limit on this desktop"
+        );
+        self.link.send_modify(|link| link.session = None);
+        true
+    }
+
+    /// Seconds until this desktop's session ends on its own limits, or `None` without a session.
+    /// The rail's auto-lock countdown shows it in remote mode (DEC-RM-26).
+    #[must_use]
+    pub fn session_seconds_left(&self) -> Option<u32> {
+        let now = self.now_ms();
+        let used = self.last_use_ms.load(Ordering::SeqCst);
+        locked(&self.session)
+            .as_ref()
+            .map(|s| s.seconds_left(now, used))
     }
 
     /// Forgets the session, if it is still the one with `serial` (`None`: any session). A stale
@@ -382,7 +451,7 @@ impl RemoteBackend {
         };
         match answer {
             Ok(body) => {
-                if session.is_some() && command != "request_list_pending" {
+                if session.is_some() && counts_as_activity(command) {
                     self.last_use_ms.store(self.now_ms(), Ordering::SeqCst);
                 }
                 // The serde text is not kept: it can quote a secret of the answer.
@@ -445,6 +514,8 @@ impl RemoteBackend {
             token: Arc::new(opened.token),
             view: view.clone(),
             idle_seconds: opened.idle_seconds,
+            max_seconds: opened.max_seconds,
+            opened_ms: self.now_ms(),
         });
         let now = self.now_ms();
         self.last_use_ms.store(now, Ordering::SeqCst);
@@ -591,22 +662,18 @@ impl RemoteBackend {
         if matches!(server, Some(VaultState::Sealed | VaultState::NoVault)) {
             self.drop_session(None);
         }
-        let session = locked(&self.session)
-            .as_ref()
-            .map(|s| (s.view.clone(), s.idle_seconds));
+        self.expire_if_due();
+        let session = locked(&self.session).as_ref().map(|s| s.view.clone());
         match session {
-            Some((session, idle_seconds)) => {
+            Some(session) => {
                 view.state = match server {
                     Some(VaultState::Locking) => VaultState::Locking,
                     _ => VaultState::Unlocked,
                 };
                 view.operator = Some(session.operator_id);
                 view.role = Some(session.role);
-                let used = self.last_use_ms.load(Ordering::SeqCst);
-                let idle_ms = i64::from(idle_seconds) * 1000;
-                let left_ms = idle_ms.saturating_sub(self.now_ms().saturating_sub(used));
-                let left = u32::try_from(left_ms.max(0) / 1000).unwrap_or(u32::MAX);
-                view.idle_seconds_left = Some(view.idle_seconds_left.map_or(left, |s| s.min(left)));
+                // The countdown of this desktop's session, as the rail shows it (DEC-RM-26).
+                view.idle_seconds_left = self.session_seconds_left();
             }
             None => {
                 view.state = VaultState::Sealed;

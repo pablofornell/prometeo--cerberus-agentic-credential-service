@@ -532,6 +532,14 @@ report addendum).
 
 ---
 
+### Review fixes (DEC-RM-26)
+
+After a review of steps 8 to 10: only `ui_activity` and actions of a person count as session activity (shared
+`ACTIVITY_COMMANDS`); the desktop applies the session limits on its own clock; a bundle import is staged and stored
+only at connect (`remote_discard_import` drops it); a failed remote lock keeps the connection bound and a successful
+one closes it; private files are always `0600`; "Lock and connect" is one backend call; the rail counts down the
+desktop's session; `commands::Dispatch` makes the generated command arms testable.
+
 ## Test plan summary
 
 | Level | Where | Covers |

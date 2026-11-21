@@ -161,6 +161,8 @@ Rules:
 4. At most 4 live sessions per daemon and 2 per enrolment; the oldest of the enrolment is closed first.
 5. `ui_activity` resets the idle limit (the desktop sends it at most once per 30 s while the person works). Admin calls
    count as operator activity for the daemon idle lock (ADR-0026), which is off by default on `cerberusd`.
+   As built (DEC-RM-26): only `ui_activity` and the actions of a person count, never a read, because the desktop
+   also reads in the background; the desktop applies the idle and absolute limits on its own clock too.
 6. Closing a session, its expiry, a lost connection or the desktop quitting **does not lock the server vault**: agents
    keep working. Only `vault_lock`, `vault_panic` or the daemon's own lock rules lock it. The UI has two different
    actions: "Disconnect" and "Lock the server vault".
