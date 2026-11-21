@@ -4,7 +4,7 @@ import { useScreenT } from "../../i18n";
 import { ipc, isIpcFailure, type UiError } from "../../ipc/client";
 import { openFile, pickSavePath } from "../../ipc/dialogs";
 import { Button, Chip, ConfirmDialog, Dialog, ErrorState, errorText, Field, Input, Notice, SegmentedControl, Skeleton, StatusDot, useToast } from "../../ui";
-import { Setting } from "./Setting";
+import { SectionHead, Setting } from "./Setting";
 import type { Can } from "./SecuritySection";
 import { settingsKeys, useNetwork } from "./queries";
 import { messages } from "./messages";
@@ -81,16 +81,18 @@ export function NetworkSection({ can }: { can: Can }) {
           </Notice>
         )}
         {n.custom_cert && <Notice tone="warn" title={t("cert.warn.active")}>{t("cert.warn.active.body")}</Notice>}
-        <Setting label={t("bind.label")} description={t("bind.desc")} ownerOnly={!can.owner}>
-          {n.bind.map((a) => (
-            <Chip key={a} className="mono">{a}</Chip>
-          ))}
-          <Chip className="mono">{t("bind.port", { port: n.port })}</Chip>
-          <StatusDot tone={n.listening ? "ok" : "bad"}>{n.listening ? t("bind.listening") : `${t("bind.stopped")}${n.error ? `: ${n.error}` : ""}`}</StatusDot>
-          {n.mtls_required && <Chip>{t("bind.mtls")}</Chip>}
-          <Button size="sm" disabled={!can.owner} onClick={() => setBinding(true)}>
-            {t("bind.change")}
-          </Button>
+        <Setting wide label={t("bind.label")} description={t("bind.desc")} ownerOnly={!can.owner}>
+          <div className="row-inline">
+            {n.bind.map((a) => (
+              <Chip key={a} className="mono">{a}</Chip>
+            ))}
+            <Chip className="mono">{t("bind.port", { port: n.port })}</Chip>
+            <StatusDot tone={n.listening ? "ok" : "bad"}>{n.listening ? t("bind.listening") : `${t("bind.stopped")}${n.error ? `: ${n.error}` : ""}`}</StatusDot>
+            {n.mtls_required && <Chip>{t("bind.mtls")}</Chip>}
+            <Button size="sm" className="push" disabled={!can.owner} onClick={() => setBinding(true)}>
+              {t("bind.change")}
+            </Button>
+          </div>
         </Setting>
         <Setting label={t("pin.label")} description={<span className="fp">{n.pin}</span>}>
           <Button size="sm" icon="copy" onClick={() => void copyPin(n.pin)}>
@@ -138,9 +140,7 @@ export function NetworkSection({ can }: { can: Can }) {
 
   return (
     <section id="network" aria-labelledby="net-h" className="settings-section" data-section="network">
-      <h2 id="net-h" tabIndex={-1}>
-        {t("net.title")}
-      </h2>
+      <SectionHead id="net-h" icon="globe" title={t("net.title")} description={t("section.net.desc")} />
       {body}
     </section>
   );

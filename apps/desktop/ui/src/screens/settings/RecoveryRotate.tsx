@@ -47,7 +47,7 @@ export function RecoveryRotate({ disabled }: { disabled: boolean }) {
 
   return (
     <>
-      <Button size="sm" disabled={disabled} onClick={() => setConfirm(true)}>
+      <Button size="sm" variant="danger-ghost" disabled={disabled} onClick={() => setConfirm(true)}>
         {t("recovery.rotate")}
       </Button>
       {error && (

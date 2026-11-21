@@ -1,7 +1,56 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { useScreenT } from "../../i18n";
-import { Icon } from "../../ui";
+import { Icon, type IconName } from "../../ui";
 import { messages } from "./messages";
+
+interface SectionHeadProps {
+  /** The id of the `h2`: the section is named by it (`aria-labelledby`). */
+  id: string;
+  icon: IconName;
+  title: string;
+  description?: ReactNode;
+  /** A status chip or a button at the trailing edge. */
+  aside?: ReactNode;
+}
+
+/** The head of a section: an icon tile, the title, one line of what the section is for. The `h2` holds only the title. */
+export function SectionHead({ id, icon, title, description, aside }: SectionHeadProps) {
+  return (
+    <header className="section-head">
+      <span className="section-ico" aria-hidden="true">
+        <Icon name={icon} size={18} />
+      </span>
+      <div className="section-title">
+        <h2 id={id} tabIndex={-1}>
+          {title}
+        </h2>
+        {description && <p>{description}</p>}
+      </div>
+      {aside && <div className="section-aside">{aside}</div>}
+    </header>
+  );
+}
+
+interface SettingGroupProps {
+  label: string;
+  /** Destructive actions: a red outline around the rows. */
+  danger?: boolean;
+  children: ReactNode;
+}
+
+/** A band with a small title over a run of rows. A danger group is a bordered block of its own. */
+export function SettingGroup({ label, danger, children }: SettingGroupProps) {
+  const id = useId();
+  return (
+    <div role="group" aria-labelledby={id} className={danger ? "setting-group danger" : "setting-group"}>
+      <h3 id={id} className="group-label">
+        {danger && <Icon name="alert" size={14} />}
+        {label}
+      </h3>
+      {children}
+    </div>
+  );
+}
 
 interface SettingProps {
   label: string;

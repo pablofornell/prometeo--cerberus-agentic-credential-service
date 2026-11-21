@@ -5,7 +5,7 @@ import { useScreenT } from "../../i18n";
 import { ipc } from "../../ipc/client";
 import { Button, Field, Input } from "../../ui";
 import { rustdeskKeys, useRustdeskStatus } from "../vault/rustdesk";
-import { Setting } from "./Setting";
+import { SectionHead, Setting } from "./Setting";
 import type { Can } from "./SecuritySection";
 import { messages } from "./messages";
 
@@ -36,9 +36,7 @@ export function RemoteSection({ values, can, pending, onSet }: Props) {
 
   return (
     <section id="remote" aria-labelledby="rd-h" className="settings-section" data-section="remote">
-      <h2 id="rd-h" tabIndex={-1}>
-        {t("rd.title")}
-      </h2>
+      <SectionHead id="rd-h" icon="monitor" title={t("rd.title")} description={t("section.rd.desc")} />
       <Setting
         wide
         label={t("rd.client.label")}

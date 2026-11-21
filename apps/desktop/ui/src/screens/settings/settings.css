@@ -1,33 +1,56 @@
-/* Settings. Ported from docs/ux/prototypes/11-settings.html. Only tokens and app.css classes. */
+/* Settings. Ported from docs/ux/prototypes/11-settings.html. Only tokens and app.css classes.
+   Scrolling content stays cheap to paint: no blur, no backdrop-filter, no fixed backgrounds, no animated shadows. */
 .settings { display: grid; grid-template-columns: 240px minmax(0, 1040px); gap: var(--s-8); align-items: start; }
 
-/* Section index: a quiet list; the current section is a faint fill with the 2 px ink rule on its leading edge. */
-.settings .subnav { position: sticky; top: calc(var(--topbar-h) + var(--s-6)); display: grid; gap: var(--s-0_5); padding-top: var(--s-1); }
-.settings .subnav button { all: unset; box-sizing: border-box; position: relative; cursor: pointer; padding: var(--s-2) var(--s-3); border-radius: var(--r-sm); color: var(--c-text-secondary); font-weight: 500; transition: background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
+/* Section index: icon and name per entry. The current section has a faint fill and a short ink rule on its leading edge. */
+.settings .subnav { position: sticky; top: calc(var(--topbar-h) + var(--s-6)); display: grid; gap: var(--s-0_5); align-content: start; padding-top: var(--s-1); }
+.settings .subnav button { all: unset; box-sizing: border-box; position: relative; cursor: pointer; display: flex; align-items: center; gap: var(--s-2_5); min-height: var(--ctl-md); padding: 0 var(--s-3); border-radius: var(--r-sm); color: var(--c-text-secondary); font-weight: 500; white-space: nowrap; transition: background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
+.settings .subnav button .icon { flex: none; color: var(--c-text-muted); transition: color var(--d-fast) var(--ease-standard); }
 .settings .subnav button:hover { background: var(--c-bg-hover); color: var(--c-text-primary); }
 .settings .subnav button:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 1px; }
-.settings .subnav button[aria-current="true"] { background: var(--c-bg-hover); color: var(--c-text-primary); font-weight: 500; border-radius: 0 var(--r-sm) var(--r-sm) 0; box-shadow: inset 2px 0 0 var(--c-text-primary); }
+.settings .subnav button[aria-current="true"] { background: var(--c-bg-hover); color: var(--c-text-primary); }
+.settings .subnav button[aria-current="true"] .icon { color: var(--c-text-primary); }
+.settings .subnav button[aria-current="true"]::before { content: ""; position: absolute; left: 0; top: var(--s-2); bottom: var(--s-2); width: 2px; border-radius: var(--r-full); background: var(--c-text-primary); }
+.settings .nav-dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--c-success-fg); flex: none; }
+.settings .nav-dot.bad { background: var(--c-danger-fg); }
 
-/* Each section is one panel: a plain title over hairline rows. */
-.settings .sections { display: grid; gap: var(--s-6); min-width: 0; }
-.settings .settings-section { display: grid; gap: 0; align-content: start; scroll-margin-top: calc(var(--topbar-h) + var(--s-5)); padding: 0 var(--s-5); background: var(--c-bg-surface); border: 1px solid var(--hair); border-radius: var(--r-md); }
-.settings .settings-section > h2 { font-weight: 600; font-size: var(--t-title-sm-size); line-height: var(--t-title-sm-line); letter-spacing: var(--t-title-sm-track); padding: var(--s-3_5) 0 var(--s-3); border-bottom: 1px solid var(--hair); }
+/* Each section is one panel: a head with an icon tile, then rows split by hairlines. */
+.settings .sections { display: flex; flex-direction: column; gap: var(--s-6); min-width: 0; }
+.settings .settings-section { display: grid; gap: 0; align-content: start; scroll-margin-top: calc(var(--topbar-h) + var(--s-5)); background: var(--c-bg-surface); border: 1px solid var(--hair); border-radius: var(--r-md); box-shadow: var(--sh-raised); }
 .settings h2:focus { outline: none; }
-.settings h2:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
-.settings .settings-section > .notice { margin: var(--s-3_5) 0 0; }
-.settings .settings-section > form { padding: var(--s-3_5) 0; border-bottom: 1px solid var(--hair); }
+.settings h2:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; border-radius: var(--r-xs); }
+.settings .settings-section > .notice { margin: var(--s-4) var(--s-5) 0; }
+.settings .settings-section > form { padding: var(--s-4) var(--s-5); border-top: 1px solid var(--hair); }
 
-.settings .setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-1_5) var(--s-6); align-items: center; padding: var(--s-3_5) 0; border-bottom: 1px solid var(--hair); }
-.settings .setting:last-child { border-bottom: 0; }
+.settings .section-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--s-3_5); align-items: center; padding: var(--s-4) var(--s-5); }
+.settings .section-ico { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-sm); background: var(--c-bg-hover); border: 1px solid var(--hair); color: var(--c-text-primary); }
+.settings .section-title { display: grid; gap: var(--s-0_5); min-width: 0; }
+.settings .section-title h2 { font-weight: 600; font-size: var(--t-title-sm-size); line-height: var(--t-title-sm-line); letter-spacing: var(--t-title-sm-track); }
+.settings .section-title p { font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); color: var(--c-text-muted); }
+.settings .section-aside { display: flex; gap: var(--s-2); align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+/* A group: a quiet band with a small title over its rows. The danger group is a red-outlined block at the end of a section. */
+.settings .setting-group { display: grid; align-content: start; }
+.settings .group-label { display: flex; align-items: center; gap: var(--s-1_5); padding: var(--s-1_5) var(--s-5); border-top: 1px solid var(--hair); background: var(--c-bg-sunken); font-size: var(--t-micro-size); line-height: var(--t-micro-line); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--c-text-muted); }
+.settings .setting-group.danger { margin: var(--s-4) var(--s-5) var(--s-5); border: 1px solid color-mix(in srgb, var(--c-danger-fg) 38%, transparent); border-radius: var(--r-sm); background: color-mix(in srgb, var(--c-danger-tint) 45%, transparent); }
+.settings .setting-group.danger .group-label { border-top: 0; background: transparent; color: var(--c-danger-fg); padding: var(--s-3) var(--s-4) var(--s-1); }
+.settings .setting-group.danger .setting { padding: var(--s-3) var(--s-4) var(--s-3_5); border-top: 0; }
+.settings .setting-group.danger .setting + .setting { border-top: 1px solid color-mix(in srgb, var(--c-danger-fg) 22%, transparent); }
+
+.settings .setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-2) var(--s-6); align-items: center; padding: var(--s-3_5) var(--s-5); border-top: 1px solid var(--hair); }
 .settings .setting.wide { grid-template-columns: minmax(0, 1fr) auto; }
-.settings .setting.wide .body { grid-column: 1 / -1; display: grid; gap: var(--s-2_5); }
+.settings .setting.wide .body { grid-column: 1 / -1; display: grid; gap: var(--s-2_5); min-width: 0; }
 .settings .setting .lbl { display: grid; gap: var(--s-0_5); min-width: 0; }
 .settings .setting .lbl b { font-weight: 500; }
-.settings .setting .lbl > span { font-size: var(--t-body-sm-size); color: var(--c-text-muted); text-wrap: pretty; }
-.settings .setting .ctl { display: flex; gap: var(--s-2); align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.settings .setting .lbl > span { font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); color: var(--c-text-muted); max-width: 68ch; text-wrap: pretty; }
+.settings .setting .ctl { display: flex; gap: var(--s-2); align-items: center; justify-content: flex-end; flex-wrap: wrap; min-height: var(--ctl-sm); }
+.settings .setting .ctl:empty { display: none; }
 .settings .setting .ctl .input { width: auto; }
-.settings .setting .ctl .chip.mono { font-size: var(--t-micro-size); }
-.settings .owner-only { font-size: var(--t-caption-size); color: var(--c-text-muted); display: inline-flex; gap: var(--s-1); align-items: center; }
+.settings .setting .ctl .chip.mono, .settings .row-inline .chip.mono { font-size: var(--t-micro-size); }
+.settings .row-inline .push { margin-left: auto; }
+/* A status beside a control reads as a chip. In running text (a description) it stays a plain dot and word. */
+.settings .ctl .status, .settings .row-inline .status, .settings .section-aside .status { height: 26px; padding: 0 var(--s-2_5) 0 var(--s-2); border-radius: var(--r-full); border: 1px solid var(--hair); background: var(--c-bg-sunken); }
+.settings .owner-only { font-size: var(--t-micro-size); line-height: 1; color: var(--c-text-muted); display: inline-flex; gap: var(--s-1); align-items: center; height: 22px; padding: 0 var(--s-2); border-radius: var(--r-full); border: 1px solid var(--hair); background: var(--c-bg-sunken); white-space: nowrap; }
 
 /* UI scale: - value + slider Reset. The slider is a flat hairline track with a filled part and a round ink thumb. */
 .settings .scale-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); }
@@ -55,21 +78,56 @@
 .settings .code { font-family: var(--font-mono); font-size: var(--t-caption-size); opacity: 0.85; }
 .settings .plain-list { margin: 0; padding-left: var(--s-4_5); color: var(--c-text-secondary); }
 .settings .setting-error { grid-column: 1 / -1; }
-.settings .save-error { position: sticky; top: calc(var(--topbar-h) + var(--s-3)); z-index: 1; }
 .settings .sections > .notice { margin: 0; }
 
 /* Operators sit in a nested hairline list. */
-.settings .rows.panel { box-shadow: none; background: var(--c-bg-sunken); }
-.settings .rows.panel > li { padding: var(--s-2_5) var(--s-4); }
+.settings .rows.panel { box-shadow: none; background: var(--c-bg-canvas); }
+.settings .rows.panel > li { padding: var(--s-2_5) var(--s-3_5); }
+.settings .op-avatar { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--c-bg-strong); border: 1px solid var(--hair); color: var(--c-text-secondary); font-size: var(--t-caption-size); font-weight: 600; line-height: 1; }
+
+/* Empty, loading and error states sit in a panel of their own, sized for a settings column. */
+.settings .sections > .state-block, .settings > .state-block { max-width: none; width: 100%; padding: var(--s-10) var(--s-6); background: var(--c-bg-surface); border: 1px dashed var(--hair-ctl); border-radius: var(--r-md); }
+.settings > .state-block { grid-column: 2; }
+.settings .placeholder .skel { display: block; }
+.settings .placeholder .section-ico { border: 0; }
+.settings .placeholder .section-title { gap: var(--s-2); }
+.settings .placeholder .skel.line { height: 12px; }
+.settings .placeholder .lbl { gap: var(--s-2); }
+.settings .placeholder .w-30 { width: 30%; } .settings .placeholder .w-40 { width: 40%; } .settings .placeholder .w-60 { width: 60%; } .settings .placeholder .w-70 { width: 70%; }
+.settings .placeholder .ctl-box { width: 112px; height: var(--ctl-sm); border-radius: var(--r-sm); }
+
+/* A failed save is the last item of the column, in flow, and sticks to the bottom edge of the window while its natural place is
+   below it. It never sits over a control (it takes the room after the last section, so the page can scroll clear of it), and
+   nothing above it moves when it appears. */
+.settings .save-error { position: sticky; bottom: var(--s-4); z-index: 3; }
+.settings .save-error > .notice { background: var(--c-bg-surface); box-shadow: 0 4px 12px -4px #00000066; }
+.settings .save-error > .notice.bad { background: color-mix(in srgb, var(--c-danger-tint) 100%, var(--c-bg-surface)); }
+.settings .sections > .notice { margin: 0; }
 
 @media (max-width: 1000px) {
-  .settings { grid-template-columns: 1fr; gap: var(--s-4); }
-  .settings .subnav { position: static; display: flex; flex-wrap: wrap; }
+  .settings { grid-template-columns: minmax(0, 1fr); gap: var(--s-4); }
+  /* The index becomes a strip that scrolls sideways and stays under the top bar. */
+  .settings .subnav { position: sticky; top: var(--topbar-h); z-index: 2; display: flex; overflow-x: auto; gap: var(--s-1); margin: 0 calc(-1 * var(--s-4)); padding: var(--s-2) var(--s-4); background: var(--c-bg-canvas); border-bottom: 1px solid var(--hair); scrollbar-width: none; }
+  .settings .subnav::-webkit-scrollbar { display: none; }
+  .settings .subnav button { flex: none; }
+  .settings .subnav button[aria-current="true"]::before { left: var(--s-3); right: var(--s-3); top: auto; bottom: 0; width: auto; height: 2px; }
+  .settings .settings-section { scroll-margin-top: calc(var(--topbar-h) + var(--s-16)); }
+  .settings > .state-block { grid-column: 1; }
+}
+/* Rows stack the control under the label only when there is no room for two columns. */
+@media (max-width: 600px) {
   .settings .setting, .settings .setting.wide { grid-template-columns: 1fr; }
   .settings .setting .ctl { justify-content: flex-start; }
   .settings .reason { text-align: left; }
 }
+@media (max-width: 760px) {
+  .settings .subnav { top: 0; }
+  .settings .settings-section { scroll-margin-top: var(--s-16); }
+  .settings .section-head { grid-template-columns: auto minmax(0, 1fr); }
+  .settings .section-aside { grid-column: 1 / -1; }
+}
 /* Forced colors drop backgrounds and box-shadows: the current section gets a system-color outline. */
 @media (forced-colors: active) {
   .settings .subnav button[aria-current="true"] { outline: 1px solid Highlight; }
+  .settings .setting-group.danger { border-color: CanvasText; }
 }

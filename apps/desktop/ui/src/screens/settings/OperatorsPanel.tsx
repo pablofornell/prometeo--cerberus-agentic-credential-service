@@ -12,6 +12,15 @@ import { messages } from "./messages";
 
 const ROLES: readonly OperatorRole[] = ["owner", "operator", "viewer"];
 
+/** The first letter of the name in a round tile. Decorative: the name is next to it. */
+function Avatar({ name }: { name: string }) {
+  return (
+    <span className="op-avatar" aria-hidden="true">
+      {name.trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 export function OperatorsPanel({ status, canOwner }: { status: VaultStatusView; canOwner: boolean }) {
   const t = useScreenT(messages);
   const toast = useToast();
@@ -59,6 +68,7 @@ export function OperatorsPanel({ status, canOwner }: { status: VaultStatusView; 
     if (me) {
       return (
         <li key={o.id}>
+          <Avatar name={o.label} />
           <span className="grow">
             {o.label} <span className="small muted">{t("ops.you")}</span>
           </span>
@@ -68,6 +78,7 @@ export function OperatorsPanel({ status, canOwner }: { status: VaultStatusView; 
     }
     return (
       <li key={o.id}>
+        <Avatar name={o.label} />
         <span className="grow">{o.label}</span>
         <Select
           aria-label={t("ops.role.aria", { name: o.label })}

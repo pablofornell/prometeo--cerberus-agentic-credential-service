@@ -2,7 +2,7 @@ import { useScreenT } from "../../i18n";
 import { SegmentedControl } from "../../ui";
 import { usePrefs } from "../../state/prefs";
 import { modLabel } from "../../state/uiScale";
-import { Setting } from "./Setting";
+import { SectionHead, Setting } from "./Setting";
 import { UiScaleControl } from "./UiScaleControl";
 import { messages } from "./messages";
 
@@ -12,9 +12,7 @@ export function AppearanceSection() {
   const prefs = usePrefs();
   return (
     <section id="appearance" aria-labelledby="ap-h" className="settings-section" data-section="appearance">
-      <h2 id="ap-h" tabIndex={-1}>
-        {t("app.title")}
-      </h2>
+      <SectionHead id="ap-h" icon="palette" title={t("app.title")} description={t("section.app.desc")} />
       <Setting label={t("theme.label")} description={t("theme.desc")}>
         <SegmentedControl
           label={t("theme.label")}

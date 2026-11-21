@@ -8,7 +8,7 @@ import { useOperators, useRemoteOverview } from "../../ipc/queries";
 import { ConnectRemoteDialog } from "../../remote/ConnectRemoteDialog";
 import { ProfileFacts } from "../../remote/ProfileFacts";
 import { Button, ConfirmDialog, errorText, Notice, Skeleton, StatusDot, useToast } from "../../ui";
-import { Setting } from "./Setting";
+import { SectionHead, Setting, SettingGroup } from "./Setting";
 import { messages } from "./messages";
 
 const formatDate = (iso: string): string => new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
@@ -102,9 +102,22 @@ export function ServerSection({ status }: { status: VaultStatusView }) {
 
   return (
     <section id="server" aria-labelledby="srv-h" className="settings-section" data-section="server">
-      <h2 id="srv-h" tabIndex={-1}>
-        {t("srv.title")}
-      </h2>
+      <SectionHead
+        id="srv-h"
+        icon="server"
+        title={t("srv.title")}
+        description={t("section.srv.desc")}
+        aside={
+          remote && (
+            <>
+              <StatusDot tone={remote.reachable ? "ok" : "bad"}>{remote.reachable ? t("srv.state.reachable") : t("srv.state.unreachable")}</StatusDot>
+              {remote.server_state && (
+                <StatusDot tone={remote.server_state === "unlocked" ? "ok" : "off"}>{remote.server_state === "unlocked" ? t("srv.state.server.unlocked") : t("srv.state.server.sealed")}</StatusDot>
+              )}
+            </>
+          )
+        }
+      />
       {error && (
         <Notice tone="bad" title={t("srv.fail")} onDismiss={() => setError(null)} dismissLabel={t("save.dismiss")}>
           {errorText(error)} <span className="code">{t("save.error.line", { command: error.command, code: error.code })}</span>
@@ -115,15 +128,7 @@ export function ServerSection({ status }: { status: VaultStatusView }) {
           <Setting
             wide
             label={t("srv.active.label", { label: remote.label })}
-            description={
-              <>
-                {t("srv.active.desc")}{" "}
-                <StatusDot tone={remote.reachable ? "ok" : "bad"}>{remote.reachable ? t("srv.state.reachable") : t("srv.state.unreachable")}</StatusDot>{" "}
-                {remote.server_state && (
-                  <StatusDot tone={remote.server_state === "unlocked" ? "ok" : "off"}>{remote.server_state === "unlocked" ? t("srv.state.server.unlocked") : t("srv.state.server.sealed")}</StatusDot>
-                )}
-              </>
-            }
+            description={t("srv.active.desc")}
           >
             <ProfileFacts
               label={remote.label}
@@ -156,11 +161,6 @@ export function ServerSection({ status }: { status: VaultStatusView }) {
               {t("srv.disconnect")}
             </Button>
           </Setting>
-          <Setting label={t("srv.lock.label")} description={t("srv.lock.desc")}>
-            <Button size="sm" variant="danger-ghost" icon="lock" disabled={busy !== null} onClick={() => setConfirmLock(true)}>
-              {t("srv.lock")}
-            </Button>
-          </Setting>
           <Setting label={t("srv.local.use.label")} description={t("srv.local.use.desc")}>
             <Button size="sm" variant="ghost" icon="vault" loading={busy === "use:local"} disabled={busy !== null} onClick={() => void activate(null)}>
               {t("srv.local.use")}
@@ -171,6 +171,13 @@ export function ServerSection({ status }: { status: VaultStatusView }) {
               <ul className="rows panel">{others.map(profileRow)}</ul>
             </Setting>
           )}
+          <SettingGroup label={t("group.danger")} danger>
+            <Setting label={t("srv.lock.label")} description={t("srv.lock.desc")}>
+              <Button size="sm" variant="danger-ghost" icon="lock" disabled={busy !== null} onClick={() => setConfirmLock(true)}>
+                {t("srv.lock")}
+              </Button>
+            </Setting>
+          </SettingGroup>
           <ConfirmDialog
             open={confirmLock}
             onOpenChange={setConfirmLock}

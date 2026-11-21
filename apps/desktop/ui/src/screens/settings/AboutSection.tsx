@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { VaultStatusView } from "../../bindings";
 import { useScreenT } from "../../i18n";
 import { Button, Dialog, StatusDot } from "../../ui";
-import { Setting } from "./Setting";
+import { SectionHead, Setting } from "./Setting";
 import { messages } from "./messages";
 
 export function AboutSection({ status }: { status: VaultStatusView }) {
@@ -21,9 +21,7 @@ export function AboutSection({ status }: { status: VaultStatusView }) {
   }, []);
   return (
     <section id="about" aria-labelledby="ab-h" className="settings-section" data-section="about">
-      <h2 id="ab-h" tabIndex={-1}>
-        {t("about.title")}
-      </h2>
+      <SectionHead id="ab-h" icon="info" title={t("about.title")} description={t("section.about.desc")} />
       <Setting label={version ? `${t("about.name")} ${version}` : t("about.name")} description={t("about.desc")}>
         <StatusDot tone={status.memlock_ok ? "ok" : "warn"}>{status.memlock_ok ? t("about.memlock.on") : t("about.memlock.off")}</StatusDot>
         <StatusDot tone={status.header_ok ? "ok" : "bad"}>{status.header_ok ? t("about.header.ok") : t("about.header.bad")}</StatusDot>
