@@ -838,6 +838,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "cerberus-admin"
+version = "0.3.0"
+dependencies = [
+ "cerberus-core",
+ "cerberus-crypto",
+ "cerberus-store",
+ "cerberus-types",
+ "ipnet",
+ "jiff 1.0.0",
+ "serde",
+ "serde_json",
+ "specta",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
 name = "cerberus-api"
 version = "0.3.0"
 dependencies = [
@@ -963,6 +980,7 @@ name = "cerberus-desktop"
 version = "0.3.0"
 dependencies = [
  "axum",
+ "cerberus-admin",
  "cerberus-api",
  "cerberus-core",
  "cerberus-crypto",
@@ -971,7 +989,6 @@ dependencies = [
  "cerberus-types",
  "futures-util",
  "getrandom 0.4.3",
- "ipnet",
  "jiff 1.0.0",
  "serde",
  "serde_json",
@@ -985,7 +1002,6 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-specta",
  "tempfile",
- "thiserror 2.0.21",
  "tokio",
  "tracing",
  "tracing-subscriber",

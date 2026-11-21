@@ -29,6 +29,10 @@ Reading rules:
 ```
 An arrow points from a crate to a crate it may use. `just deps-check` enforces the table in ADR-0024.
 
+`cerberus-admin` (ADR-0034, DEC-RM-6) holds the IPC and admin DTOs and `IpcError`, with no transport. It uses
+`cerberus-core`, `cerberus-store`, `cerberus-crypto` and `cerberus-types`. `cerberus-desktop` uses it; ADR-0034 also
+lets `cerberus-api` and `cerberusd` use it for the admin API, and `cerberus-desktop` use `cerberus-client`.
+
 ---
 
 ## 1. `cerberus-types`

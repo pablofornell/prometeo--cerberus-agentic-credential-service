@@ -6,6 +6,7 @@ members = [
     "crates/cerberus-crypto",
     "crates/cerberus-store",
     "crates/cerberus-core",
+    "crates/cerberus-admin",
     "crates/cerberus-api",
     "crates/cerberus-mcp",
     "crates/cerberus-client",
@@ -32,6 +33,7 @@ cerberus-crypto = { path = "crates/cerberus-crypto", version = "0.3.0" }
 cerberus-store = { path = "crates/cerberus-store", version = "0.3.0" }
 cerberus-core = { path = "crates/cerberus-core", version = "0.3.0" }
 cerberus-ssh-agent = { path = "crates/cerberus-ssh-agent", version = "0.3.0" }
+cerberus-admin = { path = "crates/cerberus-admin", version = "0.3.0" }
 cerberus-api = { path = "crates/cerberus-api", version = "0.3.0" }
 cerberus-client = { path = "crates/cerberus-client", version = "0.3.0" }
 # Hosts take the server only; the stdio shim (feature `shim`, on by default for the bin) pulls in the client SDK.
@@ -110,6 +112,9 @@ rmcp = { version = "3.10.0", default-features = false, features = ["server", "tr
 rpassword = "7.5.5"
 sd-notify = "0.5.0"
 toml = "1.2.1"
+
+# IPC types (cerberus-admin, desktop). Release candidates only for Tauri 2 (DEC-T15-1); one pin for both crates.
+specta = { version = "=2.0.0-rc.28", features = ["derive", "serde_json"] }
 
 # Test-only dependencies.
 tempfile = "3.27.0"

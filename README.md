@@ -22,7 +22,7 @@ builds are set up in CI but not yet tested. Final acceptance: [docs/acceptance-r
 | `cerberus` | Command line client for agents, including `cerberus run` | `crates/cerberus-client` |
 | `cerberus-mcp` | MCP server at `/mcp`, and the stdio shim for hosts that start local commands | `crates/cerberus-mcp` |
 | `cerberus-api` | HTTPS server (TLS 1.3 only), REST routes, OpenAPI | `crates/cerberus-api` |
-| Vault core, store, crypto, types, SSH bridge | Library crates behind the parts above | `crates/cerberus-core`, `crates/cerberus-store`, `crates/cerberus-crypto`, `crates/cerberus-types`, `crates/cerberus-ssh-agent` |
+| Vault core, store, crypto, types, SSH bridge, admin contract | Library crates behind the parts above | `crates/cerberus-core`, `crates/cerberus-store`, `crates/cerberus-crypto`, `crates/cerberus-types`, `crates/cerberus-ssh-agent`, `crates/cerberus-admin` |
 
 ## Requirements
 

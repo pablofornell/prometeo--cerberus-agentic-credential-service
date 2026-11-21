@@ -16,6 +16,7 @@ name = "cerberus_desktop"
 path = "src/lib.rs"
 
 [dependencies]
+cerberus-admin.workspace = true
 cerberus-api = { path = "../../../crates/cerberus-api", version = "0.3.0" }
 cerberus-core.workspace = true
 cerberus-mcp.workspace = true
@@ -25,13 +26,11 @@ cerberus-types.workspace = true
 jiff = { workspace = true, features = ["serde"] }
 serde.workspace = true
 serde_json.workspace = true
-thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs"] }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["registry"] }
 zeroize.workspace = true
 futures-util.workspace = true
-ipnet.workspace = true
 x509-parser.workspace = true
 axum.workspace = true
 getrandom.workspace = true
@@ -39,7 +38,7 @@ getrandom.workspace = true
 # Tauri and its plugins. tauri-specta has only release candidates for Tauri 2 (DEC-T15-1).
 tauri = { workspace = true, features = ["tray-icon", "image-png"] }
 tauri-specta = { version = "=2.0.0-rc.29", features = ["derive", "typescript"] }
-specta = { version = "=2.0.0-rc.28", features = ["derive", "serde_json"] }
+specta.workspace = true
 specta-typescript = "0.0.15"
 tauri-plugin-single-instance = "2.5.5"
 tauri-plugin-clipboard-manager = "2.5.0"
