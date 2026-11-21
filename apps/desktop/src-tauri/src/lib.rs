@@ -18,6 +18,7 @@ pub mod os_hooks;
 mod prefs;
 mod pump;
 pub mod remote;
+pub mod renderer;
 mod server;
 pub mod shell;
 pub mod state;

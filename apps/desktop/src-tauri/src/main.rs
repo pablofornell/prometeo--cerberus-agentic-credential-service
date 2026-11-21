@@ -3,5 +3,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    cerberus_desktop::renderer::select_renderer();
     cerberus_desktop::run();
 }
