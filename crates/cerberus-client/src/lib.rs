@@ -21,8 +21,8 @@ pub use cerberus_types::wire::WireSecret;
 pub use client::{CatalogQuery, Client, RetryPolicy, RevealResult, SshResult, TotpResult};
 pub use config::{ClientConfig, DEFAULT_URL, Overrides, Trust};
 pub use error::{ApiError, ClientError};
-pub use sse::RequestEvents;
-pub use transport::PinnedHttps;
+pub use sse::{EventStream, RequestEvents};
+pub use transport::{PinnedHttps, zeroizing_body};
 
 /// Version of this crate, taken from `Cargo.toml`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

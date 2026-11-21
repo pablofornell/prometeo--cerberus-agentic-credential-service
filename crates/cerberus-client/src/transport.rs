@@ -4,7 +4,13 @@
 //! stdio shim uses it directly to forward JSON-RPC to `/mcp`. It never retries: a call is sent
 //! once, and the error type tells the caller whether anything may have been sent
 //! ([`ClientError::Connect`] means nothing was).
+//!
+//! A transport made with [`PinnedHttps::with_client_cert`] has no token of its own: the caller
+//! gives a bearer per request with [`PinnedHttps::send_bearer`] (the admin API of `cerberusd`,
+//! whose session token changes, ADR-0034). [`zeroizing_body`] and [`Response::bytes_zeroizing`]
+//! keep a phrase or a revealed secret out of buffers that are freed without a wipe.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,6 +27,7 @@ use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio_rustls::TlsConnector;
 use url::{Host, Url};
+use zeroize::Zeroizing;
 
 use crate::config::{ClientConfig, Trust, parse_base_url};
 use crate::error::ClientError;
@@ -30,6 +37,22 @@ use crate::tls::{client_config, is_pin_mismatch};
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 /// Default time limit of one call.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// A zeroizing buffer as a request body: the buffer is wiped when the body is dropped after the
+/// send, and no unzeroized copy is made here (rustls still copies the bytes it encrypts).
+#[must_use]
+pub fn zeroizing_body(body: Zeroizing<Vec<u8>>) -> Bytes {
+    Bytes::from_owner(Wiped(body))
+}
+
+/// The owner of a [`zeroizing_body`].
+struct Wiped(Zeroizing<Vec<u8>>);
+
+impl AsRef<[u8]> for Wiped {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
 
 /// One request. `path` starts with `/` and may hold a query string. It is joined to the path of
 /// the base URL.
@@ -138,6 +161,32 @@ impl Response {
         }
         Ok(out)
     }
+
+    /// As [`Response::bytes`], into a zeroizing buffer: when it must grow, the data moves to a new
+    /// zeroizing buffer and the old one is wiped. Use it for answers that can hold a secret.
+    ///
+    /// # Errors
+    /// As [`Response::bytes`].
+    pub async fn bytes_zeroizing(
+        mut self,
+        limit: usize,
+    ) -> Result<Zeroizing<Vec<u8>>, ClientError> {
+        let mut out = Zeroizing::new(Vec::new());
+        while let Some(chunk) = self.chunk().await? {
+            let needed = out.len() + chunk.len();
+            if needed > limit {
+                return Err(ClientError::Decode("response body too long".to_owned()));
+            }
+            if needed > out.capacity() {
+                let capacity = needed.max(out.capacity().saturating_mul(2)).min(limit);
+                let mut grown = Zeroizing::new(Vec::with_capacity(capacity));
+                grown.extend_from_slice(&out);
+                out = grown;
+            }
+            out.extend_from_slice(&chunk);
+        }
+        Ok(out)
+    }
 }
 
 struct Inner {
@@ -182,6 +231,28 @@ impl PinnedHttps {
         )
     }
 
+    /// Builds a transport that presents a client certificate (PEM files: certificate chain, PKCS#8
+    /// key) and has no token of its own. Send with [`PinnedHttps::send_bearer`]. The desktop uses it
+    /// for the admin API of `cerberusd` (ADR-0034 point 7.1).
+    ///
+    /// # Errors
+    /// As [`PinnedHttps::new`], and [`ClientError::Config`] when the certificate or key file
+    /// cannot be read.
+    pub fn with_client_cert(
+        base_url: &str,
+        trust: &Trust,
+        cert_and_key: (PathBuf, PathBuf),
+        call_timeout: Duration,
+    ) -> Result<Self, ClientError> {
+        Self::build(
+            parse_base_url(base_url)?,
+            trust,
+            Some(&cert_and_key),
+            None,
+            call_timeout,
+        )
+    }
+
     /// Builds the transport from a full [`ClientConfig`] (adds mTLS and the call time limit).
     ///
     /// # Errors
@@ -199,7 +270,7 @@ impl PinnedHttps {
     fn build(
         base: Url,
         trust: &Trust,
-        client_cert: Option<&(std::path::PathBuf, std::path::PathBuf)>,
+        client_cert: Option<&(PathBuf, PathBuf)>,
         token: Option<&WireSecret>,
         call_timeout: Duration,
     ) -> Result<Self, ClientError> {
@@ -231,15 +302,7 @@ impl PinnedHttps {
             (_, Some(p)) => format!("{host}:{p}"),
             (_, None) => host.clone(),
         };
-        let auth = match token {
-            Some(secret) => {
-                let mut value = HeaderValue::from_str(&format!("Bearer {}", secret.expose()))
-                    .map_err(|_| ClientError::Config("the token is not valid".to_owned()))?;
-                value.set_sensitive(true);
-                Some(value)
-            }
-            None => None,
-        };
+        let auth = token.map(bearer_header).transpose()?;
         Ok(Self {
             inner: Arc::new(Inner {
                 base,
@@ -265,6 +328,31 @@ impl PinnedHttps {
     /// [`ClientError::Connect`] (nothing sent), [`ClientError::PinMismatch`], [`ClientError::Tls`],
     /// [`ClientError::Timeout`] or [`ClientError::Transport`] (the server may have acted).
     pub async fn send(&self, request: Request<'_>) -> Result<Response, ClientError> {
+        self.send_with(request, self.inner.auth.clone()).await
+    }
+
+    /// Sends one request with `bearer` as its token instead of the transport's own: `Some` sets
+    /// `Authorization: Bearer <bearer>` (marked sensitive, so hyper never logs or indexes it),
+    /// `None` sends no `Authorization` at all. A caller-set `Authorization` in
+    /// [`Request::headers`] is still dropped. No retry.
+    ///
+    /// # Errors
+    /// [`ClientError::Config`] when the bearer cannot be a header value, else as
+    /// [`PinnedHttps::send`].
+    pub async fn send_bearer(
+        &self,
+        request: Request<'_>,
+        bearer: Option<&WireSecret>,
+    ) -> Result<Response, ClientError> {
+        let auth = bearer.map(bearer_header).transpose()?;
+        self.send_with(request, auth).await
+    }
+
+    async fn send_with(
+        &self,
+        request: Request<'_>,
+        auth: Option<HeaderValue>,
+    ) -> Result<Response, ClientError> {
         let inner = &self.inner;
         let tcp = timeout(CONNECT_TIMEOUT, TcpStream::connect(inner.addr.clone()))
             .await
@@ -286,7 +374,7 @@ impl PinnedHttps {
             // The connection ends when the response is done or the peer closes it.
             let _ = connection.await;
         });
-        let http = self.http_request(request)?;
+        let http = self.http_request(request, auth)?;
         let response = timeout(inner.timeout, sender.send_request(http))
             .await
             .map_err(|_| ClientError::Timeout)?
@@ -318,7 +406,11 @@ impl PinnedHttps {
         self.send(Request::get(path)).await
     }
 
-    fn http_request(&self, request: Request<'_>) -> Result<HttpRequest<Full<Bytes>>, ClientError> {
+    fn http_request(
+        &self,
+        request: Request<'_>,
+        auth: Option<HeaderValue>,
+    ) -> Result<HttpRequest<Full<Bytes>>, ClientError> {
         let inner = &self.inner;
         let base_path = inner.base.path().trim_end_matches('/');
         let uri = format!("{base_path}{}", request.path);
@@ -346,13 +438,22 @@ impl PinnedHttps {
         if has_body && !has_content_type {
             builder = builder.header(hyper::header::CONTENT_TYPE, "application/json");
         }
-        if let Some(auth) = &inner.auth {
-            builder = builder.header(AUTHORIZATION, auth.clone());
+        if let Some(auth) = auth {
+            builder = builder.header(AUTHORIZATION, auth);
         }
         builder
             .body(Full::new(request.body.unwrap_or_default()))
             .map_err(|_| ClientError::Config("the request path is not valid".to_owned()))
     }
+}
+
+/// `Bearer <token>` as a sensitive header value. The formatted text is zeroized after the copy.
+fn bearer_header(token: &WireSecret) -> Result<HeaderValue, ClientError> {
+    let text = Zeroizing::new(format!("Bearer {}", token.expose()));
+    let mut value = HeaderValue::from_str(&text)
+        .map_err(|_| ClientError::Config("the token is not valid".to_owned()))?;
+    value.set_sensitive(true);
+    Ok(value)
 }
 
 fn map_handshake_error(error: &std::io::Error) -> ClientError {
@@ -363,5 +464,64 @@ fn map_handshake_error(error: &std::io::Error) -> ClientError {
         Some(e) if is_pin_mismatch(e) => ClientError::PinMismatch,
         Some(e) => ClientError::Tls(e.to_string()),
         None => ClientError::Tls(error.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    const PIN: &str = "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+    fn transport(token: Option<&WireSecret>) -> PinnedHttps {
+        PinnedHttps::build(
+            parse_base_url("https://localhost:7373").unwrap(),
+            &Trust::Pin(PIN.to_owned()),
+            None,
+            token,
+            DEFAULT_TIMEOUT,
+        )
+        .unwrap()
+    }
+
+    fn header(request: &HttpRequest<Full<Bytes>>) -> Option<&HeaderValue> {
+        request.headers().get(AUTHORIZATION)
+    }
+
+    #[test]
+    fn a_per_request_bearer_is_sensitive_and_replaces_nothing_else() {
+        let http = transport(None);
+        let first = WireSecret::new("cas_first.secret".to_owned());
+        let auth = Some(bearer_header(&first).unwrap());
+        let mut request = Request::get("/admin/v1/hello");
+        request.headers.push(("authorization", "Bearer forged"));
+        let built = http.http_request(request, auth).unwrap();
+        let value = header(&built).unwrap();
+        assert!(value.is_sensitive());
+        assert_eq!(value.to_str().unwrap(), "Bearer cas_first.secret");
+        assert_eq!(built.headers().get_all(AUTHORIZATION).iter().count(), 1);
+        // No bearer: no Authorization, also not a caller-set one.
+        let mut request = Request::get("/admin/v1/hello");
+        request.headers.push(("authorization", "Bearer forged"));
+        assert!(header(&http.http_request(request, None).unwrap()).is_none());
+    }
+
+    #[test]
+    fn a_transport_token_is_sensitive_too() {
+        let token = WireSecret::new("cvt_x.y".to_owned());
+        let http = transport(Some(&token));
+        let built = http
+            .http_request(Request::get("/v1/status"), http.inner.auth.clone())
+            .unwrap();
+        assert!(header(&built).unwrap().is_sensitive());
+        assert!(bearer_header(&WireSecret::new("bad\nvalue".to_owned())).is_err());
+    }
+
+    #[test]
+    fn a_zeroizing_body_keeps_its_bytes() {
+        let body = zeroizing_body(Zeroizing::new(b"{\"phrase\":\"x\"}".to_vec()));
+        assert_eq!(&body[..], b"{\"phrase\":\"x\"}");
     }
 }

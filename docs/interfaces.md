@@ -1392,6 +1392,28 @@ pub mod run {
 }
 ```
 
+**Admin transport (ADR-0034, remote-mode plan step 7, DEC-RM-21).** For the desktop in remote mode (step 8):
+
+```rust
+impl PinnedHttps {
+    /// Client certificate (PEM chain file, PKCS#8 PEM key file), no token of its own.
+    pub fn with_client_cert(base_url: &str, trust: &Trust, cert_and_key: (PathBuf, PathBuf),
+                            call_timeout: Duration) -> Result<Self, ClientError>;
+    /// `Some`: `Authorization: Bearer <bearer>` (sensitive) on this request; `None`: no Authorization.
+    pub async fn send_bearer(&self, request: Request<'_>, bearer: Option<&WireSecret>) -> Result<Response, ClientError>;
+}
+impl Response { pub async fn bytes_zeroizing(self, limit: usize) -> Result<Zeroizing<Vec<u8>>, ClientError>; }
+pub fn zeroizing_body(body: Zeroizing<Vec<u8>>) -> Bytes;  // request body wiped after the send
+pub struct EventStream;                                     // generic SSE reader
+impl EventStream {
+    pub fn new(response: Response) -> Self;
+    /// (event name, data): `message` without `event:`, data lines joined with `\n`, comments and
+    /// data-less blocks skipped; `None` at the end of the stream.
+    pub async fn next(&mut self) -> Option<Result<(String, Vec<u8>), ClientError>>;
+}
+```
+`Request` still drops a caller-set `Authorization`. `RequestEvents` is built on `EventStream`.
+
 ---
 
 ## 8. `cerberus-ssh-agent` (T22, summary)

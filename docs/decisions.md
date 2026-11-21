@@ -1455,6 +1455,20 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   that moves into the bundle's `WireSecret`; the base64 encoder's scratch is not zeroized (as DEC-RM-18 f).
   (`crates/cerberusd/src/{config,daemon,unlock,admin,status,https,main}.rs`, `tests/daemon.rs`)
 
+- **DEC-RM-21** — RM — `cerberus-client` admin transport, as built (plan step 7). (a)
+  `PinnedHttps::with_client_cert(base_url, trust, (cert, key), timeout)` builds a transport with no token;
+  `send_bearer(request, Some(token))` sets a sensitive `Authorization` for that request only, and `None` sends no
+  `Authorization` (the pre-session calls); `send` and the typed `Client` are unchanged. A caller-set `Authorization`
+  in `Request::headers` is still dropped. The formatted `Bearer ...` text is zeroized after the header copy. (b) Two
+  additions the plan did not list, for the desktop's phrase and reveal traffic: `zeroizing_body` (a request body over a
+  zeroizing buffer, wiped when the send is done) and `Response::bytes_zeroizing(limit)` (grows into new zeroizing
+  buffers only). rustls still copies what it encrypts and decrypts. (c) `sse::EventStream::new(response)` and `next()
+  -> Option<Result<(String, Vec<u8>), ClientError>>`: the name is `message` without an `event:` line, several `data:`
+  lines are joined with `\n`, `\r` is dropped, comment lines and blocks without data (`id:` / `retry:` only) are
+  skipped, a block over 1 MiB ends the stream. `RequestEvents` keeps its behaviour on top of it. The client still links
+  no vault or server crate (`just client-deps-check`). (`crates/cerberus-client/src/{transport,sse}.rs`,
+  `tests/pinning.rs`)
+
 ## RD — RustDesk connections (2026-11-21)
 
 - **DEC-RD-1** — New item kind `rustdesk` (Rust `ItemKind::Rustdesk`, wire value `rustdesk`) for a machine reached with

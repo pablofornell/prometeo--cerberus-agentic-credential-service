@@ -371,6 +371,10 @@ server; a different bearer per request; the header is sensitive; SSE parser hand
 
 Done when: `cargo test -p cerberus-client`; `just client-deps-check` (the client still has no vault or server crate).
 
+As built (DEC-RM-21): `send_bearer(request, None)` sends no `Authorization`. Also `zeroizing_body` and
+`Response::bytes_zeroizing` for phrase and reveal traffic. `EventStream` is re-exported at the crate root. The test
+server of `tests/common/script.rs` gained `start_mtls`, `auths` and `client_certs`.
+
 ---
 
 ## Step 8 — Desktop remote backend (Rust)

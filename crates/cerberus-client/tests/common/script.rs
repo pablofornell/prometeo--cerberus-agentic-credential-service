@@ -20,6 +20,8 @@ use http_body_util::Full as Body;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use rustls::server::WebPkiClientVerifier;
+use sha2::{Digest, Sha256};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
@@ -62,12 +64,31 @@ pub struct Script {
     pub addr: SocketAddr,
     pub requests: Arc<AtomicUsize>,
     pub seen: Arc<Mutex<Vec<String>>>,
+    /// The `Authorization` value of each request ("" when there was none).
+    pub auths: Arc<Mutex<Vec<String>>>,
+    /// SHA-256 of the client certificate of each connection that sent one.
+    pub client_certs: Arc<Mutex<Vec<[u8; 32]>>>,
     queue: Arc<Mutex<VecDeque<Reply>>>,
 }
 
 impl Script {
     /// `send_ca`: put the CA certificate after the leaf in the chain.
     pub async fn start(pki: &Pki, send_ca: bool, versions: Versions, replies: Vec<Reply>) -> Self {
+        Self::start_with(pki, send_ca, versions, replies, false).await
+    }
+
+    /// A TLS 1.3 server that requires a client certificate signed by the CA of `pki`.
+    pub async fn start_mtls(pki: &Pki, replies: Vec<Reply>) -> Self {
+        Self::start_with(pki, true, Versions::Tls13, replies, true).await
+    }
+
+    async fn start_with(
+        pki: &Pki,
+        send_ca: bool,
+        versions: Versions,
+        replies: Vec<Reply>,
+        client_auth: bool,
+    ) -> Self {
         let leaf = pki
             .ca
             .issue_leaf(
@@ -89,17 +110,32 @@ impl Script {
             Versions::Tls12Only => builder.with_protocol_versions(&[&rustls::version::TLS12]),
         }
         .unwrap();
-        let config = builder
-            .with_no_client_auth()
-            .with_single_cert(chain, key)
+        let builder = if client_auth {
+            let mut roots = rustls::RootCertStore::empty();
+            roots
+                .add(CertificateDer::from(pki.ca.cert_der().to_vec()))
+                .unwrap();
+            let verifier = WebPkiClientVerifier::builder_with_provider(
+                Arc::new(roots),
+                Arc::new(rustls::crypto::ring::default_provider()),
+            )
+            .build()
             .unwrap();
+            builder.with_client_cert_verifier(verifier)
+        } else {
+            builder.with_no_client_auth()
+        };
+        let config = builder.with_single_cert(chain, key).unwrap();
         let acceptor = TlsAcceptor::from(Arc::new(config));
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let requests = Arc::new(AtomicUsize::new(0));
         let seen = Arc::new(Mutex::new(Vec::new()));
+        let auths = Arc::new(Mutex::new(Vec::new()));
+        let client_certs = Arc::new(Mutex::new(Vec::new()));
         let queue = Arc::new(Mutex::new(VecDeque::from(replies)));
         let (r, s, q) = (requests.clone(), seen.clone(), queue.clone());
+        let (a, c) = (auths.clone(), client_certs.clone());
         tokio::spawn(async move {
             loop {
                 let Ok((tcp, _)) = listener.accept().await else {
@@ -107,12 +143,21 @@ impl Script {
                 };
                 let acceptor = acceptor.clone();
                 let (r, s, q) = (r.clone(), s.clone(), q.clone());
+                let (a, c) = (a.clone(), c.clone());
                 tokio::spawn(async move {
                     let Ok(tls) = acceptor.accept(tcp).await else {
                         return;
                     };
+                    if let Some(cert) = tls
+                        .get_ref()
+                        .1
+                        .peer_certificates()
+                        .and_then(|certs| certs.first())
+                    {
+                        c.lock().unwrap().push(Sha256::digest(cert.as_ref()).into());
+                    }
                     let service = service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
-                        let (r, s, q) = (r.clone(), s.clone(), q.clone());
+                        let (r, s, q, a) = (r.clone(), s.clone(), q.clone(), a.clone());
                         async move {
                             r.fetch_add(1, Ordering::SeqCst);
                             let auth = req
@@ -121,6 +166,7 @@ impl Script {
                                 .and_then(|v| v.to_str().ok())
                                 .unwrap_or("")
                                 .to_owned();
+                            a.lock().unwrap().push(auth.clone());
                             s.lock().unwrap().push(format!(
                                 "{} {} auth={}",
                                 req.method(),
@@ -155,6 +201,8 @@ impl Script {
             addr,
             requests,
             seen,
+            auths,
+            client_certs,
             queue,
         }
     }
