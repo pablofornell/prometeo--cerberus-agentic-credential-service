@@ -524,6 +524,12 @@ Files:
 Done when: `cargo test -p cerberus-acceptance --test acceptance a13`, `cargo test -p cerberus-desktop --test
 remote_daemon`, and then one full `just check` and `just test` when no other build runs.
 
+As built (DEC-RM-25): A13 has its own fixture (`tests/harness/remote.rs`): the vault is made with the core API and
+`cerberusd` serves it in process; the agent certificate comes from the vault CA at creation. Point 8's lock runs from a
+second enrolment's session because point 7 revoked the first. `remote_daemon.rs` shares `tests/common` with
+`tests/remote.rs`. The workspace checks ran with `cargo test --workspace -j 4` and `just check` (see the acceptance
+report addendum).
+
 ---
 
 ## Test plan summary

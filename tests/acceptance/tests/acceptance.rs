@@ -1,4 +1,5 @@
-//! Acceptance suite: scenarios A1 to A12 of docs/PLAN.md section 11, one test each.
+//! Acceptance suite: scenarios A1 to A12 of docs/PLAN.md section 11, one test each, and A13, the remote admin API of
+//! `cerberusd` (ADR-0034).
 //!
 //! Every test uses the public surface: a real vault on a temporary directory, the real TLS server
 //! of `cerberus-api` with `/mcp` mounted, an HTTPS client, an MCP client, and the `cerberus`
@@ -16,12 +17,15 @@ mod harness;
 
 use std::time::Duration;
 
+use cerberus_client::transport::Request;
+use cerberus_client::{EventStream, PinnedHttps, Trust, WireSecret};
 use cerberus_core::CoreError;
 use cerberus_core::KeyCustody;
 use cerberus_core::admin::AuditQuery;
 use cerberus_core::audit::ChainReport;
 use cerberus_crypto::{RecoveryKey, SecretString};
 use cerberus_types::{AccessRequestId, ApprovalOption, Environment, LockReason, Scope};
+use harness::remote::{Daemon, bundle_identity};
 use harness::{
     ALT_PHRASE, Env, PASSWORD, PHRASE, USERNAME, error_code, mcp_call, mcp_data, op_ctx,
 };
@@ -613,4 +617,264 @@ async fn a12_the_child_sees_the_variable_and_the_agent_output_does_not() {
         "the token does not reach the child"
     );
     env.stop().await;
+}
+
+/// A13 (ADR-0034): remote admin through a real `cerberusd`. The admin API is off unless turned on; an admin call needs
+/// an enrolled device certificate and an operator session; items and approvals work over it as the operator; closing a
+/// session leaves the vault open for agents; a revoke takes the device out at once; a remote lock locks the agents out.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a13_remote_admin_through_cerberusd() {
+    // 1. A daemon with the admin API off has no admin route at all.
+    let off = Daemon::start(false).await;
+    let reply = off
+        .client(None)
+        .send("GET", "/admin/v1/hello", None, None)
+        .await;
+    assert_eq!(reply.status, 404, "{}", reply.json);
+    assert_eq!(reply.json["error"]["code"], "route_not_found");
+    off.stop().await;
+
+    let daemon = Daemon::start(true).await;
+    let bundle = daemon.enroll("laptop").await;
+    let (cert, key) = bundle_identity(&bundle);
+    let admin = daemon.client(Some((&cert, &key)));
+    let agent = daemon.client(None);
+    let operator = bundle.operator_id.to_string();
+    assert_eq!(operator, daemon.seed.owner.to_string());
+
+    // 2. The device gate: no certificate, or a CA-signed agent certificate, is refused before anything else.
+    let bare = agent.send("GET", "/admin/v1/hello", None, None).await;
+    assert_eq!(bare.status, 403);
+    assert_eq!(bare.json["error"]["code"], "admin_cert_required");
+    let (agent_cert, agent_key) = &daemon.seed.agent_identity;
+    let agent_device = daemon
+        .client(Some((agent_cert, agent_key)))
+        .send("GET", "/admin/v1/hello", None, None)
+        .await;
+    assert_eq!(agent_device.status, 403);
+    assert_eq!(agent_device.json["error"]["code"], "admin_cert_required");
+    let hello = admin.send("GET", "/admin/v1/hello", None, None).await;
+    assert_eq!(hello.status, 200, "{}", hello.json);
+    assert_eq!(hello.json["admin_protocol"], 1);
+    assert_eq!(hello.json["vault_state"], "unlocked");
+
+    // 3. The person gate: no session, a wrong phrase, then the right one.
+    let no_session = admin.rpc("item_list", None, &json!({ "filter": {} })).await;
+    assert_eq!(no_session.status, 401);
+    assert_eq!(no_session.json["error"]["code"], "admin_session_required");
+    let wrong = admin
+        .send(
+            "POST",
+            "/admin/v1/session",
+            None,
+            Some(&json!({ "operator_id": operator, "phrase": ALT_PHRASE })),
+        )
+        .await;
+    assert_eq!(wrong.status, 401, "{}", wrong.json);
+    assert_eq!(wrong.json["error"]["code"], "bad_credentials");
+    let opened = admin
+        .send(
+            "POST",
+            "/admin/v1/session",
+            None,
+            Some(&json!({ "operator_id": operator, "phrase": PHRASE })),
+        )
+        .await;
+    assert_eq!(opened.status, 200, "{}", opened.json);
+    let token = opened.json["token"].as_str().expect("token").to_owned();
+    assert!(token.starts_with("cas_"));
+
+    // 4. Items through the admin API, audited with the operator as the actor.
+    let workspaces = admin.rpc("workspace_list", Some(&token), &json!({})).await;
+    assert_eq!(workspaces.status, 200);
+    let workspace = workspaces.json[0]["id"]
+        .as_str()
+        .expect("workspace")
+        .to_owned();
+    let created = admin
+        .rpc(
+            "item_create",
+            Some(&token),
+            &json!({ "input": {
+                "workspace_id": workspace, "title": "Remote login", "description": "", "role_label": null,
+                "category": "Web login", "tags": [], "environment": "dev", "target": null, "custom": {},
+                "expires_at": null, "max_uses": null,
+                "payload": { "kind": "web_login", "username": USERNAME, "password": PASSWORD, "url": null, "totp": null }
+            } }),
+        )
+        .await;
+    assert_eq!(created.status, 200, "{}", created.json);
+    let item = created.json["summary"]["id"]
+        .as_str()
+        .expect("id")
+        .to_owned();
+    let listed = admin
+        .rpc("item_list", Some(&token), &json!({ "filter": {} }))
+        .await;
+    assert!(
+        listed
+            .json
+            .as_array()
+            .expect("list")
+            .iter()
+            .any(|i| i["id"] == item.as_str())
+    );
+    let revealed = admin
+        .rpc("item_reveal", Some(&token), &json!({ "item": item }))
+        .await;
+    assert_eq!(revealed.status, 200);
+    assert_eq!(revealed.json["payload"]["password"], PASSWORD);
+    let reveals = admin
+        .rpc(
+            "audit_query",
+            Some(&token),
+            &json!({ "query": { "event_type": "item.reveal", "limit": 50 } }),
+        )
+        .await;
+    assert_eq!(reveals.status, 200, "{}", reveals.json);
+    assert!(
+        reveals
+            .json
+            .as_array()
+            .expect("rows")
+            .iter()
+            .any(|row| { row["actor_kind"] == "operator" && row["actor_id"] == operator.as_str() }),
+        "{}",
+        reveals.json
+    );
+    let opens = admin
+        .rpc(
+            "audit_query",
+            Some(&token),
+            &json!({ "query": { "event_type": "admin.session_open", "limit": 50 } }),
+        )
+        .await;
+    assert_eq!(
+        opens.json.as_array().expect("rows").len(),
+        1,
+        "{}",
+        opens.json
+    );
+
+    // 5. Approvals over the admin channel: the desktop-side client (`PinnedHttps`, pinned CA, the bundle's
+    //    certificate) follows the event stream, sees the agent's request and approves it.
+    let files = daemon.dir.path().join("desktop");
+    std::fs::create_dir_all(&files).expect("desktop dir");
+    let (cert_file, key_file, ca_file) = (
+        files.join("cert.pem"),
+        files.join("key.pem"),
+        files.join("ca.pem"),
+    );
+    std::fs::write(&cert_file, &bundle.client_cert_pem).expect("cert file");
+    std::fs::write(&key_file, bundle.client_key_pem.expose()).expect("key file");
+    std::fs::set_permissions(
+        &key_file,
+        std::os::unix::fs::PermissionsExt::from_mode(0o600),
+    )
+    .expect("chmod");
+    std::fs::write(&ca_file, &bundle.ca_cert_pem).expect("ca file");
+    let pinned = PinnedHttps::with_client_cert(
+        &bundle.url,
+        &Trust::CaFileAndPin {
+            ca: ca_file,
+            pin: bundle.ca_pin.clone(),
+        },
+        (cert_file, key_file),
+        Duration::from_secs(30),
+    )
+    .expect("pinned transport");
+    let bearer = WireSecret::new(token.clone());
+    let stream = pinned
+        .send_bearer(Request::get("/admin/v1/events"), Some(&bearer))
+        .await
+        .expect("event stream");
+    assert_eq!(stream.status(), 200);
+    let mut events = EventStream::new(stream);
+    let reveal_path = format!("/v1/credentials/{}/reveal", daemon.seed.prod_item);
+    let purpose = json!({ "purpose": PURPOSE });
+    let pending = agent
+        .send(
+            "POST",
+            &reveal_path,
+            Some(&daemon.seed.token),
+            Some(&purpose),
+        )
+        .await;
+    assert_eq!(pending.status, 202, "{}", pending.json);
+    let request = pending.json["access_request"]["id"]
+        .as_str()
+        .expect("request")
+        .to_owned();
+    let seen = tokio::time::timeout(Duration::from_secs(10), async {
+        while let Some(event) = events.next().await {
+            let (name, data) = event.expect("event");
+            if name == "AccessRequestCreated" {
+                let data: Value = serde_json::from_slice(&data).expect("json");
+                return Some(data["id"].as_str().unwrap_or_default().to_owned());
+            }
+        }
+        None
+    })
+    .await
+    .expect("the request event in time");
+    assert_eq!(seen.as_deref(), Some(request.as_str()));
+    let approved = admin
+        .rpc(
+            "request_approve",
+            Some(&token),
+            &json!({ "request": request, "option": "once" }),
+        )
+        .await;
+    assert_eq!(approved.status, 200, "{}", approved.json);
+    let read = agent
+        .send(
+            "POST",
+            &reveal_path,
+            Some(&daemon.seed.token),
+            Some(&purpose),
+        )
+        .await;
+    assert_eq!(read.status, 200, "{}", read.json);
+    assert!(read.json.to_string().contains(PASSWORD));
+    drop(events);
+
+    // 6. Closing the session does not lock: the agents keep working, the old token is dead.
+    let closed = admin
+        .send("DELETE", "/admin/v1/session", Some(&token), None)
+        .await;
+    assert_eq!(closed.status, 204);
+    assert_eq!(agent.get_status(&daemon.seed.token).await, 200);
+    let stale = admin
+        .rpc("item_list", Some(&token), &json!({ "filter": {} }))
+        .await;
+    assert_eq!(stale.status, 401);
+
+    // 7. A revoke takes the device out at once.
+    daemon.revoke(&bundle).await;
+    let revoked = admin.send("GET", "/admin/v1/hello", None, None).await;
+    assert_eq!(revoked.status, 403);
+    assert_eq!(revoked.json["error"]["code"], "admin_cert_required");
+
+    // 8. `vault_lock` from a session of another enrolled desktop locks the server vault: agents get 423.
+    let second = daemon.enroll("second").await;
+    let (cert, key) = bundle_identity(&second);
+    let other = daemon.client(Some((&cert, &key)));
+    let session = other
+        .send(
+            "POST",
+            "/admin/v1/session",
+            None,
+            Some(&json!({ "operator_id": operator, "phrase": PHRASE })),
+        )
+        .await;
+    assert_eq!(session.status, 200, "{}", session.json);
+    let token = session.json["token"].as_str().expect("token").to_owned();
+    let locked = other.rpc("vault_lock", Some(&token), &json!({})).await;
+    assert_eq!(locked.status, 200, "{}", locked.json);
+    assert_eq!(agent.get_status(&daemon.seed.token).await, 423);
+    let after = other
+        .rpc("item_list", Some(&token), &json!({ "filter": {} }))
+        .await;
+    assert_eq!(after.status, 401);
+    daemon.stop().await;
 }

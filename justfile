@@ -19,10 +19,11 @@ test: node-check ui-install
     @echo "just test: all tests passed"
 
 # Acceptance scenarios A1 to A12 of docs/PLAN.md section 11, one test each, through the real TLS server, MCP and the `cerberus`
-# binary. The suite is the `tests/acceptance` crate (DEC-T24-1). `just test` runs it too.
+# binary, and A13, the remote admin API of a real `cerberusd` (ADR-0034). The suite is the `tests/acceptance` crate
+# (DEC-T24-1). `just test` runs it too.
 acceptance:
     cargo test -p cerberus-acceptance
-    @echo "just acceptance: A1 to A12 passed"
+    @echo "just acceptance: A1 to A13 passed"
 
 # Line coverage of cerberus-crypto and cerberus-core, each at least 90 percent. Needs cargo-llvm-cov.
 # The test helpers `testkit.rs` and `regressions.rs` are left out of the numbers (DEC-T24-6).

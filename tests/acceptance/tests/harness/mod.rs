@@ -38,6 +38,8 @@ use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig
 use rmcp::{RoleClient, ServiceExt};
 use serde_json::Value;
 
+pub mod remote;
+
 pub const PHRASE: &str = "orbit velvet canyon mosaic 7";
 pub const ALT_PHRASE: &str = "wrong marble lantern copper 3";
 pub const PASSWORD: &str = "canary-pw-7f3a91c2";

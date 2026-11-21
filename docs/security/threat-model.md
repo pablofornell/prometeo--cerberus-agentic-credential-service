@@ -1,10 +1,15 @@
 # Cerberus threat model (T01)
 
-- Status: Accepted (design baseline). T26 (audit) reviews it against the code.
+- Status: Accepted (design baseline). T26 (audit) reviews it against the code. TB-10 (remote mode, ADR-0034) is
+  **built** (RM steps 1–10, DEC-RM-15 to DEC-RM-24) and tested end to end: `a13_remote_admin_through_cerberusd`
+  (`tests/acceptance`), `r1_desktop_state_in_remote_mode_against_cerberusd` and
+  `remote_mode_proxies_the_allowlist_and_follows_the_server` (`apps/desktop/src-tauri/tests/`), the admin groups of
+  `crates/cerberus-api/tests/admin.rs` and `tests/admin_logging.rs`, and `admin_api_enrolment_approvals_and_revoke`
+  (`crates/cerberusd/tests/daemon.rs`).
 - Date: 2026-11-16. Updated 2026-11-21 for remote backend mode (ADR-0034): TB-10, AS-11, AS-12, ATK-11, S-9 to S-11,
   T-12, R-6, I-20 to I-22, D-9, E-1 (changed), E-14 to E-16, invariants 8 to 10, AR-19 to AR-21.
 - Method: assets → attackers → trust boundaries → STRIDE per boundary. Each threat has a **control** (with the task and
-  crate that build it) or an **accepted risk** (AR-n, section 7). Plan section 14 and scenarios A1–A12 are mapped in
+  crate that build it) or an **accepted risk** (AR-n, section 7). Plan section 14 and scenarios A1–A13 are mapped in
   sections 8 and 9.
 
 ## 1. System summary
@@ -242,7 +247,7 @@ Legend: **Ctrl** = control and where it is built (task, crate). **AR** = accepte
 | Lost phrase and recovery key | — (availability) | Clear warning at creation and in docs (T17, T28) | AR-13 |
 | Crate or API changes | T-11 | Version checks per task, `Cargo.lock`, deny/audit (T02, T29; ADR-0011) | AR-16 |
 
-## 9. Acceptance scenarios A1–A12 mapping
+## 9. Acceptance scenarios A1–A13 mapping
 
 | Scenario | Threats covered | Controls under test |
 |---|---|---|
@@ -258,7 +263,7 @@ Legend: **Ctrl** = control and where it is built (task, crate). **AR** = accepte
 | A10 Revoked key → 401 at once | S-1 | AuthTable without cache (T09) |
 | A11 Agent without `write` stores → 403 | E-7 | Scope and grant checks (T07, T10) |
 | A12 `cerberus run` child sees var, output does not | I-5, I-18, S-8 | Env injection, masking (T12) |
-| A13 (planned, RM step 10) Remote admin through `cerberusd` | S-9, S-10, E-1, E-14, E-15, E-16, I-20, I-21 | Admin off gives 404; device + session gates; approvals over the admin channel; session never locks the server (ADR-0034) |
+| A13 Remote admin through `cerberusd` | S-9, S-10, E-1, E-14, E-15, E-16, I-20, I-21, invariants 8–10 | Admin off gives 404; no certificate and an agent certificate give 403; no session 401, wrong phrase 401; items and their audit as `operator:<id>`; an agent request seen on the event stream through `PinnedHttps` and approved over the admin channel; closing a session leaves agents working; revoke gives 403 at once; a remote `vault_lock` gives agents 423 (ADR-0034, `a13_remote_admin_through_cerberusd`) |
 
 ## 10. Review triggers
 

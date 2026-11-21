@@ -221,12 +221,60 @@ into the target by hand. See the
 Export writes every secret in plain text. The file has mode `0600`. Store it carefully, and delete it when you have
 finished. The app warns you about this before it writes.
 
+## 10. Remote mode: work with a vault on a server
+
+The app can be a client of a vault that runs on a server with `cerberusd` ([ADR-0034](../adr/0034-remote-backend-mode.md)).
+Then it opens no vault of its own and serves no agents on this computer. Local mode stays the default.
+
+**Before you start.** The server needs the admin API turned on (`[admin] enabled = true`), one unlock at its terminal,
+and an enrolment of this desktop. The [daemon guide](cerberusd.md) shows the steps. `cerberusd admin enroll` writes a
+bundle file. Move it to this computer over a trusted channel (for example `scp`).
+
+**Connect.**
+
+1. On the unlock screen, choose **Connect to a remote server** under the card (or Settings › Remote server ›
+   **Connect to a server**).
+2. Choose the bundle file in the file dialog.
+3. The app shows the server, its address, the **CA pin** and the **CA SHA-256**. Run `cerberusd status` on the server
+   and compare both values. They must be the same. If they differ, do not connect.
+4. Choose **Connect**. The app restarts in remote mode. Delete the bundle file: it holds this desktop's key.
+5. Unlock with the phrase of the operator the bundle is bound to. Only that operator is offered. If the server vault
+   is locked, your phrase unlocks it, and its agents can work again.
+
+**While connected.**
+
+- The top bar shows **Remote: <server>**. Settings › Remote server shows the address, pin, fingerprint, certificate
+  expiry and the server version, and has **Test connection**.
+- Items, workspaces, grants, approvals, leases, agents (read only) and the audit log are the server's. Approval
+  requests of the server's agents appear here and in the approval window, as in local mode.
+- **Disconnect** (sidebar, `Ctrl/Cmd + L`, or the tray) ends your session only. The server vault stays open and its
+  agents keep working. Sleep and screen lock also end the session.
+- **Lock the server vault** (Settings › Remote server) locks the vault on the server. Its agents get HTTP 423 until
+  someone unlocks it again. **Lock and revoke all** also acts on the server vault.
+- The session ends by itself after 15 idle minutes (the server can change this). Then the app shows the unlock screen.
+- Some actions need the local vault and show "Not available for a remote server": copy to the clipboard, item
+  history, the password and SSH key generators, SSH key import, making or changing agents and their keys, the policy
+  simulator, revoke all leases, the audit chain check and export, CSV import and export, backup and restore, and the
+  vault settings. The recovery key never works over the network.
+
+**Problems.**
+
+| The app says | What to do |
+|---|---|
+| Cannot reach the server | Check the network or the SSH tunnel, then **Try again** |
+| The server is not the one you enrolled with | The server's certificate does not match the pin. Do not connect. Ask the server owner |
+| The server no longer accepts this desktop | The enrolment was revoked or its certificate expired (90 days). Enrol again and import the new bundle |
+| The server does not match this desktop | Update one of them, or turn on the admin API |
+
+**Back to the local vault.** Choose **Use the local vault** under the unlock card or in Settings › Remote server. The
+app restarts with the vault of this computer. Imported servers stay in Settings until you choose **Forget**.
+
 ## Keyboard
 
 | Keys | Action |
 |---|---|
 | `Ctrl/Cmd + K` | Command palette |
-| `Ctrl/Cmd + L` | Lock now |
+| `Ctrl/Cmd + L` | Lock now (in remote mode: disconnect) |
 | `G`, then `D`, `V`, `A`, `P`, `R`, `L`, `U`, `S` | Go to Dashboard, Vault, Agents, Policies, Approvals, Leases, Audit, Settings |
 | `N` | New item |
 | `/` | Search on screens that have search |

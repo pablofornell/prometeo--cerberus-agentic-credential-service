@@ -302,3 +302,24 @@ I did not rebuild the release bundles (`dist/` is present and verifies).
    `zvariant_derive`). Revisit at each `sqlx` and Tauri upgrade.
 9. Packages for macOS and Windows, signing, and GitHub CI are untested (section 9).
 10. All other open Low and Info findings are in section 5.2.
+
+## 11. Addendum (2026-11-21): remote backend mode, A13
+
+Written by the implementer of RM steps 8 to 10 (ADR-0034, `docs/remote-mode-plan.md`), not by a fresh verifier. The
+sections above are the T30 report and are unchanged.
+
+| Scenario | Test | Proves | Result |
+|---|---|---|---|
+| A13 Remote admin through `cerberusd` | `a13_remote_admin_through_cerberusd` (`tests/acceptance`) | With the admin API off, `/admin/v1/hello` is `404 route_not_found`. With it on: no client certificate and a CA-signed agent certificate get `403 admin_cert_required`; `rpc/item_list` without a session is `401 admin_session_required`; a wrong phrase is `401 bad_credentials`; the right one opens a `cas_` session; `item_create`, `item_list` and `item_reveal` work and the reveal is audited with actor `operator:<id>`, with one `admin.session_open`; an agent's `ask_once` read of a `prod` item waits (202), the desktop-side client (`PinnedHttps`, bundle CA and pin, `EventStream`) sees `AccessRequestCreated`, `rpc/request_approve` gives a lease and the agent's read answers 200; `DELETE` of the session leaves `/v1/status` at 200 and the old token at 401; `cerberusd admin revoke` gives 403 at once; `rpc/vault_lock` from a second enrolment's session gives agents 423 | PASS |
+| R1 Desktop in remote mode against `cerberusd` | `r1_desktop_state_in_remote_mode_against_cerberusd` (`apps/desktop/src-tauri/tests/remote_daemon.rs`) | A `DesktopState` with an active profile opens no local vault; `vault_status` is `sealed` with the server `unlocked`; `vault_unlock` opens a session; `item_list` and `request_approve` go to the server; `vault_lock` locks the server vault (agents 423) and the desktop is sealed | PASS |
+
+Gates run once at the end, one at a time, cargo jobs capped at 4:
+
+| Gate | Exit | Numbers |
+|---|---|---|
+| `cargo test --workspace -j 4` | 0 | 61 test binaries, 968 passed, 0 failed, 1 ignored (the `cerberus-mcp` doc example) |
+| `pnpm --dir apps/desktop/ui test` | 0 | 30 files, 394 passed |
+| `just check` | 0 | fmt, clippy (workspace, all targets, `-D warnings`), deny, audit, `deps-check`, `client-deps-check`, `tsc -b`, eslint, tokens |
+
+Not verified: the plan's Xvfb smoke run of the real desktop app against a local `cerberusd` (no GUI app was started in
+this build, DEC-RM-24 h). The UI was checked with vitest and headless Playwright screenshots against the mock IPC.

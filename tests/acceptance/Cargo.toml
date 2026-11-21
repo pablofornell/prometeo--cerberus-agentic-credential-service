@@ -1,6 +1,6 @@
 [package]
 name = "cerberus-acceptance"
-description = "Acceptance suite A1-A12 (docs/PLAN.md section 11). Tests only, no library code."
+description = "Acceptance suite A1-A13 (docs/PLAN.md section 11, ADR-0034). Tests only, no library code."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,6 +17,7 @@ path = "tests/acceptance.rs"
 
 # No normal dependencies: the suite only has tests, so the dependency-direction check has nothing to allow (DEC-T24-1).
 [dev-dependencies]
+cerberus-admin.workspace = true
 cerberus-api.workspace = true
 cerberus-client.workspace = true
 cerberus-core.workspace = true
@@ -24,6 +25,8 @@ cerberus-crypto.workspace = true
 cerberus-mcp.workspace = true
 cerberus-store.workspace = true
 cerberus-types.workspace = true
+# A13 runs the real daemon in this process (dev edges are free, DEC-T10-10).
+cerberusd = { path = "../../crates/cerberusd", version = "0.3.0" }
 jiff.workspace = true
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "http2"] }
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest", "reqwest-tls-no-provider"] }

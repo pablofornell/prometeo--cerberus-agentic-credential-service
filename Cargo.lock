@@ -819,6 +819,7 @@ dependencies = [
 name = "cerberus-acceptance"
 version = "0.3.0"
 dependencies = [
+ "cerberus-admin",
  "cerberus-api",
  "cerberus-client",
  "cerberus-core",
@@ -826,6 +827,7 @@ dependencies = [
  "cerberus-mcp",
  "cerberus-store",
  "cerberus-types",
+ "cerberusd",
  "jiff 1.0.0",
  "reqwest",
  "rmcp",

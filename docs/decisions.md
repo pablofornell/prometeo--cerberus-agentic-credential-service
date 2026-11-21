@@ -1597,6 +1597,22 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   headless Playwright screenshots against the mock. (`apps/desktop/ui/src/{remote,state/backendMode.ts,
   screens/unlock,screens/settings/ServerSection.tsx,shell}`, `src/remote/remote.test.tsx`)
 
+- **DEC-RM-25** — RM — Acceptance A13, the desktop against the real daemon, and the docs, as built (plan step 10).
+  (a) `a13_remote_admin_through_cerberusd` (`tests/acceptance`) with a new fixture `tests/harness/remote.rs`: the vault
+  is made with the core API in a `0700` folder and `cerberusd` serves it in the test process (the A1–A12 `Env` cannot
+  be used: its manual clock and its own server cannot be handed to the daemon). Admin calls go through `reqwest` with
+  the bundle's client identity; the desktop-side client (`PinnedHttps` with the bundle's CA and pin, `EventStream`)
+  follows `/admin/v1/events` and sees the agent's request before the approval. The plan's points 7 (revoke) and 8
+  (`vault_lock` from a new session) keep their order: the lock runs from a session of a second enrolment, because the
+  first one is revoked. The agent certificate of point 2 is signed by the vault CA at vault creation. New dev
+  dependencies of `cerberus-acceptance`: `cerberusd`, `cerberus-admin`. (b) `r1_desktop_state_in_remote_mode_against_
+  cerberusd` (`apps/desktop/src-tauri/tests/remote_daemon.rs`) shares `tests/common` with `tests/remote.rs`. (c) Docs:
+  user guide section 10 "Remote mode", security model "Remote mode" and an AR-20 row, threat model status line (TB-10
+  built, with the tests), the A13 row of its scenario map, an addendum to the acceptance report, `just acceptance`
+  text. (d) Not done: the Xvfb smoke run of the real app (DEC-RM-24 h). (e) `cerberusd` as a dev dependency carries
+  `version = "0.3.0"` (DEC-059), else `cargo deny` reports a wildcard; the desktop's entry from step 8 had none, so
+  `just check` failed on `1a3da3c` and `94db05d` and passes from this commit on.
+
 ## RD — RustDesk connections (2026-11-21)
 
 - **DEC-RD-1** — New item kind `rustdesk` (Rust `ItemKind::Rustdesk`, wire value `rustdesk`) for a machine reached with

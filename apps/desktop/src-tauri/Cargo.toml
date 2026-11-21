@@ -59,7 +59,7 @@ tauri-build = { workspace = true }
 [dev-dependencies]
 tempfile.workspace = true
 # A real `cerberusd` with the admin API for the remote mode tests (dev edges are free, DEC-T10-10).
-cerberusd = { path = "../../../crates/cerberusd" }
+cerberusd = { path = "../../../crates/cerberusd", version = "0.3.0" }
 rustls.workspace = true
 
 [lints]
