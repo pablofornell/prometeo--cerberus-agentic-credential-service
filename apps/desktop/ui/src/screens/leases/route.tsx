@@ -5,6 +5,7 @@ import { t, useScreenT } from "../../i18n";
 import { ipc } from "../../ipc/client";
 import { qk } from "../../ipc/keys";
 import { openOverlay } from "../../shell/uiStore";
+import { useRemoteUnsupported } from "../../state/backendMode";
 import { useCan } from "../../state/session";
 import { formatLeft, useNow } from "../../state/time";
 import { Button, ConfirmDialog, EmptyState, EnvBadge, Notice, Panel, Select, TtlRing, useToast } from "../../ui";
@@ -21,6 +22,8 @@ type S = ReturnType<typeof useScreenT<typeof messages>>;
 
 function StopBand({ count, onRevokeAll }: { count: number; onRevokeAll: () => void }) {
   const s = useScreenT(messages);
+  // Remote mode: lease_revoke_all is local only (DEC-RM-14); "Lock and revoke all" acts on the server vault.
+  const localOnly = useRemoteUnsupported("lease_revoke_all");
   return (
     <section className="stop" aria-labelledby="stop-h">
       <div>
@@ -28,9 +31,11 @@ function StopBand({ count, onRevokeAll }: { count: number; onRevokeAll: () => vo
         <p className="small">{s("stop.body")}</p>
       </div>
       <div className="acts">
-        <Button icon="x" disabled={count === 0} onClick={onRevokeAll}>
-          {s("stop.revokeAll")}
-        </Button>
+        {!localOnly && (
+          <Button icon="x" disabled={count === 0} onClick={onRevokeAll}>
+            {s("stop.revokeAll")}
+          </Button>
+        )}
         <Button variant="danger" size="lg" icon="siren" onClick={() => openOverlay("panic")}>
           {s("stop.panic")}
         </Button>

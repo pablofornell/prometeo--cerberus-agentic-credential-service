@@ -1,6 +1,8 @@
 import { useScreenT } from "../../i18n";
 import type { GrantMode, SimulationRow_Serialize } from "../../bindings";
 import { EnvBadge, Icon, Panel, Button } from "../../ui";
+import { LocalOnlyNotice } from "../../remote/LocalOnly";
+import { useRemoteUnsupported } from "../../state/backendMode";
 import { QueryGate } from "../agents/QueryGate";
 import { messages } from "./messages";
 import { useItemEnvs, useSimulation } from "./queries";
@@ -36,7 +38,9 @@ export function describeDecision(row: SimulationRow_Serialize, s: S): { text: st
 /** "What can agent X see?" One row for each item and permission the policy engine answers for. */
 export function Simulator({ agentId, agentName }: { agentId: string; agentName: string }) {
   const s = useScreenT(messages);
-  const query = useSimulation(agentId);
+  // Remote mode: policy_simulate is not on the remote allowlist (DEC-RM-14); the grants themselves are.
+  const localOnly = useRemoteUnsupported("policy_simulate");
+  const query = useSimulation(agentId, !localOnly);
   const items = useItemEnvs();
   const envOf = (id: string) => items.data?.find((i) => i.id === id)?.environment;
   return (
@@ -45,11 +49,18 @@ export function Simulator({ agentId, agentName }: { agentId: string; agentName: 
       icon="search"
       title={s("sim.title", { name: agentName })}
       actions={
-        <Button size="sm" icon="refresh" loading={query.isFetching && !query.isPending} onClick={() => void query.refetch()}>
-          {s("sim.run")}
-        </Button>
+        localOnly ? undefined : (
+          <Button size="sm" icon="refresh" loading={query.isFetching && !query.isPending} onClick={() => void query.refetch()}>
+            {s("sim.run")}
+          </Button>
+        )
       }
     >
+      {localOnly ? (
+        <div className="local-only-pad">
+          <LocalOnlyNotice body={s("sim.remote")} />
+        </div>
+      ) : (
       <QueryGate query={query} action={s("sim.failed")} loadingLabel={s("sim.loading")} rows={3}>
         {(rows) =>
           rows.length === 0 ? (
@@ -83,6 +94,7 @@ export function Simulator({ agentId, agentName }: { agentId: string; agentName: 
           )
         }
       </QueryGate>
+      )}
     </Panel>
   );
 }

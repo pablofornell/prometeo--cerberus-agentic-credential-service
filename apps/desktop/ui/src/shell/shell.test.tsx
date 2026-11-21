@@ -269,9 +269,15 @@ describe("command palette", () => {
   });
 
   it("command list helpers", () => {
-    const cmds = buildCommands({ navigate: () => undefined, lock: () => undefined, panic: () => undefined, verifyAudit: () => undefined, exportCa: () => undefined, createBackup: () => undefined, cycleTheme: () => undefined, showShortcuts: () => undefined, themeLabel: "Theme: dark" });
+    const ctx = { navigate: () => undefined, lock: () => undefined, panic: () => undefined, verifyAudit: () => undefined, exportCa: () => undefined, createBackup: () => undefined, cycleTheme: () => undefined, showShortcuts: () => undefined, themeLabel: "Theme: dark", remote: false };
+    const cmds = buildCommands(ctx);
     expect(filterCommands(cmds, "ca cert").map((c) => c.id)).toEqual(["export-ca"]);
     expect(cmds.find((c) => c.id === "panic")?.keys).toBeUndefined();
+    // Remote mode: lock is Disconnect, and the actions of a local vault are not offered (DEC-RM-11).
+    const remote = buildCommands({ ...ctx, remote: true });
+    expect(remote.find((c) => c.id === "lock")?.label).toBe("Disconnect from the server");
+    for (const id of ["new-agent", "import-csv", "connect", "verify", "export-ca", "backup"]) expect(remote.some((c) => c.id === id)).toBe(false);
+    expect(remote.find((c) => c.id === "panic")?.label).toBe("Lock the server vault and revoke all");
   });
 });
 

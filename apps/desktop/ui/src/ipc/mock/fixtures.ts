@@ -13,6 +13,8 @@ import type {
   LeaseDetailView_Serialize,
   NetworkView_Serialize,
   OperatorPublic_Serialize,
+  RemoteProfileView,
+  RemoteStatusView_Serialize,
   Value,
   WorkspaceView,
 } from "../../bindings";
@@ -231,4 +233,54 @@ export const fixtureNetwork = (): NetworkView_Serialize => ({
   leaf_not_after: secondsFromNow((scenario() === "cert-soon" ? 12 : 81) * DAY),
   custom_cert: false,
   mtls_required: false,
+});
+
+// ---- Remote mode (ADR-0034) ------------------------------------------------------------------------------------------
+
+/** The mock's copy of the remote allowlist (`cerberus_admin::remote::REMOTE_COMMANDS`). The real list comes from
+ *  `remote_status`; the UI never keeps its own copy. */
+export const MOCK_REMOTE_COMMANDS = [
+  "vault_status", "vault_list_operators", "vault_unlock", "vault_lock", "vault_panic", "ui_activity",
+  "workspace_list", "workspace_put", "item_list", "item_get", "item_create", "item_update", "item_delete",
+  "item_reveal", "item_totp_preview", "agent_list", "grant_list", "grant_put", "grant_delete", "request_list_pending",
+  "request_approve", "request_deny", "lease_list", "lease_revoke", "audit_query",
+] as const;
+
+/** Commands that run on the desktop in both modes. */
+export const MOCK_DESKTOP_COMMANDS = ["remote_status", "remote_import_bundle", "remote_activate", "remote_disconnect", "remote_forget", "file_pick_open"] as const;
+
+/** A fake enrolment bundle: the pin and fingerprint are sample text, not of a real CA. */
+export const MOCK_PROFILE: RemoteProfileView = {
+  id: "0196d7a0-1c2e-7c3a-9f00-00000000a001",
+  label: "build-server",
+  url: "https://vault.example.test:8443",
+  ca_pin: "sha256/REMOTEPINDEMOREMOTEPINDEMOREMOTEPIN000000=",
+  ca_sha256: "9f1c2e7d4b8a0c3e5f6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f7089a1b",
+  operator_id: "op-ana",
+  not_after: secondsFromNow(80 * DAY),
+  active: false,
+};
+
+/** A second stored profile, for the switch list. */
+export const MOCK_PROFILE_2: RemoteProfileView = {
+  ...MOCK_PROFILE,
+  id: "0196d7a0-1c2e-7c3a-9f00-00000000a002",
+  label: "staging-box",
+  url: "https://staging.example.test:8443",
+  not_after: secondsFromNow(9 * DAY),
+};
+
+/** The `remote` part of `vault_status` for a profile. */
+export const remoteStatusOf = (profile: RemoteProfileView, extra: Partial<RemoteStatusView_Serialize> = {}): RemoteStatusView_Serialize => ({
+  profile_id: profile.id,
+  label: profile.label,
+  url: profile.url,
+  operator_id: profile.operator_id,
+  not_after: profile.not_after,
+  server_state: "unlocked",
+  reachable: true,
+  has_session: false,
+  server_version: "0.3.0",
+  problem: null,
+  ...extra,
 });

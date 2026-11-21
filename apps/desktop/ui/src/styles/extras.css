@@ -123,3 +123,20 @@ main.content:focus-visible { outline: none; }
 :root[data-css-zoom] .vb-browser { height: calc(var(--vh-full) - var(--topbar-h)); }
 :root[data-css-zoom] .dlg { max-height: calc(var(--vh-full) - 40px); }
 :root[data-css-zoom] .palette ul { max-height: calc(var(--vh-full) / 2); }
+
+/* Remote mode (ADR-0034): the top bar names the server in use. A flat info chip with a hairline, same height as the
+   palette trigger; it links to Settings > Remote server. Off (server unreachable) turns it to the warning colours. */
+.remote-badge {
+  display: inline-flex; align-items: center; gap: var(--s-1_5); height: var(--ctl-md); padding: 0 var(--s-2_5); max-width: 280px;
+  border-radius: var(--r-sm); border: 1px solid color-mix(in srgb, var(--c-info-fg) 35%, transparent); background: var(--c-info-tint); color: var(--c-info-on-tint);
+  font-size: var(--t-body-sm-size); font-weight: 500; text-decoration: none; white-space: nowrap;
+  transition: border-color var(--d-fast) var(--ease-standard);
+}
+.remote-badge > span { overflow: hidden; text-overflow: ellipsis; }
+.remote-badge .icon { flex: none; }
+.remote-badge:hover { border-color: var(--c-info-fg); }
+.remote-badge:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 1px; }
+.remote-badge.off { border-color: color-mix(in srgb, var(--c-warning-fg) 35%, transparent); background: var(--c-warning-tint); color: var(--c-warning-on-tint); }
+@media (forced-colors: active) {
+  .remote-badge { border-color: CanvasText; }
+}

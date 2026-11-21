@@ -3,6 +3,7 @@ import type { AuditEntryView_Serialize } from "../../bindings";
 import { ipc } from "../../ipc/client";
 import { useIpcQuery } from "../../ipc/queries";
 import { qk } from "../../ipc/keys";
+import { useRemoteUnsupported } from "../../state/backendMode";
 
 export type Range = "day" | "week" | "month" | "all";
 export const RANGE_SECONDS: Record<Range, number | null> = { day: 86_400, week: 604_800, month: 2_592_000, all: null };
@@ -30,7 +31,9 @@ export const auditKeys = {
 
 /** The same key as the dashboard health row, so both screens show one answer. */
 export function useChain() {
+  const localOnly = useRemoteUnsupported("audit_verify");
   return useQuery({
+    enabled: !localOnly,
     queryKey: auditKeys.verify(),
     queryFn: () => ipc.auditVerify(),
     staleTime: 60_000,

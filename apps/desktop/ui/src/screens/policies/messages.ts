@@ -160,6 +160,7 @@ export const messages = defineMessages({
   "day.friday": "Fri",
   "day.saturday": "Sat",
   "day.sunday": "Sun",
+  "sim.remote": "The simulator runs on the local vault. The grants on the left are those of the server and work as usual.",
 });
 
 export type PolicyMessageKey = keyof typeof messages;

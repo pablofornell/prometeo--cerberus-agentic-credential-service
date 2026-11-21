@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { t } from "../i18n";
 import { usePendingRequests, useVaultStatus } from "../ipc/queries";
+import { useRemote } from "../state/backendMode";
 import { useAutolockSeconds, useSessionLabel } from "../state/session";
 import { formatLeft } from "../state/time";
 import { Button, GateMark, IconButton, Icon, Kbd, TtlRing, useRandomTurn } from "../ui";
@@ -62,24 +63,33 @@ function Collar() {
   const left = useAutolockSeconds();
   const actions = useShellActions();
   const state = useVaultStatus().data?.state ?? "sealed";
+  const remote = useRemote();
   const open = state === "unlocked";
+  const lockedText = remote ? t("remote.collar.disconnected") : t(state === "locking" ? "collar.locking" : "collar.locked");
+  const openText = remote ? (label ? t("remote.collar.connectedAs", { name: label }) : t("remote.collar.connected")) : label ? t("collar.unlockedBy", { name: label }) : t("collar.unlocked");
   return (
     <div className="collar" role="group" aria-label={t("collar.label")}>
       <div className="who">
         {open ? <TtlRing gate total={1800} left={left ?? 1800} size={32} /> : <GateMark size={32} mode="locked" />}
         <span className="t">
           <span className="small">
-            {!open ? t(state === "locking" ? "collar.locking" : "collar.locked") : label ? t("collar.unlockedBy", { name: label }) : t("collar.unlocked")}
+            {open ? openText : lockedText}
           </span>
           {open && <span className="small muted num">{left === null ? t("collar.autolock.off") : t("collar.autolock", { time: formatLeft(left) })}</span>}
         </span>
       </div>
       {open && (
         <div className="row">
-          <Button size="sm" icon="lock" title={t("collar.lock.title")} onClick={actions.lock}>
-            {t("collar.lock")}
-          </Button>
-          <IconButton icon="siren" size="sm" variant="danger-ghost" label={t("collar.panic")} onClick={() => openOverlay("panic")} />
+          {remote ? (
+            <Button size="sm" icon="unplug" title={t("remote.collar.disconnect.title")} onClick={actions.lock}>
+              {t("remote.collar.disconnect")}
+            </Button>
+          ) : (
+            <Button size="sm" icon="lock" title={t("collar.lock.title")} onClick={actions.lock}>
+              {t("collar.lock")}
+            </Button>
+          )}
+          <IconButton icon="siren" size="sm" variant="danger-ghost" label={remote ? t("remote.collar.panic") : t("collar.panic")} onClick={() => openOverlay("panic")} />
         </div>
       )}
     </div>

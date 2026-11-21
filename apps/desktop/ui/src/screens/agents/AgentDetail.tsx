@@ -10,6 +10,7 @@ import { Button, Chip, ConfirmDialog, Icon, IconButton, Notice, Panel, StatusDot
 import { GrantSentence, ModeBadge } from "../policies/GrantSentence";
 import { QueryGate } from "./QueryGate";
 import { SnippetsPanel } from "./SnippetsPanel";
+import { LocalOnlyNotice } from "../../remote/LocalOnly";
 import { RotateKeyDialog, AddKeyDialog } from "./dialogs";
 import { ago, inFuture, useAgentsT } from "./format";
 import { useAgentGrants, useWorkspaces } from "./queries";
@@ -99,11 +100,13 @@ function GrantsSummary({ agent }: { agent: AgentView_Serialize }) {
 interface DetailProps {
   agent: AgentView_Serialize;
   canEdit: boolean;
+  /** Remote mode: the agent is shown, but its changes, keys, certificates and snippets are local only. */
+  localOnly?: boolean;
   onReveal: (reveal: TokenReveal) => void;
 }
 
 /** One agent: header, keys, snippets and a plain-words summary of its grants. */
-export function AgentDetail({ agent, canEdit, onReveal }: DetailProps) {
+export function AgentDetail({ agent, canEdit, localOnly = false, onReveal }: DetailProps) {
   const s = useAgentsT();
   const run = useRunner();
   const toast = useToast();
@@ -162,7 +165,7 @@ export function AgentDetail({ agent, canEdit, onReveal }: DetailProps) {
         )}
       </header>
 
-      {!canEdit && <Notice tone="info" title={s("detail.viewerNote")} />}
+      {localOnly ? <LocalOnlyNotice body={s("detail.remote")} /> : !canEdit && <Notice tone="info" title={s("detail.viewerNote")} />}
       {suspended && <Notice tone="warn" title={s("detail.suspended")} />}
       {revoked && <Notice tone="neutral" title={s("detail.revokedNote")} />}
 
@@ -194,14 +197,14 @@ export function AgentDetail({ agent, canEdit, onReveal }: DetailProps) {
             </thead>
             <tbody>
               {agent.keys.map((k) => (
-                <KeyRow key={k.id} k={k} canEdit={canEdit && !revoked} canIssue={isOwner} now={now} onRotate={() => setRotating(k)} onRevoke={() => setRevokingKey(k)} onIssue={() => void issueCertificate(k)} />
+                <KeyRow key={k.id} k={k} canEdit={canEdit && !revoked} canIssue={isOwner && !localOnly} now={now} onRotate={() => setRotating(k)} onRevoke={() => setRevokingKey(k)} onIssue={() => void issueCertificate(k)} />
               ))}
             </tbody>
           </table>
         )}
       </Panel>
 
-      {!revoked && <SnippetsPanel agentId={agent.id} />}
+      {!revoked && !localOnly && <SnippetsPanel agentId={agent.id} />}
       <GrantsSummary agent={agent} />
 
       <RotateKeyDialog keyView={rotating} onClose={() => setRotating(null)} onRotated={onReveal} />

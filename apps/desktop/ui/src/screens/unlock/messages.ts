@@ -51,6 +51,13 @@ export const messages = defineMessages({
 
   "opening": "Unlocked. Opening the vault.",
 
+  "remote.title": "Connect to {label}",
+  "remote.sealed": "The server vault is locked. Your phrase unlocks it, for its agents too.",
+  "remote.submit.connect": "Connect",
+  "remote.conflict": "Another operator has the server vault unlocked. Only that operator can connect now.",
+  "remote.noOperator": "The operator this desktop is enrolled for is not in the server vault. Enrol this desktop again on the server.",
+  "remote.opening": "Connected. Opening the server vault.",
+
   "empty.title": "No vault on this device",
   "empty.body": "Create a new vault, or restore a backup file made by Cerberus on another device.",
   "empty.create": "Create vault",

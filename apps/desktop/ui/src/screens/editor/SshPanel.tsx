@@ -3,6 +3,8 @@ import { useScreenT } from "../../i18n";
 import { ipc, isIpcFailure } from "../../ipc/client";
 import { openFile } from "../../ipc/dialogs";
 import type { SshKeySource } from "../../bindings";
+import { LocalOnlyNotice } from "../../remote/LocalOnly";
+import { useRemoteUnsupported } from "../../state/backendMode";
 import { Button, cx, errorText, Field, Icon, IconButton, Input, useToast } from "../../ui";
 import { inDesktopShell, MAX_KEY_FILE_BYTES, useNativeFileDrop } from "./keyfiles";
 import { messages } from "./messages";
@@ -33,6 +35,8 @@ export function SshPanel({ state, patch, problems }: Props) {
   const [passphrase, setPassphrase] = useState("");
   const [importProblem, setImportProblem] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  // Remote mode: the key is made or read into a draft of this desktop, which the server cannot use (ADR-0034 5.6).
+  const localOnly = useRemoteUnsupported("ssh_key_generate");
 
   const run = useCallback(
     async (make: () => ReturnType<typeof ipc.sshKeyImport>, done: string) => {
@@ -69,7 +73,7 @@ export function SshPanel({ state, patch, problems }: Props) {
     await importSource({ kind: "pem", pem: await readText(file) });
   };
 
-  useNativeFileDrop({ onOver: setOver, onPath: importPath }, state.kind === "ssh_key");
+  useNativeFileDrop({ onOver: setOver, onPath: importPath }, state.kind === "ssh_key" && !localOnly);
 
   const choose = async () => {
     if (!inDesktopShell()) {
@@ -106,6 +110,10 @@ export function SshPanel({ state, patch, problems }: Props) {
   return (
     <fieldset className="ed-group">
       <legend>{tr("ssh.legend")}</legend>
+      {localOnly ? (
+        <LocalOnlyNotice body={tr("ssh.remote")} />
+      ) : (
+        <>
       <Field label={tr("ssh.passphrase")}>
         {(p) => <SecretInput label={tr("ssh.passphrase")} control={p} value={passphrase} onChange={setPassphrase} />}
       </Field>
@@ -149,6 +157,8 @@ export function SshPanel({ state, patch, problems }: Props) {
           }}
         />
       </div>
+        </>
+      )}
       <div aria-live="polite">
         {keyProblem && (
           <p className="problem" id="ed-ssh-problem">

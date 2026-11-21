@@ -9,6 +9,7 @@ import type {
   NetworkView_Serialize,
 } from "../../bindings";
 import { t, useScreenT } from "../../i18n";
+import { useRemote } from "../../state/backendMode";
 import type { IpcFailure } from "../../ipc/client";
 import { useVaultStatus } from "../../ipc/queries";
 import { useHashQuery } from "../../shell/location";
@@ -122,7 +123,8 @@ interface BandProps {
   waiting: number;
   leases: number;
   agents: number;
-  onConnect: () => void;
+  /** `null` in remote mode: the connect guide is for agents of the local vault. */
+  onConnect: (() => void) | null;
 }
 
 /** One stat of the header: the number as a figure and its own translated label. The whole sentence stays as the screen-reader text. */
@@ -141,11 +143,12 @@ function Band({ m, waiting, leases, agents, onConnect }: BandProps) {
   const label = useSessionLabel();
   const role = useRole();
   const left = useAutolockSeconds();
+  const remote = useRemote();
   return (
     <section className="band" aria-labelledby="dash-band-h">
       <GateMark size={48} mode="open" />
       <div>
-        <h2 id="dash-band-h">{m("band.title")}</h2>
+        <h2 id="dash-band-h">{remote ? m("band.title.remote", { label: remote.label }) : m("band.title")}</h2>
         <div className="facts">
           {label && role && <span>{m("band.signedIn", { name: label, role })}</span>}
           <span>
@@ -161,7 +164,7 @@ function Band({ m, waiting, leases, agents, onConnect }: BandProps) {
         </div>
       </div>
       <div className="acts">
-        <Button icon="plus" onClick={onConnect}>{m("band.connect")}</Button>
+        {onConnect && <Button icon="plus" onClick={onConnect}>{m("band.connect")}</Button>}
       </div>
       <div className="figs" role="group" aria-label={m("band.trace")}>
         <Figure m={m} k="band.agents" n={agents} />
@@ -225,9 +228,12 @@ function Health({
   m,
   network,
   status,
+  localOnly,
 }: {
   m: M;
   network: { data?: NetworkView_Serialize; error: IpcFailure | null; isPending: boolean };
+  /** Remote mode: the chain check and the TLS listener are the server's (`cerberusd status`). */
+  localOnly: boolean;
   status: { memlock_ok: boolean; os_hook_ok: boolean; header_ok: boolean; kdf: KdfParamsView | null };
 }) {
   const [, navigate] = useLocation();
@@ -236,13 +242,16 @@ function Health({
   const rows: HealthRow[] = [];
 
   const verify = { label: m("health.verify"), run: () => void chain.refetch() };
-  if (chain.isPending || chain.isFetching) rows.push({ key: "chain", tone: "off", title: m("health.chain.checking"), sub: "" });
+  if (localOnly) rows.push({ key: "server", tone: "off", title: t("remote.unsupported"), sub: m("health.remote.sub") });
+  else if (chain.isPending || chain.isFetching) rows.push({ key: "chain", tone: "off", title: m("health.chain.checking"), sub: "" });
   else if (chain.isError) rows.push({ key: "chain", tone: "warn", title: m("health.chain.error"), sub: errorText(chain.error.error), action: verify });
   else if (chain.data.ok) rows.push({ key: "chain", tone: "ok", title: m("health.chain.ok"), sub: m("health.chain.okSub", { count: chain.data.count.toLocaleString() }), action: verify });
   else rows.push({ key: "chain", tone: "bad", title: m("health.chain.bad", { seq: (chain.data.broken_seq ?? 0).toLocaleString() }), sub: m("health.chain.badSub"), action: { label: m("alert.openAudit"), run: () => navigate("~/audit") } });
 
   const settingsAction = { label: m("health.settings"), run: () => navigate("~/settings") };
-  if (network.isPending) rows.push({ key: "tls", tone: "off", title: m("connect.loading"), sub: "" });
+  if (localOnly) {
+    // Shown once, in the chain row above.
+  } else if (network.isPending) rows.push({ key: "tls", tone: "off", title: m("connect.loading"), sub: "" });
   else if (network.data) {
     const net = network.data;
     if (!net.listening) rows.push({ key: "tls", tone: "bad", title: m("health.tls.down"), sub: net.error ?? m("health.tls.downNoReason"), action: settingsAction });
@@ -263,7 +272,7 @@ function Health({
     ? { key: "mem", tone: "ok", title: m("health.mem.ok"), sub: m("health.mem.okSub") }
     : { key: "mem", tone: "warn", title: m("health.mem.bad"), sub: m("health.mem.badSub") });
   rows.push(status.os_hook_ok
-    ? { key: "hook", tone: "ok", title: m("health.hook.ok"), sub: m("health.hook.okSub") }
+    ? { key: "hook", tone: "ok", title: m("health.hook.ok"), sub: localOnly ? m("health.hook.remoteSub") : m("health.hook.okSub") }
     : { key: "hook", tone: "warn", title: m("health.hook.bad"), sub: m("health.hook.badSub"), action: settingsAction });
   if (!status.header_ok) rows.push({ key: "header", tone: "bad", title: m("health.header.bad"), sub: m("health.header.badSub") });
 
@@ -383,7 +392,7 @@ export default function DashboardScreen() {
   // `?connect=1` (from the command palette) opens the guide at once.
   const [connectOpen, setConnectOpen] = useState(() => hashQuery.get("connect") === "1");
   const status = useVaultStatus().data;
-  const { agents, items, leases, requests, network } = useDashboardData();
+  const { agents, items, leases, requests, network, localOnly } = useDashboardData();
   const chain = useChainReport();
   const now = useNow(1000);
   useSeedFeed();
@@ -436,12 +445,12 @@ export default function DashboardScreen() {
           gate
           title={m("empty.title")}
           body={m("empty.body")}
-          action={<Button variant="ghost" icon="info" onClick={() => setConnectOpen(true)}>{m("empty.connect")}</Button>}
+          action={localOnly ? undefined : <Button variant="ghost" icon="info" onClick={() => setConnectOpen(true)}>{m("empty.connect")}</Button>}
         />
         <div className="dash-empty">
           <ol className="steps" aria-label={m("empty.steps")}>
             <li><span className="grow">{m("empty.step.item")}</span><Button size="sm" variant="primary" onClick={() => navigate("~/editor/new")}>{m("empty.step.item.action")}</Button></li>
-            <li><span className="grow">{m("empty.step.agent")}</span><Button size="sm" onClick={() => navigate("~/agents?new=1")}>{m("empty.step.agent.action")}</Button></li>
+            {!localOnly && <li><span className="grow">{m("empty.step.agent")}</span><Button size="sm" onClick={() => navigate("~/agents?new=1")}>{m("empty.step.agent.action")}</Button></li>}
             <li><span className="grow">{m("empty.step.grant")}</span><Button size="sm" onClick={() => navigate("~/policies?new=1")}>{m("empty.step.grant.action")}</Button></li>
           </ol>
         </div>
@@ -454,7 +463,7 @@ export default function DashboardScreen() {
   return (
     <section aria-label={t("screen.dashboard")} data-screen="dashboard" className="dash">
       <Alerts agents={agentList} chainBroken={brokenSeq} headerOk={status.header_ok} m={m} />
-      <Band m={m} agents={activeAgents} waiting={requests.data?.length ?? 0} leases={leases.data?.length ?? 0} onConnect={() => setConnectOpen(true)} />
+      <Band m={m} agents={activeAgents} waiting={requests.data?.length ?? 0} leases={leases.data?.length ?? 0} onConnect={localOnly ? null : () => setConnectOpen(true)} />
       <div className="cols c-main-side">
         {requests.isError ? (
           <Panel title={m("queue.title")} icon="bell"><PartError m={m} error={requests.error} onRetry={() => void requests.refetch()} /></Panel>
@@ -463,7 +472,7 @@ export default function DashboardScreen() {
         ) : (
           <Queue requests={requests.data} m={m} now={now} />
         )}
-        <Health m={m} network={network} status={status} />
+        <Health m={m} network={network} status={status} localOnly={localOnly} />
       </div>
       <div className="cols c-main-side">
         <Feed m={m} agents={agentList} items={itemList} />

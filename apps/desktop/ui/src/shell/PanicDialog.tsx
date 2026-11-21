@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { t } from "../i18n";
 import { ipc } from "../ipc/client";
 import { qk } from "../ipc/keys";
+import { useRemote } from "../state/backendMode";
 import { Button, Dialog, HoldButton, useToast } from "../ui";
 import { closeOverlay, overlayStore } from "./uiStore";
 
@@ -10,11 +11,12 @@ export function PanicDialog() {
   const overlay = overlayStore.use();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const remote = useRemote();
   const panic = useMutation({
     mutationFn: () => ipc.vaultPanic(),
     onSuccess: () => {
       closeOverlay();
-      toast.push({ tone: "success", title: t("panic.done") });
+      toast.push({ tone: "success", title: remote ? t("remote.panic.done") : t("panic.done") });
       void queryClient.invalidateQueries({ queryKey: qk.vault.status() });
     },
   });
@@ -22,8 +24,8 @@ export function PanicDialog() {
     <Dialog
       open={overlay === "panic"}
       onOpenChange={(open) => !open && closeOverlay()}
-      title={t("panic.title")}
-      description={t("panic.body")}
+      title={remote ? t("remote.panic.title") : t("panic.title")}
+      description={remote ? t("remote.panic.body", { label: remote.label }) : t("panic.body")}
       footer={
         <>
           <Button onClick={closeOverlay}>{t("panic.cancel")}</Button>

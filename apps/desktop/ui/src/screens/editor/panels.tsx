@@ -1,6 +1,7 @@
 import { useId, useState, type ReactNode } from "react";
 import { useScreenT } from "../../i18n";
 import type { ItemKind } from "../../bindings";
+import { useRemoteUnsupported } from "../../state/backendMode";
 import { Button, Field, Input, SegmentedControl, Select, Textarea } from "../../ui";
 import { PairsEditor, SecretInput } from "./fields";
 import { messages } from "./messages";
@@ -64,6 +65,8 @@ export function KeptSecretPanel({ kind, onReplace }: { kind: SecretPanelKind; on
 export function WebLoginPanel({ state, patch, problems }: PanelProps) {
   const tr = useScreenT(messages);
   const [genOpen, setGenOpen] = useState(false);
+  // The generator runs on this device (password_generate is local only, DEC-RM-11).
+  const noGenerator = useRemoteUnsupported("password_generate");
   const genId = useId();
   return (
     <Group legend={tr("web.legend")}>
@@ -82,12 +85,14 @@ export function WebLoginPanel({ state, patch, problems }: PanelProps) {
               value={state.webPassword}
               onChange={(webPassword) => patch({ webPassword })}
               extra={
-                <Button aria-expanded={genOpen} aria-controls={genId} onClick={() => setGenOpen((o) => !o)}>
-                  {tr("gen.open")}
-                </Button>
+                noGenerator ? undefined : (
+                  <Button aria-expanded={genOpen} aria-controls={genId} onClick={() => setGenOpen((o) => !o)}>
+                    {tr("gen.open")}
+                  </Button>
+                )
               }
             />
-            {genOpen && <PasswordGenerator id={genId} onGenerated={(webPassword) => patch({ webPassword })} />}
+            {genOpen && !noGenerator && <PasswordGenerator id={genId} onGenerated={(webPassword) => patch({ webPassword })} />}
           </>
         )}
       </Field>

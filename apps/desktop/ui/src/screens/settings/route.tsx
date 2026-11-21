@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { t as shellT, useScreenT } from "../../i18n";
 import { isIpcFailure, type UiError } from "../../ipc/client";
 import { useSettings, useVaultStatus } from "../../ipc/queries";
+import { LocalOnlyNotice } from "../../remote/LocalOnly";
 import { useCan, useRole } from "../../state/session";
 import { EmptyState, ErrorState, errorText, Notice, Skeleton } from "../../ui";
 import { AboutSection } from "./AboutSection";
@@ -10,23 +11,44 @@ import { BackupSection } from "./BackupSection";
 import { NetworkSection } from "./NetworkSection";
 import { RemoteSection } from "./RemoteSection";
 import { SecuritySection } from "./SecuritySection";
+import { ServerSection } from "./ServerSection";
 import { useSetSetting } from "./queries";
 import { messages } from "./messages";
 import "./settings.css";
 
-const SECTIONS = ["security", "network", "remote", "appearance", "backup", "about"] as const;
+const SECTIONS = ["security", "network", "server", "remote", "appearance", "backup", "about"] as const;
+/** In remote mode the server comes first: the sections of a local vault only say they do not apply. */
+const REMOTE_SECTIONS = ["server", "appearance", "security", "network", "remote", "backup", "about"] as const;
 type SectionId = (typeof SECTIONS)[number];
+
+/** The heading of a section in remote mode that belongs to a vault on this device (DEC-RM-11). */
+function LocalOnlySection({ id, title }: { id: SectionId; title: string }) {
+  const t = useScreenT(messages);
+  return (
+    <section id={id} aria-labelledby={`${id}-local-h`} className="settings-section" data-section={id}>
+      <h2 id={`${id}-local-h`} tabIndex={-1}>
+        {title}
+      </h2>
+      <div className="setting">
+        <LocalOnlyNotice body={t("local.section")} />
+      </div>
+    </section>
+  );
+}
 
 /** Screen 11: settings. Opens only with the vault open (route guard); the backend checks every role again. */
 export default function SettingsScreen() {
   const t = useScreenT(messages);
   const status = useVaultStatus();
-  const settings = useSettings();
+  const remote = status.data?.remote ?? null;
+  // A remote server has no desktop settings to read (settings_get is local only).
+  const settings = useSettings(remote === null);
   const role = useRole();
   const canOperator = useCan("operator");
   const canOwner = useCan("owner");
   const [saveError, setSaveError] = useState<UiError | null>(null);
-  const [current, setCurrent] = useState<SectionId>("security");
+  const [current, setCurrent] = useState<SectionId>(remote ? "server" : "security");
+  const sections = remote ? REMOTE_SECTIONS : SECTIONS;
   const root = useRef<HTMLDivElement>(null);
 
   const mutation = useSetSetting((failure) => setSaveError(isIpcFailure(failure) ? failure.error : null));
@@ -60,7 +82,19 @@ export default function SettingsScreen() {
   };
 
   let body;
-  if (settings.isPending || status.isPending) {
+  if (remote && status.data) {
+    body = (
+      <div className="sections">
+        <ServerSection status={status.data} />
+        <AppearanceSection />
+        <LocalOnlySection id="security" title={t("nav.security")} />
+        <LocalOnlySection id="network" title={t("nav.network")} />
+        <LocalOnlySection id="remote" title={t("nav.remote")} />
+        <LocalOnlySection id="backup" title={t("nav.backup")} />
+        <AboutSection status={status.data} />
+      </div>
+    );
+  } else if (settings.isPending || status.isPending) {
     body = (
       <div className="sections">
         <Skeleton label={t("loading")} rows={6} />
@@ -104,6 +138,7 @@ export default function SettingsScreen() {
           }}
         />
         <NetworkSection can={can} />
+        <ServerSection status={status.data} />
         <RemoteSection
           values={values}
           can={can}
@@ -123,7 +158,7 @@ export default function SettingsScreen() {
   return (
     <div className="settings" data-screen="settings" ref={root}>
       <nav className="subnav" aria-label={t("nav.label")}>
-        {SECTIONS.map((id) => (
+        {sections.map((id) => (
           <button key={id} type="button" aria-current={current === id ? "true" : undefined} onClick={() => go(id)}>
             {t(`nav.${id}`)}
           </button>

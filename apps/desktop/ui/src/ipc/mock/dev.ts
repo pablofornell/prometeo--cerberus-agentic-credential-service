@@ -1,6 +1,8 @@
 // Dev only: installs the mock when the app runs in a plain browser (`pnpm dev`). It is never part of a release build.
 // Start state by URL: `?mock=unlocked` (default), `?mock=sealed`, `?mock=no_vault`, `?mock=locking`; `&role=viewer`;
 // `&lock_reason=idle` sets why the vault was locked (manual, idle, max_unlocked, os, quit, panic, restore).
+// `&backend=remote` runs as a desktop in remote mode (ADR-0034); `&remote_problem=remote_unreachable` (or
+// remote_pin_mismatch, remote_protocol_mismatch, admin_cert_required) makes the server fail.
 // In the console: `__cerberusMock.setState("sealed")`.
 import type { LockReasonView, OperatorRole, VaultState } from "../../bindings";
 import { emit } from "@tauri-apps/api/event";
@@ -42,7 +44,9 @@ export function installDevMock(): MockController {
   const state = STATES.find((s) => s === params.get("mock")) ?? "unlocked";
   const role = ROLES.find((r) => r === params.get("role")) ?? "owner";
   const lockReason = LOCK_REASONS.find((r) => r === params.get("lock_reason")) ?? null;
-  const ctl = installMock({ state, role, lockReason, handlers: mergeHandlers(screenSources()) });
+  const problem = params.get("remote_problem");
+  const remote = params.get("backend") === "remote" ? (problem ? { reachable: problem === "admin_cert_required", problem } : true) : undefined;
+  const ctl = installMock({ state, role, lockReason, ...(remote ? { remote } : {}), handlers: mergeHandlers(screenSources()) });
   window.__cerberusMock = ctl;
   // The idle timer ticks once a second while the vault is open, like the real pump.
   window.setInterval(() => {

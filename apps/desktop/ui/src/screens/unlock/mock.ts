@@ -35,7 +35,10 @@ export const handlers: MockHandlers = {
   },
   vault_unlock: async (args, ctl) => {
     const phrase = String((args as { phrase?: string } | undefined)?.phrase ?? "");
+    const operator = String((args as { operatorId?: string } | undefined)?.operatorId ?? "");
     await new Promise((r) => setTimeout(r, 300));
+    // A remote enrolment opens sessions for its bound operator only (ADR-0034 point 3.3).
+    if (ctl.remote && operator !== ctl.remote.operator_id) throw mockError("forbidden", "this enrolment is bound to another operator");
     if (phrase.startsWith("cost")) throw mockError("unavailable", "the unlock cost is not supported on this device");
     if (phrase !== MOCK_PHRASE) fail(ctl);
     await opened(ctl);

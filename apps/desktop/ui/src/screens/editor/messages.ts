@@ -213,4 +213,5 @@ export const messages = defineMessages({
   "none.new": "New item",
 
   "locked": "The vault is locked",
+  "ssh.remote": "An SSH key is made or read on this device and held as a draft, which a remote server cannot use. Add SSH keys from the local vault. You can still edit the host fields of a stored key.",
 });

@@ -76,5 +76,6 @@ export const handlers: MockHandlers = {
   "plugin:app|version": () => "0.1.0",
   "plugin:dialog|save": () => "/tmp/cerberus-demo.cerb",
   // The open dialog runs in the backend now (AUD-11), so the test answers `file_pick_open`.
-  file_pick_open: () => "/tmp/cerberus-demo.cerb",
+  file_pick_open: (args) =>
+    ((args as { extensions?: string[] } | undefined)?.extensions ?? []).includes("cerberus-admin") ? "/home/demo/build-server.cerberus-admin" : "/tmp/cerberus-demo.cerb",
 };

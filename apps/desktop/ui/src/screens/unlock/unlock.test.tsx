@@ -15,7 +15,7 @@ function renderUnlock(extra: MockHandlers = {}, state: "sealed" | "no_vault" = "
 }
 
 /** A sealed `vault_status` with the unlock counters of the backend. */
-const sealed = (counters: Partial<VaultStatusView_Serialize> = {}): VaultStatusView_Serialize => ({
+const sealed = (counters: Partial<Omit<VaultStatusView_Serialize, "remote">> = {}): VaultStatusView_Serialize => ({
   state: "sealed",
   operator: null,
   role: null,
@@ -30,6 +30,7 @@ const sealed = (counters: Partial<VaultStatusView_Serialize> = {}): VaultStatusV
   free_unlock_tries_left: 5,
   retry_after_seconds: null,
   stranded_restore: [],
+  remote: null,
   ...counters,
 });
 

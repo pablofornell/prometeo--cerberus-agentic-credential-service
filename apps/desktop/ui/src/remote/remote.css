@@ -1,0 +1,35 @@
+/* Remote mode pieces shared by the unlock card, Settings and the shell. Only tokens and app.css classes. */
+
+/* The facts of a profile: label column, then values. Pins and hashes are mono and selectable, so the person can
+   compare them with `cerberusd status` character by character. */
+.remote-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--s-1_5) var(--s-4); margin: 0; font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); }
+.remote-facts dt { color: var(--c-text-muted); }
+.remote-facts dd { margin: 0; min-width: 0; color: var(--c-text-primary); overflow-wrap: anywhere; }
+.remote-facts dd.mono { font-family: var(--font-mono); font-feature-settings: "zero"; font-size: var(--t-caption-size); color: var(--c-text-secondary); user-select: all; }
+.remote-facts dd.warn { color: var(--c-warning-fg); }
+.remote-facts dd.bad { color: var(--c-danger-fg); }
+
+.remote-connect { display: grid; gap: var(--s-3_5); }
+.remote-connect .remote-facts { padding: var(--s-3) var(--s-3_5); background: var(--c-bg-sunken); border: 1px solid var(--hair); border-radius: var(--r-sm); }
+.remote-connect .note { font-size: var(--t-caption-size); line-height: var(--t-caption-line); color: var(--c-text-muted); }
+.remote-connect .choose { justify-self: start; }
+
+/* The quiet way to the other backend, under the unlock card on the canvas. Last in the tab order. */
+.unlock-alt { display: flex; justify-content: center; margin-top: var(--s-4); }
+.unlock-alt .btn { color: var(--c-text-muted); }
+.unlock-alt .btn:hover { color: var(--c-text-primary); }
+@media (max-height: 680px) {
+  .unlock-alt { margin-top: var(--s-2); }
+}
+
+/* "Not available for a remote server": one quiet line in place of the controls. */
+.local-only { display: flex; gap: var(--s-2); align-items: flex-start; color: var(--c-text-muted); font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); }
+.local-only .icon { flex: none; margin-top: calc((var(--t-body-sm-line) - 16px) / 2); }
+.local-only b { color: var(--c-text-secondary); font-weight: 500; }
+/* In a flush panel body, which has no padding of its own. */
+.local-only-pad { padding: var(--s-3_5) var(--s-4); }
+
+@media (max-width: 480px) {
+  .remote-facts { grid-template-columns: 1fr; gap: 0; }
+  .remote-facts dd { margin-bottom: var(--s-1_5); }
+}

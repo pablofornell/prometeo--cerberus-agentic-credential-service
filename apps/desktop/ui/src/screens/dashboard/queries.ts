@@ -4,6 +4,7 @@ import type { AgentActivity, AuditEntryView_Serialize } from "../../bindings";
 import { ipc } from "../../ipc/client";
 import { qk } from "../../ipc/keys";
 import { useIpcQuery, usePendingRequests } from "../../ipc/queries";
+import { useRemoteUnsupported } from "../../state/backendMode";
 import { agentFeedStore, FEED_LIMIT } from "../../state/live";
 
 export const dashKeys = {
@@ -20,15 +21,19 @@ export function useDashboardData() {
   const items = useIpcQuery(dashKeys.items(), () => ipc.itemList({}));
   const leases = useIpcQuery(dashKeys.leases(), () => ipc.leaseList());
   const requests = usePendingRequests();
-  const network = useIpcQuery(dashKeys.network(), () => ipc.networkStatus());
-  return { agents, items, leases, requests, network };
+  // A remote server has no local listener to show (network_status is local only, DEC-RM-11).
+  const localOnly = useRemoteUnsupported("network_status");
+  const network = useIpcQuery(dashKeys.network(), () => ipc.networkStatus(), { enabled: !localOnly });
+  return { agents, items, leases, requests, network, localOnly };
 }
 
 /** The chain check. It runs when the dashboard opens and again on "Verify". */
 export function useChainReport() {
+  const localOnly = useRemoteUnsupported("audit_verify");
   return useQuery({
     queryKey: dashKeys.verify(),
     queryFn: () => ipc.auditVerify(),
+    enabled: !localOnly,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });

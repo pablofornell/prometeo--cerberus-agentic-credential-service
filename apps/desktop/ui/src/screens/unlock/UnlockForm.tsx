@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { OperatorPublic_Serialize } from "../../bindings";
+import type { OperatorPublic_Serialize, RemoteStatusView } from "../../bindings";
 import { useScreenT } from "../../i18n";
 import { ipc, isIpcFailure, type UiError } from "../../ipc/client";
 import { qk } from "../../ipc/keys";
@@ -25,11 +25,23 @@ export function sortOperators(list: readonly OperatorPublic_Serialize[]): Operat
 
 type Mode = "phrase" | "recovery";
 
+/** The host and port of a server URL, for the line under the title. */
+const hostOf = (url: string): string => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+};
+
 /**
  * Unlock with an operator phrase or the recovery key. The phrase and the key are in local state only and are cleared
  * after every try, so a failed secret never stays in the page.
+ *
+ * With `remote` (ADR-0034 remote mode) the phrase opens an admin session on the server: only the operator the
+ * enrolment is bound to is offered, and there is no recovery key (it never crosses the network).
  */
-export function UnlockForm() {
+export function UnlockForm({ remote = null }: { remote?: RemoteStatusView | null }) {
   const t = useScreenT(messages);
   const queryClient = useQueryClient();
   const operators = useOperators();
@@ -51,7 +63,9 @@ export function UnlockForm() {
   const triesLeft = status.data?.free_unlock_tries_left ?? 0;
   const retryAfter = status.data?.retry_after_seconds ?? null;
   const until = retryAfter === null ? null : status.dataUpdatedAt + retryAfter * 1000;
-  const lockReason = status.data?.last_lock_reason ?? null;
+  // A server vault that is open was not locked for this person: its last lock reason is old news.
+  const serverOpen = remote?.server_state === "unlocked";
+  const lockReason = serverOpen ? null : (status.data?.last_lock_reason ?? null);
 
   const left = useCountdown(until);
   const waiting = until !== null && (left ?? 0) > 0;
@@ -66,7 +80,7 @@ export function UnlockForm() {
     wasBusy.current = busy;
   }, [busy, opening, mode]);
 
-  const list = sortOperators(operators.data ?? []);
+  const list = sortOperators(operators.data ?? []).filter((o) => remote === null || o.id === remote.operator_id);
   const operator = list.find((o) => o.id === selected) ?? list[0];
 
   const fail = async (error: UiError | null) => {
@@ -79,7 +93,8 @@ export function UnlockForm() {
       setProblem(mode === "phrase" ? t("phrase.problem", { name: operator?.label ?? "" }) : t("recovery.problem.wrong"));
     } else if (code === "validation_failed" && mode === "recovery") {
       setProblem(t("recovery.problem.format"));
-    } else if (code !== "too_many_failures") {
+    } else if (code !== "too_many_failures" || remote !== null) {
+      // A remote server also limits the tries of this one desktop; that wait is not in the vault status.
       setFailure(error ?? { code: "ipc_unreachable", message: "", command: mode === "phrase" ? "vault_unlock" : "vault_unlock_recovery", retryAfterSeconds: null, fields: [] });
     }
     // Wait for the new tries count, so the status line goes straight from "Deriving" to the new count.
@@ -135,7 +150,8 @@ export function UnlockForm() {
     );
   }
 
-  const kdfProblem = failure?.code === "unavailable";
+  const kdfProblem = failure?.code === "unavailable" && remote === null;
+  const failureText = failure && (remote && failure.code === "conflict" ? t("remote.conflict") : errorText(failure));
   const triesText =
     failedTries === 0
       ? t("tries.none")
@@ -157,9 +173,20 @@ export function UnlockForm() {
     <form className={opening ? "unlock opening" : "unlock"} noValidate aria-busy={busy || undefined} onSubmit={(e) => void submit(e)}>
       {/* The head is the mark and the title only; why the vault locked is its one line. The wait text sits in the timer
           and the opening and deriving text in the footer, so the head keeps its height in every state. */}
-      <Brand mode={opening ? "open" : busy ? "spin" : "locked"} title={isWait ? t("wait.title") : busy ? t("loading.title") : t("title")} headingRef={headingRef}>
-        {lockReason && <p className="sub reason">{t(`reason.${lockReason}`)}</p>}
+      <Brand mode={opening ? "open" : busy ? "spin" : "locked"} title={isWait ? t("wait.title") : busy ? t("loading.title") : remote ? t("remote.title", { label: remote.label }) : t("title")} headingRef={headingRef}>
+        {remote && (
+          <p className="sub host" title={remote.url}>
+            {hostOf(remote.url)}
+          </p>
+        )}
+        {remote && remote.server_state !== "unlocked" ? (
+          <p className="sub reason">{t("remote.sealed")}</p>
+        ) : (
+          lockReason && <p className="sub reason">{t(`reason.${lockReason}`)}</p>
+        )}
       </Brand>
+
+      {remote && list.length === 0 && <Notice tone="warn" title={t("remote.noOperator")} />}
 
       {waitedOut && !isWait && <Notice tone="ok" title={t("wait.over")} />}
 
@@ -170,7 +197,7 @@ export function UnlockForm() {
       )}
       {failure && !kdfProblem && (
         <Notice tone="bad" title={t("fail.title")}>
-          {errorText(failure)} <span className="code block">{t("fail.line", { command: failure.command, code: failure.code })}</span>
+          {failureText} <span className="code block">{t("fail.line", { command: failure.command, code: failure.code })}</span>
         </Notice>
       )}
 
@@ -248,9 +275,11 @@ export function UnlockForm() {
           </Field>
         )}
 
-        <Button variant="primary" size="lg" type="submit" icon="unlock" loading={busy} disabled={isWait || opening} aria-disabled={isWait || opening}>
-          {t("submit")}
+        <Button variant="primary" size="lg" type="submit" icon={serverOpen ? "plug" : "unlock"} loading={busy} disabled={isWait || opening || (remote !== null && list.length === 0)} aria-disabled={isWait || opening}>
+          {serverOpen ? t("remote.submit.connect") : t("submit")}
         </Button>
+        {/* The recovery key never crosses the network (ADR-0034 point 6.3): no switch in remote mode. */}
+        {remote === null && (
         <Button
           size="sm"
           variant="ghost"
@@ -266,13 +295,14 @@ export function UnlockForm() {
         >
           {mode === "phrase" ? t("recovery.use") : t("phrase.use")}
         </Button>
+        )}
       </div>
       <div className="tries">
         {/* While the key is derived, and once the vault opens, this line says so in the place of the tries (it is always a
             live region). */}
         <span role="status" className={warnTries ? "warn" : undefined}>
           {warnTries && <Icon name="alert" size={14} />}
-          {opening ? t("opening") : busy ? t("loading.body") : triesText}
+          {opening ? (remote ? t("remote.opening") : t("opening")) : busy ? t("loading.body") : triesText}
         </span>
       </div>
     </form>

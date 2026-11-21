@@ -24,6 +24,7 @@ const UNLOCKED: VaultStatusView_Serialize = {
   free_unlock_tries_left: 5,
   retry_after_seconds: null,
   stranded_restore: [],
+  remote: null,
 };
 const open = (extra: MockHandlers = {}, options: { role?: "owner" | "operator" | "viewer" } = {}) =>
   renderApp({ path: "/dashboard", handlers: { ...base, ...extra }, ...options });

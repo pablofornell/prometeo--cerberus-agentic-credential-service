@@ -22,7 +22,15 @@ export type KnownErrorCode =
   | "invalid_request"
   | "unavailable"
   | "stranded_restore"
-  | "ipc_unreachable";
+  | "ipc_unreachable"
+  // Remote mode (ADR-0034): the desktop is a client of one cerberusd.
+  | "remote_unsupported"
+  | "remote_unreachable"
+  | "remote_pin_mismatch"
+  | "remote_protocol_mismatch"
+  | "admin_session_required"
+  | "admin_cert_required"
+  | "invalid_bundle";
 
 export type ErrorCode = KnownErrorCode | (string & {});
 
@@ -69,7 +77,8 @@ export const isFinalError = (error: unknown): boolean =>
   isIpcFailure(error) &&
   error.code !== "internal" &&
   error.code !== "ipc_unreachable" &&
-  error.code !== "unavailable";
+  error.code !== "unavailable" &&
+  error.code !== "remote_unreachable";
 
 const snake = (name: string): string => name.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 

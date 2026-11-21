@@ -1560,6 +1560,43 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   (`apps/desktop/src-tauri/src/{remote,ops/remote.rs,commands.rs,state.rs,os_hooks.rs,pump.rs,tray.rs,prefs.rs}`,
   `tests/remote.rs`, `tests/contract.rs`, `crates/cerberus-api/src/admin/routes.rs`)
 
+- **DEC-RM-24** — RM — UI of remote mode, as built (plan step 9). (a) The shared pieces live in `ui/src/remote/`
+  (`ConnectRemoteDialog`, `ProfileFacts`, `LocalOnlyNotice`, strings and CSS), not in a screen folder, because the
+  unlock screen, Settings and the shell all use them. `state/backendMode.ts` has `useRemote`, `useBackendMode` and
+  `useRemoteUnsupported(command)`; the last reads the allowlist from `remote_status` (true for every command until the
+  list is read, so a local-only action never flashes on). (b) Unlock: the compact card does not change. "Connect to a
+  remote server" (local mode) and "Use the local vault" (remote mode) are a quiet ghost link **under** the card, on
+  the canvas, last in the tab order (radios → phrase → Unlock → recovery switch → link). In remote mode the card offers
+  only the bound operator, has no recovery switch (the recovery key never crosses the network), names the server and
+  host, says when the server vault is locked that the phrase unlocks it for its agents too, and its button reads
+  Connect when the server vault is open. `conflict` (another operator has the server vault open) gets its own text. A
+  server that cannot be used (`remote_unreachable`, `remote_pin_mismatch`, `remote_protocol_mismatch`,
+  `admin_cert_required`) replaces the form with a card that names the problem, the profile facts and Try again; there
+  is no way to connect past a pin mismatch. (c) The connect dialog imports through `file_pick_open` (extensions
+  `cerberus-admin`, `json`), shows Server, Address, `CA pin` and `CA SHA-256` (the labels `cerberusd status` prints),
+  bound operator and certificate expiry (warning under 14 days) with a "compare before you connect" warning, then
+  Connect (`remote_activate`, the app restarts). A bundle imported in the dialog and then cancelled is forgotten again.
+  (d) Settings: a new section **Remote server** (`nav.server`; the existing `remote` section is the RustDesk client
+  and keeps its ID). Local mode: Connect to a server (locks the local vault first, as the backend asks), the imported
+  servers with Lock and connect / Forget. Remote mode: the section comes first; facts with pin, fingerprint and server
+  version, Test connection, Disconnect, Lock the server vault (behind a confirm), Use the local vault, other servers.
+  `settings_get` is not called; Security, Network, Remote desktop and Backup show one `LocalOnlyNotice`; Appearance
+  (UI scale) and About stay. (e) Shell: a "Remote: <label>" badge in the top bar (info tint, warning tint when the
+  server is not reachable) links to Settings. In the collar, Lock is **Disconnect** (and so is Ctrl+L and the palette
+  lock), the panic button and dialog name the server vault, the locked state says that a disconnect does not lock the
+  server vault. The palette leaves out its local-only actions. (f) Local-only actions in remote mode: hidden with a
+  `LocalOnlyNotice` where a whole area is affected (agent changes, keys, certificates and snippets; the policy
+  simulator; the audit chain check and export; SSH key generate and import; RustDesk Connect), or simply not shown
+  where one button is affected (copy, versions, password generator, CSV import and export, lease revoke all, the
+  approval window's Suspend). The dashboard Health panel replaces the chain and TLS rows with one row about the
+  server, and hides "Connect an agent". (g) The mock IPC knows remote mode (`installMock({ remote, profiles })`, dev
+  URL `&backend=remote` and `&remote_problem=...`); it refuses commands off its copy of the allowlist with
+  `remote_unsupported`, as the desktop does. (h) Not done: the plan's Xvfb smoke run of the real app against a local
+  `cerberusd`. Starting the Tauri app (even under Xvfb) is out of bounds for this build (no GUI launch, no `tauri
+  dev`/`build`); the Rust side is covered by `desk/tests/remote.rs` and `remote_daemon.rs`, the UI by vitest and
+  headless Playwright screenshots against the mock. (`apps/desktop/ui/src/{remote,state/backendMode.ts,
+  screens/unlock,screens/settings/ServerSection.tsx,shell}`, `src/remote/remote.test.tsx`)
+
 ## RD — RustDesk connections (2026-11-21)
 
 - **DEC-RD-1** — New item kind `rustdesk` (Rust `ItemKind::Rustdesk`, wire value `rustdesk`) for a machine reached with

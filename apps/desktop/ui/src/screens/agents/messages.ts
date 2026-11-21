@@ -142,4 +142,5 @@ export const messages = defineMessages({
 
   "empty.body": "An agent is a program that asks Cerberus for credentials, for example Claude Code or a CI job. Each gets its own token and grants.",
   "error.body": "The agent list did not load. Agent calls still work with the grants you set.",
+  "detail.remote": "Agents are read-only on a remote server for now. Making, suspending or revoking an agent, and its keys, client certificates and snippets, need the local vault.",
 });

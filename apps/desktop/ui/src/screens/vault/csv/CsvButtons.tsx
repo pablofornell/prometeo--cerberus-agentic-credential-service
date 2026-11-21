@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useScreenT } from "../../../i18n";
+import { useRemoteUnsupported } from "../../../state/backendMode";
 import { Button } from "../../../ui";
 import { ExportDialog } from "./ExportDialog";
 import { ImportWizard } from "./ImportWizard";
@@ -19,7 +20,10 @@ export function ImportButton({
   defaultOpen?: boolean;
 }) {
   const tr = useScreenT(messages);
-  const [open, setOpen] = useState(defaultOpen && !disabled);
+  // CSV files are read on this device; a remote server has no import (DEC-RM-11).
+  const localOnly = useRemoteUnsupported("csv_import");
+  const [open, setOpen] = useState(defaultOpen && !disabled && !localOnly);
+  if (localOnly) return null;
   return (
     <>
       <Button size={size} variant={variant} icon="upload" disabled={disabled} onClick={() => setOpen(true)}>
@@ -36,7 +40,9 @@ export function ImportButton({
  */
 export function ExportButton({ size = "md", variant = "danger-ghost", disabled }: { size?: "sm" | "md"; variant?: "danger-ghost" | "ghost"; disabled?: boolean }) {
   const tr = useScreenT(messages);
+  const localOnly = useRemoteUnsupported("csv_export");
   const [open, setOpen] = useState(false);
+  if (localOnly) return null;
   return (
     <>
       <Button size={size} variant={variant} icon="download" disabled={disabled} onClick={() => setOpen(true)}>

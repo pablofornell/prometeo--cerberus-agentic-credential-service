@@ -72,4 +72,6 @@ export const messages = defineMessages({
   "export.title": "Export the audit log",
   "export.done": "Exported {n} events as JSON lines. No secret values inside.",
   "export.fail": "Export failed",
+  "chain.remote.label": "Audit chain",
+  "chain.remote": "The chain check and the export run on the local vault. These are the events of the server, newest first.",
 });

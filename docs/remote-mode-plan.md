@@ -489,6 +489,12 @@ import and forget; disabled actions show the notice; panic text; guard tests unc
 Done when: `pnpm --dir apps/desktop/ui test`, `pnpm --dir apps/desktop/ui lint` (or the `ui-check` recipe), and a
 headless smoke run on Xvfb (connect to a local `cerberusd` with the admin API on).
 
+As built (DEC-RM-24): shared pieces in `ui/remote/` (connect dialog, profile facts, local-only notice). The connect link
+sits under the compact unlock card (last in the tab order), not in it. The Settings section is `server` ("Remote
+server"), because `remote` is already the RustDesk section. In remote mode Lock is Disconnect everywhere (collar,
+Ctrl+L, palette, tray). Local-only areas show one notice; single local-only buttons are not shown. The Xvfb smoke run
+of the real app was not made (no GUI launch in this build); screenshots are headless Playwright against the mock.
+
 ---
 
 ## Step 10 — Acceptance A13, desktop against the real daemon, docs

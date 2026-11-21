@@ -173,4 +173,7 @@ export const messages = defineMessages({
   "connect.loading": "Reading the server address",
   "connect.error.action": "read the server address",
   "connect.viewer": "Your role can read this guide, but only an owner or operator can create a token.",
+  "health.remote.sub": "The audit chain check and the TLS listener belong to the server. Run cerberusd status there.",
+  "band.title.remote": "Connected to {label}",
+  "health.hook.remoteSub": "Sleep and screen lock end the session with the server. The server vault stays open.",
 });

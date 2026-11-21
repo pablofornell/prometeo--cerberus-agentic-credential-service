@@ -3,6 +3,8 @@ import { useState } from "react";
 import type { ItemSummaryView_Serialize as Item } from "../../bindings";
 import { useScreenT } from "../../i18n";
 import { ipc, isIpcFailure } from "../../ipc/client";
+import { LocalOnlyNotice } from "../../remote/LocalOnly";
+import { useRemoteUnsupported } from "../../state/backendMode";
 import { Button, CLIPBOARD_CLEAR_SECONDS, errorText, IconButton, Notice, useToast } from "../../ui";
 import { messages } from "./messages";
 import { invalidateItems } from "./queries";
@@ -23,7 +25,9 @@ export function RustdeskCard({ item, canReveal }: Props) {
   const tr = useScreenT(messages);
   const toast = useToast();
   const queryClient = useQueryClient();
-  const status = useRustdeskStatus();
+  // Remote mode: the RustDesk client and the clipboard are of this device; Connect is local only (DEC-RM-15).
+  const localOnly = useRemoteUnsupported("rustdesk_connect");
+  const status = useRustdeskStatus(!localOnly);
   const [busy, setBusy] = useState(false);
   const c = rustdeskConnection(item.custom);
   const link = rustdeskLink(c);
@@ -104,14 +108,16 @@ export function RustdeskCard({ item, canReveal }: Props) {
         </Notice>
       )}
       <div className="row-inline">
-        <Button variant="primary" icon="monitor" loading={busy} disabled={missing} onClick={() => void connect()}>
-          {tr("rd.connect")}
-        </Button>
+        {!localOnly && (
+          <Button variant="primary" icon="monitor" loading={busy} disabled={missing} onClick={() => void connect()}>
+            {tr("rd.connect")}
+          </Button>
+        )}
         <Button icon="copy" onClick={() => void copyText(share, tr("rd.shareCopied"))}>
           {tr("rd.copyAll")}
         </Button>
       </div>
-      <p className="small muted">{canReveal ? tr("rd.connectHint") : tr("rd.connectHintViewer")}</p>
+      {localOnly ? <LocalOnlyNotice body={tr("rd.remote")} /> : <p className="small muted">{canReveal ? tr("rd.connectHint") : tr("rd.connectHintViewer")}</p>}
     </section>
   );
 }

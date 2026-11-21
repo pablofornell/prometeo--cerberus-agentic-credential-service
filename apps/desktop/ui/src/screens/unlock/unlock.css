@@ -67,6 +67,9 @@
 .unlock-screen h1 { font-size: var(--t-title-size); line-height: var(--t-title-line); font-weight: 600; letter-spacing: -0.03em; text-wrap: balance; }
 .unlock-screen h1:focus { outline: none; }
 .unlock-screen .sub { font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-line); color: var(--c-text-muted); text-wrap: balance; }
+/* Remote mode: the server's host under the title, mono like every address. */
+.unlock-screen .sub.host { font-family: var(--font-mono); font-size: var(--t-caption-size); line-height: var(--t-caption-line); }
+.unlock-screen .remote-facts { padding: var(--s-2_5) var(--s-3); background: var(--c-bg-sunken); border: 1px solid var(--c-line-mid); border-radius: var(--r-sm); }
 /* Why the vault is locked: the one line under the title, a step brighter than other context lines. */
 .unlock-screen .sub.reason { color: var(--c-text-secondary); }
 

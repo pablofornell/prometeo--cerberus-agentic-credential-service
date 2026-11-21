@@ -32,5 +32,8 @@ export const useOperators = () => useIpcQuery(qk.vault.operators(), () => ipc.va
 export const usePendingRequests = (enabled = true) =>
   useIpcQuery(qk.requests.pending(), () => ipc.requestListPending(), { enabled });
 
+/** The backend mode, the stored remote profiles and the remote allowlist (ADR-0034). */
+export const useRemoteOverview = (enabled = true) => useIpcQuery(qk.vault.remote(), () => ipc.remoteStatus(), { enabled, staleTime: 60_000 });
+
 export const useSettings = (enabled = true) =>
   useIpcQuery(qk.settings(), () => ipc.settingsGet(), { enabled });

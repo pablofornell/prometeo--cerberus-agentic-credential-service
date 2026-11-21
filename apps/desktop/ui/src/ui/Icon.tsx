@@ -31,10 +31,12 @@ import {
   Moon,
   Pause,
   Pencil,
+  Plug,
   Plus,
   RefreshCw,
   Search,
   Server,
+  ServerOff,
   ShieldAlert,
   ShieldCheck,
   Siren,
@@ -45,6 +47,7 @@ import {
   Timer,
   Trash2,
   TriangleAlert,
+  Unplug,
   Upload,
   User,
   X,
@@ -103,6 +106,9 @@ export const ICONS = {
   ticket: Ticket,
   window: AppWindow,
   edit: Pencil,
+  plug: Plug,
+  unplug: Unplug,
+  serverOff: ServerOff,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

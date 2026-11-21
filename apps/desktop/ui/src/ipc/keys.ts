@@ -4,6 +4,8 @@ export const qk = {
   vault: {
     status: () => ["vault", "status"] as const,
     operators: () => ["vault", "operators"] as const,
+    /** `remote_status`: the backend mode and the stored remote profiles. Kept at a lock (no vault data). */
+    remote: () => ["vault", "remote"] as const,
   },
   requests: {
     all: () => ["requests"] as const,

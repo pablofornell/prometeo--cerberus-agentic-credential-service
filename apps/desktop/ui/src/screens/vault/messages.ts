@@ -152,4 +152,6 @@ export const messages = defineMessages({
   "ws.nameProblem": "Add a name.",
 
   "locked": "The vault is locked",
+  "drawer.holdHint.remote": "Hold the eye button to reveal. Values hide after 15 s. Copy is not available for a remote server yet.",
+  "rd.remote": "Connect starts the RustDesk client on this device and puts the password on its clipboard, which is not available for a remote server yet. Use the share text.",
 });

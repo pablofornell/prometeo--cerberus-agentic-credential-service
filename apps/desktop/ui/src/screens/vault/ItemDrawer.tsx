@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import type { ItemSummaryView_Serialize as Item } from "../../bindings";
 import { useScreenT } from "../../i18n";
 import { ipc, isIpcFailure } from "../../ipc/client";
+import { useRemoteUnsupported } from "../../state/backendMode";
 import { AgentMadeBadge, Button, ConfirmDialog, EmptyState, EnvBadge, errorText, ErrorState, IconButton, KindIcon, RoleChip, SecretField, Skeleton, TtlRing, useToast } from "../../ui";
 import { ttlSpan } from "./filters";
 import { formatDateTime, isSessionKind, kindLabel } from "./kinds";
@@ -54,6 +55,10 @@ function DrawerBody({ item, canEdit, canReveal, agentNames, operatorNames, onClo
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Remote mode: copy needs the clipboard timer of this device and the history is not on the remote allowlist
+  // (DEC-RM-14). The value can still be revealed.
+  const noCopy = useRemoteUnsupported("clipboard_copy_secret");
+  const noHistory = useRemoteUnsupported("item_versions");
   const fields = SECRET_FIELDS[item.kind];
   const span = isSessionKind(item.kind) ? ttlSpan(item) : null;
 
@@ -127,7 +132,7 @@ function DrawerBody({ item, canEdit, canReveal, agentNames, operatorNames, onClo
                 label={label}
                 denied={!canReveal}
                 onReveal={() => reveal(def.key)}
-                onCopy={def.field ? () => ipc.clipboardCopySecret(item.id, def.field ?? "") : undefined}
+                onCopy={def.field && !noCopy ? () => ipc.clipboardCopySecret(item.id, def.field ?? "") : undefined}
               />
             </div>
           );
@@ -138,7 +143,7 @@ function DrawerBody({ item, canEdit, canReveal, agentNames, operatorNames, onClo
             <span className="mono small">{item.target}</span>
           </div>
         )}
-        {fields.length > 0 && canReveal && <p className="small muted">{tr("drawer.holdHint")}</p>}
+        {fields.length > 0 && canReveal && <p className="small muted">{noCopy ? tr("drawer.holdHint.remote") : tr("drawer.holdHint")}</p>}
       </section>
 
       {item.has_totp && (
@@ -151,7 +156,7 @@ function DrawerBody({ item, canEdit, canReveal, agentNames, operatorNames, onClo
               const view = await ipc.itemTotpPreview(item.id);
               return `${view.code.slice(0, Math.ceil(view.code.length / 2))} ${view.code.slice(Math.ceil(view.code.length / 2))}`;
             }}
-            onCopy={() => ipc.clipboardCopySecret(item.id, "totp")}
+            onCopy={noCopy ? undefined : () => ipc.clipboardCopySecret(item.id, "totp")}
           />
         </section>
       )}
@@ -180,9 +185,11 @@ function DrawerBody({ item, canEdit, canReveal, agentNames, operatorNames, onClo
             <dt>{tr("drawer.version")}</dt>
             <dd className="row-inline">
               {tr("drawer.versionLine", { version: info.version })}
-              <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)}>
-                {tr("drawer.history")}
-              </Button>
+              {!noHistory && (
+                <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)}>
+                  {tr("drawer.history")}
+                </Button>
+              )}
             </dd>
             <dt>{tr("drawer.createdBy")}</dt>
             <dd>{creatorLabel(item.created_by, agentNames, operatorNames, tr("drawer.unknownOperator"))}</dd>
@@ -213,7 +220,7 @@ function DrawerBody({ item, canEdit, canReveal, agentNames, operatorNames, onClo
         onConfirm={() => void remove()}
         loading={deleting}
       />
-      <HistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} item={item} canRestore={canEdit} />
+      <HistoryDialog open={historyOpen && !noHistory} onOpenChange={setHistoryOpen} item={item} canRestore={canEdit} />
     </aside>
   );
 }

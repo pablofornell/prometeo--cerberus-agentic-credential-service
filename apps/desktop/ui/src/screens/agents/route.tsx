@@ -3,6 +3,7 @@ import { t } from "../../i18n";
 import { Button, EmptyState, Icon, StatusDot } from "../../ui";
 import { useHashQuery } from "../../shell/location";
 import { PageActions } from "../../shell/PageActions";
+import { useRemoteUnsupported } from "../../state/backendMode";
 import { useCan } from "../../state/session";
 import { useNow } from "../../state/time";
 import { AgentDetail, STATUS_TONE } from "./AgentDetail";
@@ -46,7 +47,9 @@ function AgentList({ agents, selectedId, onSelect }: { agents: readonly AgentVie
 export default function AgentsScreen() {
   const s = useAgentsT();
   const query = useAgents();
-  const canEdit = useCan("operator");
+  // Remote mode: the server lists its agents, but making and changing them is local only for now (DEC-RM-14).
+  const localOnly = useRemoteUnsupported("agent_create");
+  const canEdit = useCan("operator") && !localOnly;
   const hashQuery = useHashQuery();
   const [picked, setPicked] = useState<string | null>(() => hashQuery.get("agent"));
   const [creating, setCreating] = useState(() => hashQuery.get("new") === "1");
@@ -93,12 +96,12 @@ export default function AgentsScreen() {
           return (
             <div className="agents">
               <AgentList agents={agents} selectedId={selected?.id ?? null} onSelect={setPicked} />
-              {selected && <AgentDetail key={selected.id} agent={selected} canEdit={canEdit} onReveal={setReveal} />}
+              {selected && <AgentDetail key={selected.id} agent={selected} canEdit={canEdit} localOnly={localOnly} onReveal={setReveal} />}
             </div>
           );
         }}
       </QueryGate>
-      <CreateAgentDialog open={creating} onOpenChange={setCreating} onCreated={onCreated} />
+      <CreateAgentDialog open={creating && canEdit} onOpenChange={setCreating} onCreated={onCreated} />
       <TokenDialog reveal={reveal} onDone={clearReveal} />
     </section>
   );

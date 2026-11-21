@@ -4,6 +4,7 @@ import { t } from "../i18n";
 import { ipc, isIpcFailure } from "../ipc/client";
 import { pickSavePath } from "../ipc/dialogs";
 import { qk } from "../ipc/keys";
+import { useRemote } from "../state/backendMode";
 import { usePrefs } from "../state/prefs";
 import { errorText, useToast } from "../ui";
 import type { CommandContext } from "./commands";
@@ -15,6 +16,7 @@ export function useShellActions(): CommandContext {
   const toast = useToast();
   const queryClient = useQueryClient();
   const prefs = usePrefs();
+  const remote = useRemote();
 
   const fail = (error: unknown) =>
     toast.push({
@@ -23,10 +25,14 @@ export function useShellActions(): CommandContext {
       detail: isIpcFailure(error) ? errorText(error.error) : undefined,
     });
 
+  // In remote mode "lock" ends this desktop's session; the server vault stays open for its agents (DEC-RM-8). Locking
+  // the server vault itself is a separate action in Settings.
   const lock = () => {
-    ipc
-      .vaultLock()
-      .then(() => queryClient.invalidateQueries({ queryKey: qk.vault.status() }))
+    (remote ? ipc.remoteDisconnect() : ipc.vaultLock())
+      .then(() => {
+        if (remote) toast.push({ tone: "success", title: t("remote.disconnected") });
+        return queryClient.invalidateQueries({ queryKey: qk.vault.status() });
+      })
       .catch(fail);
   };
 
@@ -60,5 +66,6 @@ export function useShellActions(): CommandContext {
     cycleTheme: prefs.cycleTheme,
     showShortcuts: () => openOverlay("shortcuts"),
     themeLabel: t(`palette.theme.${prefs.theme}`),
+    remote: remote !== null,
   };
 }

@@ -27,7 +27,13 @@ export interface CommandContext {
   cycleTheme: () => void;
   showShortcuts: () => void;
   themeLabel: string;
+  /** Remote mode (ADR-0034): `lock` disconnects, panic acts on the server vault, local-only actions are left out. */
+  remote: boolean;
 }
+
+/** Palette actions that need the local vault or this device (agent create, CSV import, connect guide, audit verify,
+ *  CA export, backup). In remote mode they answer `remote_unsupported`, so the palette leaves them out (DEC-RM-11). */
+const LOCAL_ONLY: ReadonlySet<string> = new Set(["new-agent", "import-csv", "connect", "verify", "export-ca", "backup"]);
 
 const goTo = (s: ScreenDef) => s.layout === "app";
 
@@ -41,21 +47,24 @@ export function buildCommands(ctx: CommandContext): Command[] {
     keys: s.goKey ? ["G", s.goKey.toUpperCase()] : undefined,
     run: () => ctx.navigate(s.path),
   }));
-  return [
+  const all: Command[] = [
     ...go,
     { id: "new-item", group: "create", label: t("palette.newItem"), icon: "plus", keys: ["N"], run: () => ctx.navigate("/editor/new") },
     { id: "new-agent", group: "create", label: t("palette.newAgent"), icon: "bot", run: () => ctx.navigate("/agents?new=1") },
     { id: "new-grant", group: "create", label: t("palette.newGrant"), icon: "shield", run: () => ctx.navigate("/policies?new=1") },
     { id: "import-csv", group: "create", label: t("palette.importCsv"), icon: "upload", keywords: "bitwarden 1password keepass chrome firefox", run: () => ctx.navigate("/vault?import=1") },
     { id: "connect", group: "create", label: t("palette.connect"), icon: "terminal", keywords: "mcp claude snippet guide", run: () => ctx.navigate("/dashboard?connect=1") },
-    { id: "lock", group: "vault", label: t("palette.lock"), icon: "lock", keys: ["Ctrl", "L"], run: ctx.lock },
-    { id: "panic", group: "vault", label: t("palette.panic"), icon: "siren", danger: true, run: ctx.panic },
+    ctx.remote
+      ? { id: "lock", group: "vault", label: t("palette.disconnect"), icon: "unplug", keys: ["Ctrl", "L"], keywords: "lock", run: ctx.lock }
+      : { id: "lock", group: "vault", label: t("palette.lock"), icon: "lock", keys: ["Ctrl", "L"], run: ctx.lock },
+    { id: "panic", group: "vault", label: ctx.remote ? t("remote.collar.panic") : t("palette.panic"), icon: "siren", danger: true, run: ctx.panic },
     { id: "verify", group: "vault", label: t("palette.verify"), icon: "audit", run: ctx.verifyAudit },
     { id: "export-ca", group: "vault", label: t("palette.exportCa"), icon: "download", keywords: "certificate tls", run: ctx.exportCa },
     { id: "backup", group: "vault", label: t("palette.backup"), icon: "download", run: ctx.createBackup },
     { id: "theme", group: "view", label: ctx.themeLabel, icon: "sun", keywords: "dark light appearance", run: ctx.cycleTheme },
     { id: "shortcuts", group: "view", label: t("palette.shortcuts"), icon: "key", keys: ["?"], run: ctx.showShortcuts },
   ];
+  return ctx.remote ? all.filter((c) => !LOCAL_ONLY.has(c.id)) : all;
 }
 
 export const GROUP_ORDER: readonly CommandGroup[] = ["goto", "create", "vault", "view", "items", "agents"];

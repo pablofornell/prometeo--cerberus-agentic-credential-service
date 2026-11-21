@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { useScreenT } from "../../i18n";
+import { useRemoteUnsupported } from "../../state/backendMode";
 import { Button, Field, Input } from "../../ui";
 import { SecretInput } from "./fields";
 import { messages } from "./messages";
@@ -21,6 +22,8 @@ interface Props {
 export function RustdeskPanel({ state, patch, problems, editing }: Props) {
   const tr = useScreenT(messages);
   const [genOpen, setGenOpen] = useState(false);
+  // The generator runs on this device (password_generate is local only, DEC-RM-11).
+  const noGenerator = useRemoteUnsupported("password_generate");
   const genId = useId();
   return (
     <fieldset className="ed-group">
@@ -56,12 +59,14 @@ export function RustdeskPanel({ state, patch, problems, editing }: Props) {
                   value={state.rdPassword}
                   onChange={(rdPassword) => patch({ rdPassword })}
                   extra={
-                    <Button aria-expanded={genOpen} aria-controls={genId} onClick={() => setGenOpen((o) => !o)}>
-                      {tr("gen.open")}
-                    </Button>
+                    noGenerator ? undefined : (
+                      <Button aria-expanded={genOpen} aria-controls={genId} onClick={() => setGenOpen((o) => !o)}>
+                        {tr("gen.open")}
+                      </Button>
+                    )
                   }
                 />
-                {genOpen && <PasswordGenerator id={genId} onGenerated={(rdPassword) => patch({ rdPassword })} />}
+                {genOpen && !noGenerator && <PasswordGenerator id={genId} onGenerated={(rdPassword) => patch({ rdPassword })} />}
                 {editing && (
                   <div>
                     <Button size="sm" variant="ghost" onClick={() => patch({ keepSecret: true, rdPassword: "" })}>

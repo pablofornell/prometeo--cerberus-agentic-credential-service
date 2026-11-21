@@ -31,6 +31,8 @@ import {
   type Outcome,
   type Range,
 } from "./queries";
+import { LocalOnlyNotice } from "../../remote/LocalOnly";
+import { useRemoteUnsupported } from "../../state/backendMode";
 import "./audit.css";
 
 type M = ReturnType<typeof useScreenT<typeof messages>>;
@@ -267,6 +269,7 @@ export default function AuditScreen() {
   }, [search]);
   const [jumping, setJumping] = useState(false);
   const chain = useChain();
+  const chainLocalOnly = useRemoteUnsupported("audit_verify");
   const events = useEvents(filter);
   const agents = useAuditAgents();
   const operators = useOperators();
@@ -367,8 +370,15 @@ export default function AuditScreen() {
 
   return (
     <section className="audit" data-screen="audit" aria-label={t("screen.audit")}>
-      <ExportAction m={m} />
-      <ChainCard m={m} chain={chain} lowestLoaded={lowestLoaded} onJump={(seq) => void jump(seq)} jumping={jumping} />
+      {/* Remote mode: the chain check and the export are local only (DEC-RM-14); the log itself is the server's. */}
+      {!chainLocalOnly && <ExportAction m={m} />}
+      {chainLocalOnly ? (
+        <section className="chain" aria-label={m("chain.remote.label")}>
+          <LocalOnlyNotice body={m("chain.remote")} />
+        </section>
+      ) : (
+        <ChainCard m={m} chain={chain} lowestLoaded={lowestLoaded} onJump={(seq) => void jump(seq)} jumping={jumping} />
+      )}
       <div className="filters" role="search" aria-label={m("filters.label")}>
         <label className="sr-only" htmlFor="audit-range">{m("filters.time")}</label>
         <Select id="audit-range" options={rangeOptions} value={filter.range} onChange={(e) => setFilter({ ...filter, range: e.target.value as Range })} />

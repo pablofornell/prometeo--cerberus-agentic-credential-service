@@ -7,6 +7,7 @@ import { ipc, isIpcFailure, isLockError } from "../../ipc/client";
 import { qk } from "../../ipc/keys";
 import { usePendingRequests, useVaultStatus } from "../../ipc/queries";
 import { windowLabel } from "../../shell/windowLabel";
+import { useRemoteUnsupported } from "../../state/backendMode";
 import { useCan } from "../../state/session";
 import { Button, EmptyState, ErrorState, GateMark, Notice, Skeleton, errorText, useToast } from "../../ui";
 import { ApprovalCard, HOLD_MS, type Choice } from "./ApprovalCard";
@@ -154,6 +155,8 @@ export default function ApprovalScreen() {
     }
   };
 
+  // Remote mode: agent_set_status is local only (DEC-RM-14); deny all still works.
+  const noSuspend = useRemoteUnsupported("agent_set_status");
   const suspend = async (agentId: string, name: string) => {
     try {
       await ipc.agentSetStatus(agentId, "suspended");
@@ -262,9 +265,11 @@ export default function ApprovalScreen() {
                 <Button size="sm" variant="danger" icon="x" disabled={busy} onClick={() => void denyAll(burst)}>
                   {s("burst.denyAll", { n: burst.length })}
                 </Button>
-                <Button size="sm" icon="lock" onClick={() => void suspend(burst[0]?.agent_id ?? "", burst[0]?.agent_name ?? "")}>
-                  {s("burst.suspend", { agent: burst[0]?.agent_name ?? "" })}
-                </Button>
+                {!noSuspend && (
+                  <Button size="sm" icon="lock" onClick={() => void suspend(burst[0]?.agent_id ?? "", burst[0]?.agent_name ?? "")}>
+                    {s("burst.suspend", { agent: burst[0]?.agent_name ?? "" })}
+                  </Button>
+                )}
               </>
             }
           />
