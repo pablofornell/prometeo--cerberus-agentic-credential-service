@@ -4,7 +4,9 @@
 //!
 //! Each function (1) checks the window label, (2) builds the `OperatorContext` from the unlocked
 //! session (`DesktopState::operator`), and (3) calls exactly one `VaultService` method, which
-//! checks the role of the session (`authorize`, DEC-WIRE6-13).
+//! checks the role of the session (`authorize`, DEC-WIRE6-13). The commands of the remote
+//! allowlist make that call through the shared handler in `cerberus_admin::handlers`, the same
+//! one the admin API of `cerberusd` runs (ADR-0034).
 
 mod agents;
 mod csv;

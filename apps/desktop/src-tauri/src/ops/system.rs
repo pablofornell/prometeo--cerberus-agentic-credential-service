@@ -2,6 +2,7 @@
 
 use std::net::IpAddr;
 
+use cerberus_admin::handlers;
 use cerberus_api::tls::{CustomCertError, store_custom_cert};
 use cerberus_store::AgentStatus as StoreAgentStatus;
 use cerberus_types::OperatorRole as CoreRole;
@@ -27,8 +28,7 @@ pub async fn audit_query(
 ) -> IpcResult<Vec<AuditEntryView>> {
     check(window, "audit_query")?;
     let (core, ctx) = state.operator().await?;
-    let rows = core.audit_query(&ctx, query.into_core()?).await?;
-    Ok(rows.into_iter().map(Into::into).collect())
+    handlers::audit_query(&core, &ctx, query).await
 }
 
 /// `audit_verify`.

@@ -7,8 +7,17 @@
 //! - [`dto`]: the IPC types (they carry `specta::Type`, so `bindings.ts` has the same shape) and
 //!   their conversions from and to the core types.
 //! - [`error`]: [`error::IpcError`], the error every command returns.
+//! - [`handlers`]: one handler per command of the remote allowlist. The desktop `ops` and the
+//!   admin API call the same handler, so a command does the same work in both modes.
+//! - [`remote`]: the remote allowlist and the admin protocol version.
+//! - [`rpc`]: the arguments of each remote command, the zeroizing JSON body, and the dispatch.
+//! - [`events`]: the live UI events as they go on the wire.
 
 #![forbid(unsafe_code)]
 
 pub mod dto;
 pub mod error;
+pub mod events;
+pub mod handlers;
+pub mod remote;
+pub mod rpc;

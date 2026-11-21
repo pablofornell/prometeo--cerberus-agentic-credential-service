@@ -79,6 +79,32 @@ impl IpcError {
         Self::new("unavailable", message)
     }
 
+    /// The command is not available for a remote server (ADR-0034 point 5.2): it is not on the
+    /// remote allowlist, or it needs something that lives on the desktop.
+    #[must_use]
+    pub fn remote_unsupported(message: &str) -> Self {
+        Self::new("remote_unsupported", message)
+    }
+
+    /// The admin call needs a live admin session (ADR-0034 point 6.2).
+    #[must_use]
+    pub fn admin_session_required() -> Self {
+        Self::new(
+            "admin_session_required",
+            "this call needs an open admin session",
+        )
+    }
+
+    /// The arguments are not the JSON the command takes (a bad shape or an unknown field). The
+    /// text never quotes the input: it can hold a secret.
+    #[must_use]
+    pub fn invalid_request() -> Self {
+        Self::new(
+            "invalid_request",
+            "the arguments are not valid for this command",
+        )
+    }
+
     /// An internal failure. The cause goes to the log, never to the UI.
     #[must_use]
     pub fn internal(cause: &dyn std::fmt::Display) -> Self {

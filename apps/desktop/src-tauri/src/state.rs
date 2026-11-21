@@ -532,7 +532,7 @@ impl DesktopState {
                 .compare_exchange(last, now, Ordering::SeqCst, Ordering::SeqCst)
                 .is_ok()
         {
-            core.note_operator_activity();
+            cerberus_admin::handlers::ui_activity(&core);
         }
         Ok(())
     }

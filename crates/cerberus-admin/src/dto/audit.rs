@@ -28,7 +28,7 @@ impl From<AuditOutcomeView> for AuditOutcome {
 }
 
 /// Filter of `audit_query`.
-#[derive(Clone, Debug, Deserialize, Type)]
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
 pub struct AuditQueryView {
     /// Events at or after this time.
     pub from: Option<String>,

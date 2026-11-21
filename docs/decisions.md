@@ -1350,6 +1350,23 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   `admin.bind`; an encrypted bundle. Each needs only an allowlist entry or a small change on top of the MVP.
   (`docs/remote-mode-plan.md`, "Follow-ups")
 
+## RM — Remote backend mode, build (2026-11-21)
+
+- **DEC-RM-15** — RM — The two RustDesk commands (`rustdesk_status`, `rustdesk_connect`, DEC-RD-3) are local-only and
+  not on the remote allowlist: they look for the RustDesk client on this machine, start it, and put the password on the
+  local clipboard. A `rustdesk` item itself needs no remote work: it flows through the shared DTOs and `item_*`
+  commands. Connect in remote mode is the same follow-up as clipboard copy (DEC-RM-14): reveal over RPC, then the local
+  launch and clipboard timer. (`docs/remote-mode-plan.md` step 0)
+- **DEC-RM-16** — RM — RPC argument errors: a body that is not the JSON object of the command's arguments (bad shape,
+  wrong type, missing field, unknown field, empty body) is `invalid_request`, as ADR-0034 point 5.2 says; the plan's
+  step 2 test said `validation_failed` and was corrected. A bad ID or time inside well-formed arguments stays
+  `validation_failed` with the field name, as in local IPC. The message never quotes the input (it can hold a phrase).
+  Commands with no arguments take `{}`. `vault_unlock` through `rpc` is `remote_unsupported`: it opens a session and
+  only goes to `POST /admin/v1/session`, whose body is parsed as the same `VaultUnlockArgs`. Shared handler shapes that
+  differ from the plan sketch: `vault_lock(core)` takes no context (core `lock` needs none, as the local command), and
+  `ui_activity(core)` is synchronous (the caller rate-limits it); `handlers::take_payload` and
+  `handlers::payload_for_create` hold the payload split that both callers need. (`crates/cerberus-admin/src/rpc.rs`)
+
 ## RD — RustDesk connections (2026-11-21)
 
 - **DEC-RD-1** — New item kind `rustdesk` (Rust `ItemKind::Rustdesk`, wire value `rustdesk`) for a machine reached with

@@ -1,8 +1,10 @@
 //! Commands of grants, the simulator, access requests and leases.
 
+use cerberus_admin::handlers;
+
 use crate::dto::{
     AccessRequestView, ApprovalOption, GrantInputView, GrantView, LeaseDetailView, LeaseView,
-    SimulationRow, id, opt_id,
+    SimulationRow, id,
 };
 use crate::error::IpcResult;
 use crate::guard::check;
@@ -16,13 +18,7 @@ pub async fn grant_list(
 ) -> IpcResult<Vec<GrantView>> {
     check(window, "grant_list")?;
     let (core, ctx) = state.operator().await?;
-    let agent = opt_id("agent_id", agent_id.as_deref())?;
-    Ok(core
-        .list_grants(&ctx, agent)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect())
+    handlers::grant_list(&core, &ctx, agent_id).await
 }
 
 /// `grant_put`: operator; `allow_prod_auto` needs the owner (the core checks it).
@@ -33,15 +29,14 @@ pub async fn grant_put(
 ) -> IpcResult<GrantView> {
     check(window, "grant_put")?;
     let (core, ctx) = state.operator().await?;
-    Ok(core.put_grant(&ctx, input.into_core()?).await?.into())
+    handlers::grant_put(&core, &ctx, input).await
 }
 
 /// `grant_delete`: operator.
 pub async fn grant_delete(state: &DesktopState, window: &str, grant: String) -> IpcResult<()> {
     check(window, "grant_delete")?;
     let (core, ctx) = state.operator().await?;
-    core.delete_grant(&ctx, id("id", &grant)?).await?;
-    Ok(())
+    handlers::grant_delete(&core, &ctx, grant).await
 }
 
 /// `policy_simulate`.
@@ -63,12 +58,7 @@ pub async fn request_list_pending(
 ) -> IpcResult<Vec<AccessRequestView>> {
     check(window, "request_list_pending")?;
     let (core, ctx) = state.operator().await?;
-    Ok(core
-        .pending_requests(&ctx)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect())
+    handlers::request_list_pending(&core, &ctx).await
 }
 
 /// `request_approve`: operator.
@@ -80,38 +70,28 @@ pub async fn request_approve(
 ) -> IpcResult<LeaseView> {
     check(window, "request_approve")?;
     let (core, ctx) = state.operator().await?;
-    Ok(core
-        .approve_request(&ctx, id("id", &request)?, option.into())
-        .await?
-        .into())
+    handlers::request_approve(&core, &ctx, request, option).await
 }
 
 /// `request_deny`: operator.
 pub async fn request_deny(state: &DesktopState, window: &str, request: String) -> IpcResult<()> {
     check(window, "request_deny")?;
     let (core, ctx) = state.operator().await?;
-    core.deny_request(&ctx, id("id", &request)?).await?;
-    Ok(())
+    handlers::request_deny(&core, &ctx, request).await
 }
 
 /// `lease_list`.
 pub async fn lease_list(state: &DesktopState, window: &str) -> IpcResult<Vec<LeaseDetailView>> {
     check(window, "lease_list")?;
     let (core, ctx) = state.operator().await?;
-    Ok(core
-        .list_leases(&ctx)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect())
+    handlers::lease_list(&core, &ctx).await
 }
 
 /// `lease_revoke`: any role (DEC-WIRE6-11).
 pub async fn lease_revoke(state: &DesktopState, window: &str, lease: String) -> IpcResult<()> {
     check(window, "lease_revoke")?;
     let (core, ctx) = state.operator().await?;
-    core.revoke_lease(&ctx, id("id", &lease)?).await?;
-    Ok(())
+    handlers::lease_revoke(&core, &ctx, lease).await
 }
 
 /// `lease_revoke_all`: any role. Returns how many leases ended.

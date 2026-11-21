@@ -1,15 +1,17 @@
-//! The event pump: turns `CoreEvent`s into typed UI events, keeps the pending count, opens and
-//! closes the approval window, updates the tray, and drops backend-held secrets at lock.
+//! The event pump: turns `CoreEvent`s into typed UI events (through the wire events of
+//! `cerberus-admin`, so a remote server maps them the same way), keeps the pending count, opens
+//! and closes the approval window, updates the tray, and drops backend-held secrets at lock.
 //!
 //! It follows the vault service: a restore opens a new one, and the pump subscribes again.
 
+use cerberus_admin::events::{WireEvent, from_core};
 use cerberus_core::CoreEvent;
 use cerberus_types::VaultStateKind;
 use tauri::{AppHandle, Wry};
 use tauri_specta::Event;
 use tokio::sync::broadcast::error::RecvError;
 
-use crate::dto::{RequestStatus, VaultState};
+use crate::dto::VaultState;
 use crate::events::{
     AccessRequestCreated, AccessRequestResolved, AgentActivity, AutolockTick, HeaderMismatch,
     IntegrityAlert, LeaseChanged, MassReadAlert, PendingCountChanged, VaultStateChanged,
@@ -112,23 +114,19 @@ async fn recount(app: &AppHandle<Wry>, state: &DesktopState) {
 }
 
 async fn on_event(app: &AppHandle<Wry>, state: &DesktopState, event: CoreEvent) {
-    match event {
-        CoreEvent::StateChanged(kind) => on_state(app, state, kind).await,
-        CoreEvent::AccessRequestCreated(id) => {
-            emit(app, &AccessRequestCreated { id: id.to_string() });
+    match from_core(event) {
+        WireEvent::VaultStateChanged { state: kind } => {
+            on_state(app, state, VaultStateKind::from(kind)).await;
+        }
+        WireEvent::AccessRequestCreated { id } => {
+            emit(app, &AccessRequestCreated { id });
             recount(app, state).await;
         }
-        CoreEvent::AccessRequestResolved { id, status } => {
-            emit(
-                app,
-                &AccessRequestResolved {
-                    id: id.to_string(),
-                    status: RequestStatus::from(status),
-                },
-            );
+        WireEvent::AccessRequestResolved { id, status } => {
+            emit(app, &AccessRequestResolved { id, status });
             recount(app, state).await;
         }
-        CoreEvent::AgentActivity {
+        WireEvent::AgentActivity {
             agent_id,
             event_type,
             item_id,
@@ -136,36 +134,30 @@ async fn on_event(app: &AppHandle<Wry>, state: &DesktopState, event: CoreEvent) 
         } => emit(
             app,
             &AgentActivity {
-                agent_id: agent_id.to_string(),
-                event_type: event_type.to_owned(),
-                item_id: item_id.map(|i| i.to_string()),
-                at: at.to_string(),
+                agent_id,
+                event_type,
+                item_id,
+                at,
             },
         ),
-        CoreEvent::LeaseChanged(id) => emit(app, &LeaseChanged { id: id.to_string() }),
-        CoreEvent::AutoLockTick { seconds_left } => emit(
-            app,
-            &AutolockTick {
-                seconds_left: u32::try_from(seconds_left).unwrap_or(u32::MAX),
-            },
-        ),
-        CoreEvent::MassReadAlert {
+        WireEvent::LeaseChanged { id } => emit(app, &LeaseChanged { id }),
+        WireEvent::AutolockTick { seconds_left } => emit(app, &AutolockTick { seconds_left }),
+        WireEvent::MassReadAlert {
             agent_id,
             distinct_items,
         } => emit(
             app,
             &MassReadAlert {
-                agent_id: agent_id.to_string(),
+                agent_id,
                 distinct_items,
             },
         ),
-        CoreEvent::HeaderMismatch => emit(app, &HeaderMismatch {}),
-        CoreEvent::IntegrityAlert { table, row_id } => emit(
-            app,
-            &IntegrityAlert {
-                table: table.to_owned(),
-                row_id,
-            },
-        ),
+        WireEvent::HeaderMismatch => emit(app, &HeaderMismatch {}),
+        WireEvent::IntegrityAlert { table, row_id } => {
+            emit(app, &IntegrityAlert { table, row_id });
+        }
+        // The core has no such event (`from_core` never makes it); the pending count is
+        // `recount`'s work.
+        WireEvent::PendingCountChanged { count } => emit(app, &PendingCountChanged { count }),
     }
 }

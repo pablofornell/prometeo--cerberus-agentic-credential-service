@@ -1,5 +1,6 @@
 //! Commands of workspaces, items and secrets.
 
+use cerberus_admin::handlers;
 use cerberus_core::items::{Payload, PayloadChange, generate_ed25519, import_private_key};
 use cerberus_types::OperatorRole as CoreRole;
 
@@ -8,7 +9,7 @@ use super::generate::{self, CharClass};
 use crate::dto::{
     ItemDetailView, ItemFilterView, ItemInputView, ItemSummaryView, ItemVersionView, OneTimeKind,
     PayloadSource, PayloadView, RevealedSecretView, Secret, SshKeyDraft, TotpView,
-    WorkspaceInputView, WorkspaceView, id, opt_id,
+    WorkspaceInputView, WorkspaceView, id,
 };
 use crate::error::{IpcError, IpcResult};
 use crate::guard::check;
@@ -21,12 +22,7 @@ const MAX_KEY_FILE_BYTES: u64 = 64 * 1024;
 pub async fn workspace_list(state: &DesktopState, window: &str) -> IpcResult<Vec<WorkspaceView>> {
     check(window, "workspace_list")?;
     let (core, ctx) = state.operator().await?;
-    Ok(core
-        .list_workspaces(&ctx)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect())
+    handlers::workspace_list(&core, &ctx).await
 }
 
 /// `workspace_put`: operator. `id = null` makes a new workspace.
@@ -38,11 +34,7 @@ pub async fn workspace_put(
 ) -> IpcResult<WorkspaceView> {
     check(window, "workspace_put")?;
     let (core, ctx) = state.operator().await?;
-    let workspace = opt_id("id", workspace.as_deref())?;
-    Ok(core
-        .put_workspace(&ctx, workspace, input.into())
-        .await?
-        .into())
+    handlers::workspace_put(&core, &ctx, workspace, input).await
 }
 
 /// `workspace_delete`: operator; `conflict` when the workspace has items.
@@ -65,8 +57,7 @@ pub async fn item_list(
 ) -> IpcResult<Vec<ItemSummaryView>> {
     check(window, "item_list")?;
     let (core, ctx) = state.operator().await?;
-    let items = core.list_items(&ctx, filter.into_core()?).await?;
-    Ok(items.into_iter().map(Into::into).collect())
+    handlers::item_list(&core, &ctx, filter).await
 }
 
 /// `item_get`.
@@ -77,7 +68,7 @@ pub async fn item_get(
 ) -> IpcResult<ItemDetailView> {
     check(window, "item_get")?;
     let (core, ctx) = state.operator().await?;
-    Ok(core.get_item(&ctx, id("id", &item)?).await?.into())
+    handlers::item_get(&core, &ctx, item).await
 }
 
 /// What an input does with the secret, and the draft to drop after the save.
@@ -103,21 +94,14 @@ pub async fn item_create(
 ) -> IpcResult<ItemDetailView> {
     check(window, "item_create")?;
     let (core, ctx) = state.operator().await?;
-    let view = std::mem::replace(&mut input.payload, empty_payload());
+    let view = handlers::take_payload(&mut input);
     let (change, draft) = resolve_payload(state, view).await?;
-    let PayloadChange::Replace(payload) = change else {
-        return Err(IpcError::invalid(
-            "payload",
-            "cannot be kept when an item is created",
-        ));
-    };
-    let detail = core
-        .create_item_as_operator(&ctx, input.into_core(payload)?)
-        .await?;
+    let payload = handlers::payload_for_create(change)?;
+    let detail = handlers::item_create(&core, &ctx, input, payload).await?;
     if let Some(draft) = draft {
         state.discard_draft(&draft);
     }
-    Ok(detail.into())
+    Ok(detail)
 }
 
 /// `item_update`: operator. A payload of kind `keep` changes the metadata only: the stored
@@ -130,31 +114,22 @@ pub async fn item_update(
 ) -> IpcResult<ItemDetailView> {
     check(window, "item_update")?;
     let (core, ctx) = state.operator().await?;
-    let item = id("id", &item)?;
-    let view = std::mem::replace(&mut input.payload, empty_payload());
+    // A bad ID is refused before the draft is looked up.
+    id::<cerberus_types::ItemId>("id", &item)?;
+    let view = handlers::take_payload(&mut input);
     let (change, draft) = resolve_payload(state, view).await?;
-    let detail = core
-        .update_item(&ctx, item, input.into_core(change)?)
-        .await?;
+    let detail = handlers::item_update(&core, &ctx, item, input, change).await?;
     if let Some(draft) = draft {
         state.discard_draft(&draft);
     }
-    Ok(detail.into())
-}
-
-/// A placeholder that `std::mem::replace` leaves behind. It holds no secret.
-fn empty_payload() -> PayloadView {
-    PayloadView::SshKeyDraft {
-        draft_id: String::new(),
-    }
+    Ok(detail)
 }
 
 /// `item_delete`: operator.
 pub async fn item_delete(state: &DesktopState, window: &str, item: String) -> IpcResult<()> {
     check(window, "item_delete")?;
     let (core, ctx) = state.operator().await?;
-    core.delete_item_as_operator(&ctx, id("id", &item)?).await?;
-    Ok(())
+    handlers::item_delete(&core, &ctx, item).await
 }
 
 /// `item_reveal`: operator. The only answer that holds an item secret. It goes to the main window
@@ -166,7 +141,7 @@ pub async fn item_reveal(
 ) -> IpcResult<RevealedSecretView> {
     check(window, "item_reveal")?;
     let (core, ctx) = state.operator().await?;
-    Ok(core.reveal_item(&ctx, id("id", &item)?).await?.into())
+    handlers::item_reveal(&core, &ctx, item).await
 }
 
 /// `item_versions`.
@@ -204,7 +179,7 @@ pub async fn item_totp_preview(
 ) -> IpcResult<TotpView> {
     check(window, "item_totp_preview")?;
     let (core, ctx) = state.operator().await?;
-    Ok(core.totp_preview(&ctx, id("id", &item)?).await?.into())
+    handlers::item_totp_preview(&core, &ctx, item).await
 }
 
 /// The text of one secret field of a payload. `None` when the kind has no such field.

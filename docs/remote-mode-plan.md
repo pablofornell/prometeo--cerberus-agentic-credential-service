@@ -58,6 +58,10 @@ changes in the tree). Step 9 starts after those land.
 
 Done when: `git log` shows the rustdesk commit on the base of the remote-mode branch.
 
+As built: the change landed in `95c58d4` and `e48a930` with **two** commands, `rustdesk_status` and
+`rustdesk_connect` (`ALL_COMMANDS: [&str; 71]`), and a new DTO file `dto/rustdesk.rs`. Both commands are local-only
+(DEC-RM-15): they find and start the RustDesk client on this machine and use the local clipboard.
+
 ---
 
 ## Step 1 — New crate `cerberus-admin` (pure move, no behaviour change)
@@ -70,7 +74,7 @@ Files:
   `thiserror`, `tracing`, `zeroize`. `[lints] workspace = true`.
 - New `crates/cerberus-admin/src/lib.rs`: crate docs, `#![forbid(unsafe_code)]`, `pub mod dto; pub mod error;`
   (ADR-0024 rule 6).
-- `git mv desk/src/dto/{mod,agents,audit,csv,items,network,policy,vault}.rs crates/cerberus-admin/src/dto/` and
+- `git mv desk/src/dto/{mod,agents,audit,csv,items,network,policy,rustdesk,vault}.rs crates/cerberus-admin/src/dto/` and
   `git mv desk/src/error.rs crates/cerberus-admin/src/error.rs`. Inside the moved files `crate::error` and `super::`
   paths stay valid. `IpcError` keeps its name (`error.rs:29`), so specta writes the same TypeScript.
 - `desk/src/dto.rs` (new, replaces the folder): `pub use cerberus_admin::dto::*;`.
@@ -142,7 +146,8 @@ Changed in desk:
 
 Tests:
 - adm unit: every `REMOTE_COMMANDS` entry has an `Args` type and an `ARG_NAMES` row; args JSON round-trips; unknown
-  field → `validation_failed`; unknown command → `remote_unsupported`; `Session` without ctx →
+  field → `invalid_request` (DEC-RM-16; a bad ID or time inside valid JSON stays `validation_failed`); unknown command
+  → `remote_unsupported`; `Session` without ctx →
   `admin_session_required`; draft payload refused; `from_core` covers every `CoreEvent` variant.
 - desk `tests/contract.rs` new `remote_commands_are_ipc_commands`: every remote name is in `ALL_COMMANDS`, and its
   `ARG_NAMES` equal the argument names in `bindings.ts` (the generated `TAURI_INVOKE("<name>", { ... })` call).

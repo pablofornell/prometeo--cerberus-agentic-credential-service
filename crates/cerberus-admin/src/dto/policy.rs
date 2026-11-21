@@ -191,7 +191,7 @@ impl ConditionsView {
 }
 
 /// Input of `grant_put`. `id = null` makes a new grant.
-#[derive(Clone, Debug, Deserialize, Type)]
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
 pub struct GrantInputView {
     /// The grant to change.
     pub id: Option<String>,

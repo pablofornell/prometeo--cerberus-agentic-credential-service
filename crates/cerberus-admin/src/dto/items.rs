@@ -411,7 +411,7 @@ impl PayloadView {
 
 /// Input of `item_create` and `item_update`. `payload` may be `{ kind: "keep" }` in
 /// `item_update`: the stored secret stays and only the metadata changes (DEC-INT10-6).
-#[derive(Debug, Deserialize, Type)]
+#[derive(Debug, Serialize, Deserialize, Type)]
 pub struct ItemInputView {
     /// Workspace ID.
     pub workspace_id: String,
@@ -464,7 +464,7 @@ impl ItemInputView {
 }
 
 /// Filter of `item_list`.
-#[derive(Clone, Debug, Default, Deserialize, Type)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Type)]
 pub struct ItemFilterView {
     /// Only this workspace.
     pub workspace_id: Option<String>,
@@ -621,7 +621,7 @@ impl From<SshMeta> for SshMetaView {
 }
 
 /// Result of `item_reveal`. The only IPC answer that holds an item secret.
-#[derive(Debug, Serialize, Type)]
+#[derive(Debug, Serialize, Deserialize, Type)]
 pub struct RevealedSecretView {
     /// The metadata.
     pub summary: ItemSummaryView,
@@ -669,7 +669,7 @@ impl From<CoreVersion> for ItemVersionView {
 }
 
 /// Result of `item_totp_preview`. The code is a secret for a short time.
-#[derive(Debug, Serialize, Type)]
+#[derive(Debug, Serialize, Deserialize, Type)]
 pub struct TotpView {
     /// The code.
     #[specta(type = String)]
@@ -703,7 +703,7 @@ pub struct SshKeyDraft {
 }
 
 /// Input of `workspace_put`.
-#[derive(Clone, Debug, Deserialize, Type)]
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
 pub struct WorkspaceInputView {
     /// Slug.
     pub slug: String,

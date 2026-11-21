@@ -1,5 +1,6 @@
 //! Commands of agents, their keys and their client certificates.
 
+use cerberus_admin::handlers;
 use cerberus_api::LocalCa;
 use cerberus_core::agents::NewAgentKey;
 use cerberus_types::{AgentKeyId, OperatorRole as CoreRole};
@@ -17,12 +18,7 @@ use crate::state::DesktopState;
 pub async fn agent_list(state: &DesktopState, window: &str) -> IpcResult<Vec<AgentView>> {
     check(window, "agent_list")?;
     let (core, ctx) = state.operator().await?;
-    Ok(core
-        .list_agents(&ctx)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect())
+    handlers::agent_list(&core, &ctx).await
 }
 
 /// AUD-13: on a LAN bind every active key needs a client certificate (ADR-0023 point 2). A new key

@@ -1,12 +1,15 @@
 //! Contract tests of the IPC surface: the bindings file is current, every command of
-//! `docs/interfaces.md` section 9 exists, the capability files and the label guard agree, and every
-//! command checks its window label first.
+//! `docs/interfaces.md` section 9 exists, the capability files and the label guard agree, every
+//! command checks its window label first, and the remote allowlist names IPC commands with their
+//! IPC argument names.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
+use cerberus_admin::remote::REMOTE_COMMANDS;
+use cerberus_admin::rpc::arg_names;
 use cerberus_desktop::guard::{ALL_COMMANDS, APPROVAL_COMMANDS};
 use cerberus_desktop::{BINDINGS_PATH, export_bindings};
 
@@ -112,6 +115,40 @@ fn bindings_hold_every_command_and_event() {
             bindings.contains(event),
             "bindings.ts has no event `{event}`"
         );
+    }
+}
+
+/// The argument names of `command` in its generated `__TAURI_INVOKE` call, in order.
+fn invoke_args(bindings: &str, command: &str) -> Vec<String> {
+    let call = format!("__TAURI_INVOKE(\"{command}\", ");
+    let rest = bindings
+        .split(&call)
+        .nth(1)
+        .unwrap_or_else(|| panic!("bindings.ts has no call of `{command}`"));
+    if rest.starts_with("undefined") {
+        return Vec::new();
+    }
+    let inner = rest
+        .strip_prefix("{ ")
+        .and_then(|r| r.split(" }").next())
+        .unwrap_or_else(|| panic!("unexpected arguments of `{command}`"));
+    inner.split(", ").map(ToOwned::to_owned).collect()
+}
+
+#[test]
+fn remote_commands_are_ipc_commands() {
+    let bindings = read("../ui/src/bindings.ts");
+    for (name, _) in REMOTE_COMMANDS {
+        assert!(
+            ALL_COMMANDS.contains(&name),
+            "`{name}` is not an IPC command"
+        );
+        let ours: Vec<String> = arg_names(name)
+            .unwrap_or_else(|| panic!("`{name}` has no argument names"))
+            .iter()
+            .map(|arg| camel(arg))
+            .collect();
+        assert_eq!(invoke_args(&bindings, name), ours, "arguments of `{name}`");
     }
 }
 

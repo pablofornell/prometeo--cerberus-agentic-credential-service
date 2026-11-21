@@ -2,12 +2,13 @@
 
 use std::time::Duration;
 
+use cerberus_admin::handlers;
 use cerberus_core::{KeyCustody, NewVault};
 use cerberus_crypto::{
     DICEWARE_MAX_WORDS, RecoveryKey, meets_phrase_policy, normalize_phrase, phrase_strength,
     total_ram_bytes, tune_kdf,
 };
-use cerberus_types::{LockReason, OperatorRole as CoreRole};
+use cerberus_types::OperatorRole as CoreRole;
 
 use crate::dto::{
     CreatedVaultView, KdfParamsView, KdfTuningView, OneTimeKind, OperatorPublic, OperatorRole,
@@ -27,7 +28,7 @@ pub async fn vault_status(state: &DesktopState, window: &str) -> IpcResult<Vault
     if !stranded.is_empty() {
         return Ok(VaultStatusView::stranded(&stranded));
     }
-    Ok(state.core()?.status().await.into())
+    Ok(handlers::vault_status(&state.core()?).await)
 }
 
 /// `vault_list_operators`. Works while sealed.
@@ -36,8 +37,7 @@ pub async fn vault_list_operators(
     window: &str,
 ) -> IpcResult<Vec<OperatorPublic>> {
     check(window, "vault_list_operators")?;
-    let operators = state.core()?.list_operators().await?;
-    Ok(operators.into_iter().map(Into::into).collect())
+    handlers::vault_list_operators(&state.core()?).await
 }
 
 /// `vault_create`. Only in state `NoVault`. Starts the HTTPS server, because the local CA and the
@@ -116,8 +116,7 @@ pub async fn vault_unlock_recovery(
 /// `vault_lock`. Locking a vault that is already locked is not an error.
 pub async fn vault_lock(state: &DesktopState, window: &str) -> IpcResult<()> {
     check(window, "vault_lock")?;
-    let core = state.core()?;
-    core.lock(LockReason::Manual).await?;
+    handlers::vault_lock(&state.core()?).await?;
     state.clear_held();
     Ok(())
 }
@@ -126,7 +125,7 @@ pub async fn vault_lock(state: &DesktopState, window: &str) -> IpcResult<()> {
 pub async fn vault_panic(state: &DesktopState, window: &str) -> IpcResult<()> {
     check(window, "vault_panic")?;
     let (core, ctx) = state.operator().await?;
-    core.panic_lock(&ctx).await?;
+    handlers::vault_panic(&core, &ctx).await?;
     state.clear_held();
     Ok(())
 }
