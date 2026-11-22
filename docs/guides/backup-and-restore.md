@@ -123,8 +123,8 @@ old agent keys, so do not leave it where others can read it.
 
 ## Restore to the headless daemon
 
-The daemon has no restore command. It can make a backup (see "Back up the headless daemon" above), but not restore one. Do the copy by hand, as in the
-[daemon guide](cerberusd.md#2-put-the-vault-on-the-server):
+The daemon has no restore command. It can make a backup (see "Back up the headless daemon" above), but not restore one. A new server vault is made with `cerberusd init`
+([daemon guide](cerberusd.md#2-put-the-vault-on-the-server), option A); to bring in a backup, do the copy by hand, as in option B there:
 
 ```
 sudo systemctl stop cerberusd

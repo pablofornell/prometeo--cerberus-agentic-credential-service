@@ -1796,3 +1796,32 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   To clear it, an owner or operator sets `max_unlocked_seconds` to `null` in the vault settings (`settings_set`): the row
   then holds off, and the file value does not apply to this vault. There is no call that deletes the row. Test:
   `a_change_saves_only_the_changed_keys_so_the_daemon_default_still_applies`. Replaces the last sentence of DEC-T13-5.
+
+- **DEC-SRV-2** — Server — `cerberusd init` makes a new vault, so a headless deploy needs no desktop app. Before, `serve`
+  refused to start without `vault.cerberus` and the error told the operator to copy a desktop backup. `serve` still
+  never creates a vault (`create: false`, `DaemonError::NoVault`); the new `init` subcommand (`crates/cerberusd/src/init.rs`,
+  library fn `init_with`, like `unlock_with`) is the only creator. It reads the owner passphrase twice with `rpassword`
+  (never from an argument or the environment), measures the KDF cost with `tune_kdf(700 ms)` as the desktop does, and
+  calls `KeyCustody::create_vault` with the core settings that `serve` builds (`daemon::core_config`, shared), so the vault
+  matches what `serve` expects (lock defaults, approvals, TLS issuer; the TLS folder with the CA and the first leaf is
+  written as on the desktop). The TLS names are the `host_names` of the config only: a `--host-name` option was rejected,
+  because `serve` checks the Host header against the config names alone, so a certificate with other names would be
+  refused (`OriginRefused`). The recovery key is shown one time: `--recovery-out FILE` writes it to a new file (mode
+  `0600`, exclusive create) and prints only the path; the file must be outside the data folder (the canonical folder of
+  the path is compared with the data folder) and its folder must exist and accept a probe file (`O_EXCL`), all checked before the prompts, as is the owner of an existing data folder (it must be the user that runs the command). The passphrase policy check uses the owner label as a user input, like the desktop. Without it the key
+  is printed only when stdout is a terminal. With neither a file nor a terminal the command refuses before it makes
+  anything, so the key does not reach journald or a log file. It refuses when the vault file or a `-wal` / `-shm` side file
+  exists (also a dangling link), when the data folder is open to others, when the recovery file exists, and when the two
+  phrases differ. Order: the checks, the prompts, the passphrase and label policy (`meets_phrase_policy`, the core rule),
+  the cost test, and only then the files. The files are made in one short section with SIGINT, SIGTERM, SIGHUP and SIGQUIT held (tokio
+  signal handlers; the run finishes so the key is delivered; a warning is printed if a handler cannot be installed): the data folder (0700, only if missing), the key file and the
+  vault file, both with `O_CREAT | O_EXCL`. The exclusive create of the vault file is the real "no vault here" check: a
+  vault that appears after the first check stops the run and is never touched. A failed create removes only what this run
+  made (tracked: the vault file and its side files, the key file, the TLS files and their `.tmp` names that did not exist before
+  and the TLS folder if it was new, the data folder and the parent folders that this run made, if empty; the store is closed before
+  removal, also when `VaultService::open` fails). If the key file cannot be written after the vault was
+  made, the partial key file is removed and the error says to remove the vault files and run `init` again. The vault is locked and the store
+  closed at the end, so `serve` opens a clean file. There is no flag for a weak KDF: the cost is a field of `InitRequest`
+  that only tests set (`KdfParams::new(19_456, 1, 1)`, the floor of the production range). Residual: SIGKILL or a power
+  loss in the file section can leave a partial vault that makes the next `init` refuse (documented). Replaces the sentence "cerberusd
+  never creates a vault" of DEC-T27-G-1 and amends ADR-0002 point 3. Tests: `crates/cerberusd/tests/init.rs`.

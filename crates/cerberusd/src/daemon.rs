@@ -48,7 +48,7 @@ pub struct Ready {
 pub enum DaemonError {
     /// The vault file is not in the data directory.
     #[error(
-        "no vault file at {path}. Make a backup in the desktop app, copy it to this path as {VAULT_FILE} with mode 0600, then start again."
+        "no vault file at {path}. Create one here with `cerberusd init`, or make a backup in the desktop app and copy it to this path as {VAULT_FILE} with mode 0600, then start again."
     )]
     NoVault {
         /// The expected path.
@@ -130,9 +130,23 @@ async fn bind_socket(
     Ok(listener)
 }
 
+/// The core settings of this daemon. `serve` and `cerberusd init` build them here, so a vault made by `init` is the
+/// vault that `serve` expects (lock defaults, approvals, the TLS CA issuer).
+pub(crate) fn core_config(config: &Config, tls: &TlsPaths) -> CoreConfig {
+    CoreConfig {
+        // With the admin API an enrolled desktop can decide requests (ADR-0034 point 2.3,
+        // DEC-RM-7); without it ask grants answer `403 approval_unavailable`.
+        approvals_available: config.admin.enabled,
+        idle_lock_default: config.idle_lock(),
+        max_unlocked_default: config.max_unlocked(),
+        data_dir: config.data_dir.clone(),
+        ca_issuer: Arc::new(LocalCaIssuer::new(tls.clone(), config.host_names.clone())),
+    }
+}
+
 /// Refuses a path that group or others can use. systemd sets the modes, but a manual run does not
 /// (AUD-30).
-fn check_private(path: &Path, fix: &'static str) -> Result<(), DaemonError> {
+pub(crate) fn check_private(path: &Path, fix: &'static str) -> Result<(), DaemonError> {
     let mode = std::fs::metadata(path)?.permissions().mode() & 0o777;
     if mode & 0o077 != 0 {
         return Err(DaemonError::Mode {
@@ -186,20 +200,7 @@ where
         Arc::clone(&clock),
     )
     .await?;
-    let core = VaultService::open(
-        store,
-        clock,
-        CoreConfig {
-            // With the admin API an enrolled desktop can decide requests (ADR-0034 point 2.3,
-            // DEC-RM-7); without it ask grants answer `403 approval_unavailable`.
-            approvals_available: config.admin.enabled,
-            idle_lock_default: config.idle_lock(),
-            max_unlocked_default: config.max_unlocked(),
-            data_dir: config.data_dir.clone(),
-            ca_issuer: Arc::new(LocalCaIssuer::new(tls.clone(), config.host_names.clone())),
-        },
-    )
-    .await?;
+    let core = VaultService::open(store, clock, core_config(config, &tls)).await?;
     write_ca_pem(&core, &config.data_dir).await?;
     if let Some(admin) = &admin {
         announce_admin(&core, admin).await;

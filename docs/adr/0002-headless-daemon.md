@@ -1,6 +1,6 @@
 # ADR-0002: Headless daemon `cerberusd` uses the same library
 
-- Status: Accepted. Amended by ADR-0034: point 2 ("no admin interface") and point 4 (no approvals) no longer hold when the owner turns on the opt-in admin API (`[admin] enabled = true`); point 3 names a `cerberusd restore` command that was never built (DEC-RM-13).
+- Status: Accepted. Amended by ADR-0034: point 2 ("no admin interface") and point 4 (no approvals) no longer hold when the owner turns on the opt-in admin API (`[admin] enabled = true`); point 3 names a `cerberusd restore` command that was never built (DEC-RM-13). Point 3 ("the person prepares the vault in the desktop app") is no longer the only way: see the amendment of 2026-11-22 below.
 - Date: 2026-11-16
 - Plan reference: D2
 - Related: ADR-0001, ADR-0003, ADR-0018, ADR-0024, ADR-0031
@@ -29,6 +29,15 @@ The vault logic must not be written two times.
    `MemoryDenyWriteExecute=yes`, `LimitCORE=0`, `Type=notify` (`sd-notify`). SIGTERM locks the vault and stops
    the server in a graceful way (drain 10 s).
 7. Idle auto-lock is off by default on `cerberusd` (an agent server must stay up). The owner can set it in the config.
+
+## Amendment (2026-11-22): `cerberusd init` makes a vault on the server
+
+Point 3 said the vault is always prepared in the desktop app and copied to the server. That is no longer the only way.
+`cerberusd init` creates a new vault in the data directory, so a headless deploy needs no desktop app (DEC-SRV-2). It
+uses the same `create_vault` of `cerberus-core` and the same core settings as `serve`; the passphrase is read at the
+terminal with echo off; the recovery key goes to a new `0600` file (`--recovery-out`) or to the terminal, never to a
+pipe or a log. It refuses when `vault.cerberus` exists. Copying a desktop backup still works. `cerberusd serve` still
+never creates a vault (`create: false`).
 
 ## Consequences
 

@@ -1,8 +1,9 @@
 # Running the Cerberus daemon (cerberusd)
 
-`cerberusd` serves the Agent API (REST and MCP) for a vault on a server with no screen. You prepare items, agents and
-grants in the desktop app, then copy the vault to the server. If you turn on the admin API, the desktop app can then
-work with the server vault live, approvals included (section 6, ADR-0034).
+`cerberusd` serves the Agent API (REST and MCP) for a vault on a server with no screen. You create the vault on the
+server with `cerberusd init`, or you prepare items, agents and grants in the desktop app and copy the vault to the
+server. If you turn on the admin API, the desktop app can work with the server vault live, approvals included
+(section 6, ADR-0034).
 
 ## What it can and cannot do
 
@@ -33,8 +34,58 @@ work with the server vault live, approvals included (section 6, ADR-0034).
 
 ## 2. Put the vault on the server
 
-The vault is made on the desktop app. Make a backup there, copy the backup file to the server, and store it as the
-vault file. It must be mode `0600` and owned by `cerberus`:
+There are two ways. Use one of them.
+
+### Option A: create the vault on the server
+
+A headless deploy needs no desktop app for this. Run `init` as the `cerberus` user, in an interactive shell on the
+server, before you start the service. This is the example for the packaged systemd install:
+
+```
+sudo -u cerberus cerberusd --config /etc/cerberus/cerberusd.toml init --owner alice
+```
+
+- It asks for the owner passphrase twice. Nothing is echoed. The passphrase must have 12 characters or more and a
+  strength score of 3 or more. It is never read from an argument or the environment.
+- `--owner` is the label of the first owner (default `owner`). The TLS certificate carries the `host_names` of the
+  config, so set them in `cerberusd.toml` before you run `init`: the certificate and the Host check of the daemon then
+  agree. There is no `--host-name` option.
+- Run `init` as the user that owns the data folder (`sudo -u cerberus`). It refuses a data folder of another user before it
+  asks anything.
+- The recovery key opens the vault without the passphrase and is shown one time. In a terminal `init` prints it, and
+  you write it down or put it in a password manager. Store it offline. When stdout is not a terminal (a script, or output
+  sent to a file or a log) `init` refuses before it makes anything, so the key never lands in a journal. In that case use
+  `--recovery-out FILE`: it writes the key to a new file (mode `0600`) and prints only the path. The file must be
+  **outside** the data folder (never under `/var/lib/cerberus`: the key must not sit next to the vault), must not exist,
+  and its folder must exist and be writable by the user that runs `init` (checked before the passphrase is asked).
+  Make a private folder first. `/run` is memory, so the key does not reach the disk:
+
+  ```
+  sudo install -d -m 0700 -o cerberus -g cerberus /run/cerberus-init
+  sudo -u cerberus cerberusd --config /etc/cerberus/cerberusd.toml init --owner alice \
+      --recovery-out /run/cerberus-init/recovery-key.txt
+  ```
+
+  Then move the key to offline storage (a password manager or paper), and delete the folder:
+  `sudo rm -r /run/cerberus-init`.
+- It prints the **CA pin**. A desktop that connects to this server needs it (section 6).
+- It refuses when `vault.cerberus`, `vault.cerberus-wal` or `vault.cerberus-shm` exists, and changes nothing. It never
+  removes a file it did not make. If the vault cannot be made, it removes the files it made, and you can run it again.
+- The passphrase check and the key-derivation cost test (a few seconds) run before any file is made. While the files are
+  made, SIGINT, SIGTERM, SIGHUP and SIGQUIT are held and the command finishes first, so the recovery key is not lost. A kill
+  with SIGKILL, or a power loss, in that short moment can leave a partial vault that makes the next `init` refuse. Remove
+  `vault.cerberus`, `vault.cerberus-wal`, `vault.cerberus-shm` and the `tls/` folder from the data folder (only these
+  names) and run `init` again.
+- The vault is left sealed. The key derivation cost is measured on this server (about 0.7 s per unlock), as on the
+  desktop.
+
+Then go to section 3: start the service and run `cerberusd unlock`. You can create items, agents and grants with a
+desktop in remote mode (section 6), or make the vault on the desktop (Option B) if you prefer to prepare it there.
+
+### Option B: copy a vault from the desktop app
+
+Make a backup in the desktop app, copy the backup file to the server, and store it as the vault file. It must be mode
+`0600` and owned by `cerberus`:
 
 ```
 install -m 0600 -o cerberus -g cerberus cerberus-<id>-<date>.cerberus-backup /var/lib/cerberus/vault.cerberus
