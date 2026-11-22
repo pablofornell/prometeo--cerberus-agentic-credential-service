@@ -30,14 +30,17 @@ The vault logic must not be written two times.
    the server in a graceful way (drain 10 s).
 7. Idle auto-lock is off by default on `cerberusd` (an agent server must stay up). The owner can set it in the config.
 
-## Amendment (2026-11-22): `cerberusd init` makes a vault on the server
+## Amendment (2026-11-22): the first client makes the vault on the server
 
 Point 3 said the vault is always prepared in the desktop app and copied to the server. That is no longer the only way.
-`cerberusd init` creates a new vault in the data directory, so a headless deploy needs no desktop app (DEC-SRV-2). It
-uses the same `create_vault` of `cerberus-core` and the same core settings as `serve`; the passphrase is read at the
-terminal with echo off; the recovery key goes to a new `0600` file (`--recovery-out`) or to the terminal, never to a
-pipe or a log. It refuses when `vault.cerberus` exists. Copying a desktop backup still works. `cerberusd serve` still
-never creates a vault (`create: false`).
+The daemon is the custodian and distributor of the vault, so nobody types a passphrase on the server (DEC-SRV-3; it
+replaces the `cerberusd init` of DEC-SRV-2, which is removed). With no `vault.cerberus` in the data directory,
+`cerberusd serve` does not stop: it tells systemd it is ready and runs a setup listener (a throwaway self-signed TLS
+certificate, only `GET /v1/health` and `POST /v1/setup`) until the first client creates the vault with a one-time setup
+code (`cerberusd setup-code`). The vault is made with the same `create_vault` of `cerberus-core` and the same core
+settings as `serve`, the client is enrolled as an admin client (ADR-0034 point 9), and the daemon goes on with the
+vault, with no restart. Copying a desktop backup still works. `serve` still never creates a vault by itself: the setup
+listener does it on request of a client that holds the token (`create: false` stays for an existing vault file).
 
 ## Consequences
 

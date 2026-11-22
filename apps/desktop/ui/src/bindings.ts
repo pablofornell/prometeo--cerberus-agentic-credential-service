@@ -83,6 +83,11 @@ export const commands = {
 	rustdeskConnect: (item: string, copyPassword: boolean, options?: InvokeOptions) => typedError<RustdeskConnectView, IpcError_Serialize>(__TAURI_INVOKE("rustdesk_connect", { item, copyPassword }, options)),
 	remoteStatus: (options?: InvokeOptions) => typedError<RemoteOverview_Serialize, IpcError_Serialize>(__TAURI_INVOKE("remote_status", undefined, options)),
 	remoteImportBundle: (path: string, options?: InvokeOptions) => typedError<RemoteProfileView, IpcError_Serialize>(__TAURI_INVOKE("remote_import_bundle", { path }, options)),
+	remoteSetupCheck: (code: Secret, url: string | null, options?: InvokeOptions) => typedError<RemoteSetupCheckView, IpcError_Serialize>(__TAURI_INVOKE("remote_setup_check", { code, url }, options)),
+	remoteSetup: (code: Secret, ownerLabel: string, passphrase: Secret, deviceLabel: string | null, url: string | null, options?: InvokeOptions) => typedError<RemoteSetupView_Serialize, IpcError_Serialize>(__TAURI_INVOKE("remote_setup", { code, ownerLabel, passphrase, deviceLabel, url }, options)),
+	remoteSetupSave: (options?: InvokeOptions) => typedError<RemoteProfileView, IpcError_Serialize>(__TAURI_INVOKE("remote_setup_save", undefined, options)),
+	remoteSetupCopyKey: (options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remote_setup_copy_key", undefined, options)),
+	remoteSetupFinish: (options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remote_setup_finish", undefined, options)),
 	remoteDiscardImport: (options?: InvokeOptions) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remote_discard_import", undefined, options)),
 	/**
 	 *  `remote_activate`: chooses the backend (`None`: local mode) and restarts the app to use it.
@@ -1498,6 +1503,63 @@ export type RemoteProfileView = {
 	active: boolean,
 };
 
+/**
+ *  Result of `remote_setup_check`: what the server of a setup code says before anything is sent
+ *  to it that is secret.
+ */
+export type RemoteSetupCheckView = {
+	/**  The address the setup connects to: the one in the code, or the one the person chose. */
+	url: string,
+	/**  The setup state of the server. */
+	state: SetupState,
+	/**  The server version. */
+	version: string,
+};
+
+/**
+ *  Result of `remote_setup`: the recovery key, which the server shows only once, and the profile
+ *  of the new server. The key always comes back once the server made the vault, even when this
+ *  desktop could not keep the profile: then `profile` is `None`, `store_error` says why, and
+ *  `remote_setup_save` tries again from the bundle that the backend holds.
+ */
+export type RemoteSetupView = RemoteSetupView_Serialize | RemoteSetupView_Deserialize;
+
+/**
+ *  Result of `remote_setup`: the recovery key, which the server shows only once, and the profile
+ *  of the new server. The key always comes back once the server made the vault, even when this
+ *  desktop could not keep the profile: then `profile` is `None`, `store_error` says why, and
+ *  `remote_setup_save` tries again from the bundle that the backend holds.
+ */
+export type RemoteSetupView_Deserialize = {
+	/**
+	 *  The profile of the new server. It is stored, and not the active one: `remote_activate`
+	 *  connects to it.
+	 */
+	profile?: RemoteProfileView | null,
+	/**  Why the profile is not stored. */
+	store_error?: IpcError_Deserialize | null,
+	/**  The recovery key of the new vault. */
+	recovery_key: Secret,
+};
+
+/**
+ *  Result of `remote_setup`: the recovery key, which the server shows only once, and the profile
+ *  of the new server. The key always comes back once the server made the vault, even when this
+ *  desktop could not keep the profile: then `profile` is `None`, `store_error` says why, and
+ *  `remote_setup_save` tries again from the bundle that the backend holds.
+ */
+export type RemoteSetupView_Serialize = {
+	/**
+	 *  The profile of the new server. It is stored, and not the active one: `remote_activate`
+	 *  connects to it.
+	 */
+	profile: RemoteProfileView | null,
+	/**  Why the profile is not stored. */
+	store_error: IpcError_Serialize | null,
+	/**  The recovery key of the new vault. */
+	recovery_key: Secret,
+};
+
 /**  The remote side of `vault_status` (DEC-RM-10). `null` in local mode. */
 export type RemoteStatusView = RemoteStatusView_Serialize | RemoteStatusView_Deserialize;
 
@@ -1740,6 +1802,16 @@ export type SettingsView = {
 	/**  Key to value. */
 	values: { [key in string]: Value },
 };
+
+/**  What a server without a vault says about its setup. */
+export type SetupState = 
+/**  The server waits for its first client. */
+"pending" | 
+/**
+ *  The server took too many wrong tokens from this address and asks it to wait. The wait is temporary, the code stays
+ *  valid and no restart is needed; the answer of a refused setup has the seconds (`retry_after_seconds`).
+ */
+"locked_out";
 
 /**  One row of the policy simulator. */
 export type SimulationRow = SimulationRow_Serialize | SimulationRow_Deserialize;

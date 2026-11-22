@@ -483,6 +483,24 @@ pub fn leaf_needs_renewal(
     Ok(have != want)
 }
 
+/// True when the leaf file was issued by the CA certificate `ca_der`: the issuer name of the leaf is the subject name of
+/// the CA (the name has the short ID of the vault, so the CA of another vault never matches). A leaf that cannot be read
+/// is not issued by it. `cerberusd` uses it so that a leaf of a dead CA (left by a setup that was killed, or copied with an
+/// old data folder) is never served for a vault with another CA.
+#[must_use]
+pub fn leaf_issued_by(paths: &TlsPaths, ca_der: &[u8]) -> bool {
+    let Ok(leaf_der) = std::fs::read(&paths.leaf_cert_der) else {
+        return false;
+    };
+    let (Ok((_, leaf)), Ok((_, ca))) = (
+        X509Certificate::from_der(&leaf_der),
+        X509Certificate::from_der(ca_der),
+    ) else {
+        return false;
+    };
+    leaf.issuer().as_raw() == ca.subject().as_raw()
+}
+
 fn ip_from_bytes(bytes: &[u8]) -> Option<IpAddr> {
     if let Ok(v4) = <[u8; 4]>::try_from(bytes) {
         return Some(IpAddr::from(v4));
@@ -501,7 +519,7 @@ pub fn renew_leaf_if_needed(
     now: Timestamp,
 ) -> Result<bool, ServerError> {
     let needed = match leaf_needs_renewal(paths, names, now) {
-        Ok(needed) => needed,
+        Ok(needed) => needed || !leaf_issued_by(paths, ca.cert_der()),
         Err(ServerError::Io(_) | ServerError::Cert(_)) => true,
         Err(other) => return Err(other),
     };
@@ -979,6 +997,68 @@ pub fn server_config(
     let mut config = builder.with_cert_resolver(resolver);
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     Ok(Arc::new(config))
+}
+
+/// Lifetime of the throwaway certificate of the first-start setup listener. Clients pin its key, so the date
+/// is only a bound on a forgotten process.
+const BOOTSTRAP_DAYS: i64 = 365;
+
+/// The TLS side of the first-start setup listener of `cerberusd` (ADR-0034, DEC-SRV-3): a self-signed leaf with no
+/// CA flag, made in memory at each start. It is never stored in a vault and it is not the vault CA.
+pub struct BootstrapTls {
+    /// The rustls server config: TLS 1.3 only, ALPN `http/1.1`, no client certificate.
+    pub config: Arc<ServerConfig>,
+    /// `sha256/<base64>` of the SubjectPublicKeyInfo of the certificate. The setup code carries it, and the client
+    /// pins it.
+    pub pin: String,
+}
+
+impl std::fmt::Debug for BootstrapTls {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BootstrapTls")
+            .field("pin", &self.pin)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Makes the certificate and the server config of the setup listener, for `names` (DNS names and IP addresses).
+/// ECDSA P-256, EKU serverAuth, not a CA.
+///
+/// # Errors
+/// [`ServerError::Cert`] when a name is not valid or signing fails, [`ServerError::Tls`] when rustls refuses the
+/// settings.
+pub fn bootstrap_tls(names: &[String], now: Timestamp) -> Result<BootstrapTls, ServerError> {
+    let first = names
+        .first()
+        .ok_or_else(|| cert_error("no names for the setup certificate"))?;
+    let key = KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).map_err(cert_error)?;
+    let mut params = CertificateParams::default();
+    params.distinguished_name = dn(first);
+    params.subject_alt_names = names
+        .iter()
+        .map(|name| san(name))
+        .collect::<Result<Vec<_>, _>>()?;
+    params.is_ca = IsCa::ExplicitNoCa;
+    params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    validity(&mut params, now, BOOTSTRAP_DAYS)?;
+    let cert = params.self_signed(&key).map_err(cert_error)?;
+    let pin = spki_pin(cert.der())?;
+    let provider = Arc::new(ring_provider::default_provider());
+    let mut config = ServerConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .map_err(|e| ServerError::Tls(e.to_string()))?
+        .with_no_client_auth()
+        .with_single_cert(
+            vec![CertificateDer::from(cert.der().to_vec())],
+            PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.serialize_der())),
+        )
+        .map_err(|e| ServerError::Tls(e.to_string()))?;
+    config.alpn_protocols = vec![b"http/1.1".to_vec()];
+    Ok(BootstrapTls {
+        config: Arc::new(config),
+        pin,
+    })
 }
 
 /// The client certificate check of [`server_config`]: signed by the CA in `ca_der`, EKU

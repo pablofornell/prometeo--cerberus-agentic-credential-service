@@ -41,17 +41,21 @@ a device that the owner enrolled, and only after the person types an operator pa
 4. One remote profile is active at a time. A profile is one enrolment bundle (point 3): server URL, CA pin, client
    certificate and key. Several profiles may be stored.
 
-### 2. The admin API on `cerberusd` (off by default)
+### 2. The admin API on `cerberusd` (on by default since DEC-SRV-3; was off)
 
 1. A new config table in `cerberusd.toml` (mode 0600, ADR-0002 point 5):
    ```toml
    [admin]
-   enabled = false               # CERBERUSD_ADMIN_ENABLED
+   enabled = true                # CERBERUSD_ADMIN_ENABLED (default true since DEC-SRV-3; it was false)
    session_idle_seconds = 900    # 60..3600   CERBERUSD_ADMIN_SESSION_IDLE_SECONDS
    session_max_seconds = 43200   # 900..86400 CERBERUSD_ADMIN_SESSION_MAX_SECONDS
    ```
-   With `enabled = false` (the default) **no `/admin` route is mounted**: every `/admin/...` path gives
-   `404 route_not_found`, the same answer as any unknown path. The daemon behaves exactly as before.
+   With `enabled = false` (an explicit choice since DEC-SRV-3; it was the default) **no `/admin` route is mounted**:
+   every `/admin/...` path gives `404 route_not_found`, the same answer as any unknown path. The daemon behaves exactly
+   as before. The default became `true` so that a fresh default install can wait for its first client (point 9); with
+   no desktop enrolled every admin route is refused by the device check (point 4), so nothing new is reachable. It is a
+   behaviour change for an existing config that has no `enabled` key (admin routes, client-certificate request,
+   registry read, `admin.api_start` audit and approvals on); `enabled = false` keeps the old behaviour.
 2. With `enabled = true` the routes live on the **same TLS 1.3 listener** as the Agent API (ADR-0023), under
    `/admin/v1`. The `Host`, `Origin` and `Sec-Fetch-Site` rules of ADR-0023 apply unchanged. The listener asks every
    client for a certificate signed by the vault CA. When `require_mtls` is false (loopback bind), a client without a
@@ -213,11 +217,53 @@ Rules:
 
 ### 8. Bootstrap order on a new server
 
+(Point 9 is the other way: the first client creates the vault, and steps 1 and 2 are not needed.)
+
 1. Copy a desktop backup to `<data_dir>/vault.cerberus` (mode 0600), as today (`docs/guides/cerberusd.md`).
 2. `cerberusd serve` with `[admin] enabled = true`; `cerberusd unlock` once at the terminal (makes the TLS leaf,
    ADR-0031 point 2); `cerberusd admin enroll ...` writes the bundle.
 3. On the desktop: import the bundle, connect, unlock with the bound operator's phrase. After a later daemon restart the
    vault starts sealed and the desktop can unlock it remotely, because the leaf now exists.
+
+### 9. First-time setup of a server with no vault (amendment 2026-11-22, DEC-SRV-3)
+
+Point 8 assumed the vault exists before the first desktop connects. The server is the custodian of the vault, so a
+new server needs no vault prepared elsewhere and no passphrase typed on it: the first client creates it.
+
+1. With no `vault.cerberus` and the admin API on (the default), `cerberusd serve` starts, sends READY and runs a **setup
+   listener** on the configured addresses. Its certificate is self-signed, not a CA, made in memory at each start and
+   never stored in a vault. With an explicit `enabled = false` there is no listener (the client could not get a bundle); the daemon
+   logs why and waits.
+2. It makes a random 32-byte token and a one-time **setup code** `cerberus-setup:1:<base64url(json {url, token, pin})>`
+   with the pin `sha256/<base64>` of the SPKI of the setup certificate. The code goes to `<data_dir>/setup-code` (mode
+   `0600`, replaced at each start, deleted when the setup works or the daemon stops) and to `cerberusd setup-code`.
+   The log has the file path and the pin, never the token.
+3. Routes: `GET /v1/health` answers `{"status":"ok","vault":"no_vault","setup":"pending"|"locked_out","version"}`.
+   `POST /v1/setup` takes `{setup_token, owner_label, passphrase, device_label?, url?}`. Every other route answers
+   `503 unavailable`. Errors have the ADR-0021 shape. The token is compared in constant time; after 5 wrong tokens from
+   one address that address waits 2 s, 4 s ... up to 5 min (`429 too_many_failures`, `retry_after_seconds`; health says
+   `locked_out` to it meanwhile); other addresses (IPv6 by /64) are not affected. The listener serves one request per
+   connection, with at most 4 connections per address and 16 in all, 40 s for a connection that starts no setup and 10 s
+   for the body (threat model E-17). One setup runs at a time (`409 conflict`) and one
+   that worked closes the listener for good. It runs in a task of its own that holds the phase lock, so a connection
+   that ends cannot stop it half way; the vault is built under a temporary name and renamed to `vault.cerberus` after the
+   enrolment (point 5). The passphrase policy is checked on the server, and the key-derivation cost
+   is **measured by the server** (ADR-0013); the client cannot choose it. The `url` of the bundle (default: the URL of
+   the code) must be a valid bundle URL (`check_url`) whose host is a TLS name of the server, checked before anything is made.
+4. The client trusts only the key of the setup certificate (`cerberus_client::setup`: a leaf pin, TLS 1.3, no system
+   roots). So the passphrase goes only to the server that holds the code.
+5. On success the server makes the vault (core `create_vault`, same core settings as `serve`), enrols the client like
+   `cerberusd admin enroll` (certificate, `admin-clients.json`, audit `admin.client_enroll`; `vault.create` is audited by
+   the core), deletes the code file and answers once, over the pinned channel, with `{recovery_key, ca_pin, owner_id,
+   bundle}`. The bundle is the file of point 3.4, so the desktop imports and activates it as any bundle. Any failure
+   before the answer is ready removes every file of the attempt (the recovery key is never lost with a vault that
+   exists).
+6. Then the setup listener stops and the daemon goes on as for any vault, with no restart: HTTPS with the vault CA and
+   leaf, renewal, the unlock socket and MCP. The vault stays unlocked, as `create_vault` leaves it; it starts sealed
+   after the next restart, and point 6 (admin sessions, unlock through the desktop) applies.
+
+Alternative rejected: keep a server-side `cerberusd init` that types the passphrase (DEC-SRV-2). It makes the server
+the place where the secret is typed, which is the opposite of a custodian that serves vaults to clients.
 
 ## Consequences
 

@@ -7,6 +7,7 @@ import { qk } from "../../ipc/keys";
 import { useOperators, useRemoteOverview } from "../../ipc/queries";
 import { ConnectRemoteDialog } from "../../remote/ConnectRemoteDialog";
 import { ProfileFacts } from "../../remote/ProfileFacts";
+import { openSetupDialog } from "../../shell/setupFlow";
 import { Button, ConfirmDialog, errorText, Notice, Skeleton, StatusDot, useToast } from "../../ui";
 import { SectionHead, Setting, SettingGroup } from "./Setting";
 import { messages } from "./messages";
@@ -197,6 +198,11 @@ export function ServerSection({ status }: { status: VaultStatusView }) {
           <Setting label={t("srv.local.label")} description={t("srv.local.desc")}>
             <Button size="sm" icon="server" disabled={busy !== null} onClick={() => setConnecting(true)}>
               {t("srv.connect")}
+            </Button>
+          </Setting>
+          <Setting label={t("srv.setup.label")} description={t("srv.setup.desc")}>
+            <Button size="sm" icon="plus" disabled={busy !== null} onClick={() => openSetupDialog(true)}>
+              {t("srv.setup")}
             </Button>
           </Setting>
           {overview.isPending ? (

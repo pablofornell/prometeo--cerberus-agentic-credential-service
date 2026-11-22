@@ -30,7 +30,7 @@ the end of this page.
 | `404 no_match` | No item matches `app`, `environment`, `role` or `kind`. Or the agent has no grant for the item | Check the names with `cerberus find`. Check the grant in the policies screen. An agent sees only what its grants allow |
 | `403 forbidden` on a call that should work | No grant for that permission, or the scope is missing | Check the grant (`find`, `read`, `write`, `use_ssh`) and the key scopes |
 | `403 insufficient_scope` | The key does not have the scope the route needs | Make a key with the scope, or ask the owner for it |
-| `403 approval_unavailable` | The daemon cannot ask a person | Use an `auto` grant on the server, or approve in the desktop app |
+| `403 approval_unavailable` | The daemon cannot ask a person (the admin API is off: `[admin] enabled = false`) | Use an `auto` grant on the server, or approve in the desktop app |
 | `403 approval_denied` | A person denied the request. The same agent cannot ask for the same item again for 10 minutes by default | Ask the person. Do not retry in a loop |
 | `"outcome": "pending"` in an answer | Nobody decided within the wait (120 s by default) | Call again later. Keep the request ID. Ask the owner to look at the approval window |
 | `429 rate_limited` on a good token | The agent is over its limit (20 calls a second, burst 40), or it already has 32 open connections | Read `Retry-After`. Slow down |
@@ -66,10 +66,16 @@ the end of this page.
 |---|---|---|
 | `config file ... has mode 644; it must be 0600` | Config file is readable by others | `chmod 0600 /etc/cerberus/cerberusd.toml` and the owner `cerberus` |
 | `... has mode ...; it must not be open to group or others` | The data folder or the vault file is open to others | Set mode `0700` on the folder and `0600` on the file |
-| `no vault file at ...` | The data folder has no vault yet | Make one with `cerberusd init` (see the [daemon guide](cerberusd.md#2-put-the-vault-on-the-server)), or copy a desktop backup as `vault.cerberus` (see [backup and restore](backup-and-restore.md#restore-to-the-headless-daemon)) |
-| `init`: `... exists (the vault file or one of its -wal / -shm side files); init never replaces a vault` | The data folder already has `vault.cerberus`, or a `vault.cerberus-wal` / `-shm` file | Use that vault, or remove the vault files yourself if you want a new one. A `-wal` with no vault is a leftover: check it before you remove it |
-| `init`: `stdout is not a terminal ...` | `init` runs in a script or with its output sent to a file, and has no `--recovery-out` | Add `--recovery-out <new file outside the data folder>`, or run it in a terminal |
-| `init`: `... is inside the data folder` | `--recovery-out` points into the data folder | Use a path outside it |
+| `no vault yet: waiting for the first client to create it` in the log | The data folder has no vault. This is normal on a first start | Read the code with `cerberusd setup-code` and give it to the first client (see the [daemon guide](cerberusd.md#2-put-the-vault-on-the-server)), or copy a desktop backup as `vault.cerberus` and restart (see [backup and restore](backup-and-restore.md#restore-to-the-headless-daemon)) |
+| `no vault yet, and [admin] enabled = false` in the log | The data folder has no vault, and the config turns the admin API off, so no client can create it | Remove `enabled = false` from `[admin]` in `cerberusd.toml` (the default is true) and restart, or copy a desktop backup |
+| `setup-code`: `no setup is pending` / `... is stale` | No daemon waits for a first client: it is stopped, it has a vault, or the config has `[admin] enabled = false` | Start the daemon with an empty data folder and the admin API on (the default). A new start makes a new code |
+| `setup-code`: `... exists: this server has a vault already` | The data folder has `vault.cerberus`, so no setup is pending | Nothing to set up. To start again, remove the vault files yourself (`vault.cerberus`, `-wal`, `-shm`, `tls/`), after you check that you do not need them, and restart |
+| The client gets `unauthenticated` from setup | The setup token is wrong, or the code is from an earlier start | Read the code again with `cerberusd setup-code` |
+| The client gets `too_many_failures` from setup, health says `"setup": "locked_out"` | This address sent more than 5 wrong tokens and has to wait (2 s, 4 s ... up to 5 min) | Wait `retry_after_seconds` and use the current code (`cerberusd setup-code`). No restart is needed |
+| The client gets `conflict` from setup | A setup is running, one already worked, or a vault file appeared in the data folder | Wait and try again. If a vault file is there, restart the daemon to serve it |
+| The client gets `validation_failed` with the field `url` from setup | The host of the URL is not a TLS name of the server | Add the name to `host_names` in `cerberusd.toml` and restart, or use `localhost` through an SSH tunnel |
+| The client gets a certificate pin mismatch from setup | The code is from another start or another server, or the vault was made already (the port now serves the vault certificate) | Read the current code with `cerberusd setup-code` |
+| `vault.cerberus.setup-...` files in the data folder after a crash | A kill or a power loss while the first client made the vault. They are not the vault | Nothing: the next start removes them and waits for the first client again |
 | `config file ...: unknown key ...` | A key in the TOML file is not known | Remove the key, or fix the spelling. See the [config reference](cerberusd.md#config-reference) |
 | `no cerberusd is running for this data directory` | `unlock` ran while the daemon is stopped, or with another data directory | Start the service. Use the same `--config` |
 | `cannot read the passphrase: ... Run this command from a local terminal.` | No terminal, for example in a remote script | Run `unlock` in a local terminal |

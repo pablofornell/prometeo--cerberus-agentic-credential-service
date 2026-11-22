@@ -26,6 +26,7 @@ use crate::error::IpcResult;
 use crate::guard::check;
 use crate::ops::{self, CharClass, SshKeySource};
 use crate::remote;
+use crate::remote::setup::{RemoteSetupCheckView, RemoteSetupView};
 use crate::state::DesktopState;
 
 /// Makes a command that calls `ops::<name>(&state, window_label, args...)`.
@@ -179,6 +180,11 @@ ipc!(rustdesk_status() -> RustdeskStatusView);
 ipc!(rustdesk_connect(item: String, copy_password: bool) -> RustdeskConnectView);
 ipc!(@both remote_status() -> RemoteOverview);
 ipc!(@both remote_import_bundle(path: String) -> RemoteProfileView);
+ipc!(@both remote_setup_check(code: Secret, url: Option<String>) -> RemoteSetupCheckView);
+ipc!(@both remote_setup(code: Secret, owner_label: String, passphrase: Secret, device_label: Option<String>, url: Option<String>) -> RemoteSetupView);
+ipc!(@both remote_setup_save() -> RemoteProfileView);
+ipc!(@both remote_setup_copy_key() -> ());
+ipc!(@both remote_setup_finish() -> ());
 ipc!(@both remote_discard_import() -> ());
 ipc!(@both remote_disconnect() -> ());
 ipc!(@both remote_forget(profile: String) -> ());

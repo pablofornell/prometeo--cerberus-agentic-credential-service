@@ -226,11 +226,48 @@ finished. The app warns you about this before it writes.
 The app can be a client of a vault that runs on a server with `cerberusd` ([ADR-0034](../adr/0034-remote-backend-mode.md)).
 Then it opens no vault of its own and serves no agents on this computer. Local mode stays the default.
 
-**Before you start.** The server needs the admin API turned on (`[admin] enabled = true`), one unlock at its terminal,
-and an enrolment of this desktop. The [daemon guide](cerberusd.md) shows the steps. `cerberusd admin enroll` writes a
-bundle file. Move it to this computer over a trusted channel (for example `scp`).
+There are two ways in. A server that has no vault yet is **set up** from this app: the app makes the vault on the
+server and comes out connected. A server that already has a vault is **connected** with a bundle file.
 
-**Connect.**
+**Set up a new server.** The server runs `cerberusd` and has no vault yet. It waits for its first client. Ask whoever
+runs the server for its **setup code**: `cerberusd setup-code` prints it, as a line that starts with
+`cerberus-setup:1:`. See the [daemon guide](cerberusd.md).
+
+1. On the unlock screen, choose **Set up a new server** under the card (or Settings › Remote server ›
+   **Set up a new server**). It sits next to **Connect to a remote server**.
+2. **Server.** Paste the setup code and choose **Check server**. The app asks the server whether it waits for its first
+   client and shows its address, status and version. The code holds the fingerprint of the server, so you do not
+   compare anything by hand: your phrase can reach only the server that made the code. If the server is behind an SSH
+   tunnel, open **Reach the server at another address** and enter the address of the tunnel end, for example
+   `https://localhost:7373`. It must be one of the names in the certificate of the server.
+3. **Owner.** Enter your name on the vault and a master phrase. The phrase has the same rules as for a local vault
+   (12 characters or more, a strength score of 3 or more), and the strength meter and the generator work the same. The
+   server tunes the unlock cost to its own machine and takes a few seconds, up to two minutes on a slow one. Keep the
+   app open meanwhile. Under **Name of this computer on the server** you can change how the server lists this
+   computer (default `desktop`).
+4. **Recovery key.** The app shows the recovery key one time. Print it, copy it, or write it down, then type back the
+   two groups it asks for and confirm that you stored it. The server keeps no copy you can read.
+5. Choose **Connect to the server**. The app restarts in remote mode, the same as after a bundle import. Unlock with the
+   phrase you just chose. You are the owner of the vault, and this computer is its first admin client.
+
+The app stores the server as a profile before it shows the key, so if you close it in between, connect from
+Settings › Remote server. After you check the key, **Close, connect later** leaves the dialog without connecting. If
+this computer cannot store the profile (for example a full disk), the app still shows the key and offers **Save the
+connection**, which tries again; the key and the enrolment stay in the app until you leave this step. The dialog stays
+open if the screen under it changes, for example when an idle lock happens during the setup. The recovery key cannot be shown again, and a remote session cannot rotate it, so store it
+before you choose **Connect to the server**.
+
+| The app says | What to do |
+|---|---|
+| This is not a Cerberus setup code | Paste the whole line that `cerberusd setup-code` prints |
+| This is not the server of that code | The code is old (the server restarted and made a new one), the address leads to another machine, or the vault is already set up. Get a new code |
+| This address has to wait, or Wait before you try again | The server saw too many wrong codes from this address (five in a row) and asks it to wait: 2 s, then 4 s, 8 s and so on, up to 5 minutes. The code stays valid and the server needs no restart. The app counts the seconds and enables **Create vault on the server** again when the wait is over. Other computers are not affected |
+| This server already has a vault | Nothing to set up. Run `cerberusd admin enroll` on the server and connect with the bundle |
+| The answer of the server did not arrive | The vault may exist. Run `cerberusd status` on the server. If it shows none, try again. If it shows a vault, you did not see its recovery key and nobody can show it again. The vault is new and empty: remove it on the server and set up again, or enrol this desktop with `cerberusd admin enroll` and work without a recovery key |
+
+**Connect with a bundle.** The server needs the admin API turned on (`[admin] enabled = true`), one unlock at its
+terminal, and an enrolment of this desktop. The [daemon guide](cerberusd.md) shows the steps. `cerberusd admin enroll`
+writes a bundle file. Move it to this computer over a trusted channel (for example `scp`).
 
 1. On the unlock screen, choose **Connect to a remote server** under the card (or Settings › Remote server ›
    **Connect to a server**).

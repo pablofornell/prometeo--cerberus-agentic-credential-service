@@ -31,7 +31,7 @@ use zeroize::Zeroizing;
 
 use crate::config::{ClientConfig, Trust, parse_base_url};
 use crate::error::ClientError;
-use crate::tls::{client_config, is_pin_mismatch};
+use crate::tls::{client_config, is_pin_mismatch, leaf_pin_config};
 
 /// Time limit of the TCP connect.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -253,6 +253,25 @@ impl PinnedHttps {
         )
     }
 
+    /// Builds the transport for the first-time setup of a `cerberusd` with no vault (DEC-SRV-3): the server
+    /// certificate must have the key of `leaf_pin` (`sha256/<base64>`, the pin in the setup code). No token, no client
+    /// certificate. Use it through [`crate::setup`].
+    ///
+    /// # Errors
+    /// [`ClientError::Config`] when the URL is not `https` or the pin is not valid.
+    pub fn for_setup(
+        base_url: &str,
+        leaf_pin: &str,
+        call_timeout: Duration,
+    ) -> Result<Self, ClientError> {
+        Self::build_with(
+            parse_base_url(base_url)?,
+            leaf_pin_config(leaf_pin)?,
+            None,
+            call_timeout,
+        )
+    }
+
     /// Builds the transport from a full [`ClientConfig`] (adds mTLS and the call time limit).
     ///
     /// # Errors
@@ -274,7 +293,20 @@ impl PinnedHttps {
         token: Option<&WireSecret>,
         call_timeout: Duration,
     ) -> Result<Self, ClientError> {
-        let tls = client_config(trust, client_cert)?;
+        Self::build_with(
+            base,
+            client_config(trust, client_cert)?,
+            token,
+            call_timeout,
+        )
+    }
+
+    fn build_with(
+        base: Url,
+        tls: rustls::ClientConfig,
+        token: Option<&WireSecret>,
+        call_timeout: Duration,
+    ) -> Result<Self, ClientError> {
         let (host, server_name) = match base.host() {
             Some(Host::Domain(name)) => (
                 name.to_owned(),

@@ -25,10 +25,13 @@ pub const ADMIN_IDLE_RANGE: std::ops::RangeInclusive<u32> = 60..=3600;
 /// Allowed admin session absolute limits, in seconds (ADR-0034 point 2.1).
 pub const ADMIN_MAX_RANGE: std::ops::RangeInclusive<u32> = 900..=86_400;
 
-/// The `[admin]` table: the admin API for an enrolled desktop app (ADR-0034). Off by default.
+/// The `[admin]` table: the admin API for an enrolled desktop app (ADR-0034). On by default (DEC-SRV-3); an explicit
+/// `enabled = false` turns it off.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AdminSettings {
-    /// Mount `/admin/v1` on the HTTPS listener and allow approvals (`ask_once`, `ask_always`).
+    /// Mount `/admin/v1` on the HTTPS listener (every route needs the client certificate of an enrolled desktop, so with
+    /// none enrolled nothing is reachable), ask for client certificates on the listener, load the admin registry,
+    /// allow approvals (`ask_once`, `ask_always`) and allow the first-time setup of a server with no vault.
     pub enabled: bool,
     /// An admin session ends after this many seconds without a call: 60 to 3600, default 900.
     pub session_idle_seconds: u32,
@@ -39,7 +42,7 @@ pub struct AdminSettings {
 impl Default for AdminSettings {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             session_idle_seconds: 900,
             session_max_seconds: 43_200,
         }
@@ -76,7 +79,7 @@ pub struct Config {
     /// Hard limit after unlock in seconds. `0` is off, the daemon default. An admin can change it
     /// at run time with the vault settings.
     pub max_unlocked_seconds: u32,
-    /// The admin API (ADR-0034). Off by default.
+    /// The admin API (ADR-0034). On by default.
     pub admin: AdminSettings,
 }
 
@@ -576,13 +579,21 @@ mod tests {
     }
 
     #[test]
-    fn the_admin_api_is_off_by_default() {
+    fn the_admin_api_is_on_by_default_and_an_explicit_false_turns_it_off() {
         let config = resolve(FileConfig::default(), &data_dir_env).expect("defaults");
         assert_eq!(config.admin, AdminSettings::default());
-        assert!(!config.admin.enabled);
+        assert!(config.admin.enabled);
         assert_eq!(config.admin.limits(), AdminLimits::default());
         let file: FileConfig = toml::from_str("[admin]\n").expect("empty table");
         let config = resolve(file, &data_dir_env).expect("empty table");
+        assert!(config.admin.enabled);
+        let file: FileConfig = toml::from_str("[admin]\nenabled = false\n").expect("off");
+        assert!(!resolve(file, &data_dir_env).expect("off").admin.enabled);
+        let env = |key: &str| match key {
+            "CERBERUSD_ADMIN_ENABLED" => Some("false".to_owned()),
+            other => data_dir_env(other),
+        };
+        let config = resolve(FileConfig::default(), &env).expect("env off");
         assert!(!config.admin.enabled);
     }
 

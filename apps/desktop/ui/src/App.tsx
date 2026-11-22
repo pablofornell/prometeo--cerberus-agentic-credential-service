@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { Router, type BaseLocationHook } from "wouter";
 import { EventBridge } from "./ipc/events";
 import { createQueryClient } from "./ipc/queryClient";
+import { SetupServerDialog } from "./remote/SetupServerDialog";
 import { Routes } from "./shell/Routes";
 import { useHashLocation } from "./shell/location";
 import { PrefsProvider } from "./state/prefs";
@@ -25,6 +26,7 @@ export function App({ queryClient, hook = useHashLocation }: AppProps) {
             <Router hook={hook}>
               <EventBridge />
               <Routes />
+              <SetupServerDialog />
             </Router>
           </ContextMenuProvider>
         </ToastProvider>

@@ -30,7 +30,11 @@ export type KnownErrorCode =
   | "remote_protocol_mismatch"
   | "admin_session_required"
   | "admin_cert_required"
-  | "invalid_bundle";
+  | "invalid_bundle"
+  // First-time setup of a server (DEC-SRV-3).
+  | "unauthenticated"
+  | "setup_wrong_server"
+  | "setup_unconfirmed";
 
 export type ErrorCode = KnownErrorCode | (string & {});
 

@@ -1096,3 +1096,30 @@ async fn aud30_a_stale_loose_temp_file_does_not_set_the_key_mode() {
     assert_eq!(mode & 0o777, 0o600);
     fx.stop().await;
 }
+
+/// A leaf of another CA (left behind by a setup that was killed, or by an older vault in the folder) is not accepted for
+/// this CA, and the renewal replaces it at once, although it is new and has the right names.
+#[test]
+fn a_leaf_of_another_ca_is_not_issued_by_this_ca_and_is_renewed() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let paths = cerberus_api::tls::TlsPaths::in_data_dir(dir.path());
+    let now = SystemClock.now();
+    let dead = LocalCa::create(&VaultId::generate(), now).expect("dead ca");
+    let live = LocalCa::create(&VaultId::generate(), now).expect("live ca");
+    let names = cerberus_api::tls::leaf_names(&[]);
+    write_leaf(&paths, &dead.issue_leaf(&names, now).expect("leaf")).expect("write");
+    assert!(cerberus_api::tls::leaf_issued_by(&paths, dead.cert_der()));
+    assert!(!cerberus_api::tls::leaf_issued_by(&paths, live.cert_der()));
+    assert!(
+        cerberus_api::tls::renew_leaf_if_needed(&live, &paths, &names, now).expect("renew"),
+        "the leaf of the dead CA is replaced"
+    );
+    assert!(cerberus_api::tls::leaf_issued_by(&paths, live.cert_der()));
+    assert!(
+        !cerberus_api::tls::renew_leaf_if_needed(&live, &paths, &names, now).expect("renew"),
+        "a leaf of this CA is kept"
+    );
+    // No leaf at all is not issued by any CA.
+    let empty = cerberus_api::tls::TlsPaths::in_data_dir(&dir.path().join("none"));
+    assert!(!cerberus_api::tls::leaf_issued_by(&empty, live.cert_der()));
+}

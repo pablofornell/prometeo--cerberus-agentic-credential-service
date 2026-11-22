@@ -1,15 +1,14 @@
-//! Command line of `cerberusd`: `init`, `serve`, `unlock`, `status` (ADR-0002), `backup` (ADR-0031) and `admin` (ADR-0034). See
-//! `docs/guides/cerberusd.md`.
+//! Command line of `cerberusd`: `serve`, `unlock`, `status`, `setup-code` (ADR-0002, DEC-SRV-3), `backup` (ADR-0031) and `admin`
+//! (ADR-0034). See `docs/guides/cerberusd.md`.
 
-use std::io::{self, IsTerminal};
+use std::io;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use cerberus_crypto::memlock::{self, HardeningReport};
 use cerberusd::admin::{self, EnrollRequest, Source};
 use cerberusd::config::{self, Config};
-use cerberusd::init::{self, InitRequest, RecoveryOutput, RecoveryTarget};
-use cerberusd::{backup, daemon, status, unlock};
+use cerberusd::{backup, daemon, setup, status, unlock};
 use clap::{Parser, Subcommand};
 use tokio::signal::unix::{SignalKind, signal};
 
@@ -18,7 +17,7 @@ use tokio::signal::unix::{SignalKind, signal};
 #[command(
     name = "cerberusd",
     version,
-    about = "Cerberus headless daemon: serves the Agent API for a vault made here with `init` or copied from the desktop app."
+    about = "Cerberus headless daemon: serves the Agent API for a vault that the first client creates over the network, or that is copied from the desktop app."
 )]
 struct Cli {
     /// Config file. Without this flag the default file is read when it exists.
@@ -31,19 +30,12 @@ struct Cli {
 /// The commands.
 #[derive(Subcommand)]
 enum Command {
-    /// Create a new vault in the data directory. Asks for the owner passphrase twice, with echo off. Refuses when a
-    /// vault file exists.
-    Init {
-        /// Label of the first owner, 1 to 64 characters.
-        #[arg(long, value_name = "LABEL", default_value = init::DEFAULT_OWNER)]
-        owner: String,
-        /// Write the recovery key to this new file (mode 0600) instead of the terminal. It must be outside the data
-        /// directory. Needed when stdout is not a terminal: the key is never printed to a pipe or a log.
-        #[arg(long, value_name = "FILE")]
-        recovery_out: Option<PathBuf>,
-    },
-    /// Serve the Agent API. The vault starts sealed. Unlock it with `cerberusd unlock`.
+    /// Serve the Agent API. The vault starts sealed. Unlock it with `cerberusd unlock`. With no vault in the data
+    /// directory the daemon waits for the first client to create it (see `setup-code`).
     Serve,
+    /// Print the setup code of a daemon that waits for its first client. Paste it into the desktop app to create
+    /// the vault. It is a secret until the vault exists.
+    SetupCode,
     /// Unlock a running daemon. Asks for the passphrase here, with echo off.
     Unlock {
         /// Operator label. Needed when the vault has more than one owner.
@@ -127,11 +119,12 @@ async fn run(cli: Cli, report: HardeningReport) -> Result<(), String> {
     let env = |key: &str| std::env::var(key).ok();
     let config = config::load(cli.config.as_deref(), &env).map_err(|error| error.to_string())?;
     match cli.command {
-        Command::Init {
-            owner,
-            recovery_out,
-        } => run_init(&config, owner, recovery_out).await,
         Command::Serve => serve(&config, report).await,
+        Command::SetupCode => {
+            let code = setup::read_setup_code(&config).map_err(|error| error.to_string())?;
+            println!("{}", code.as_str());
+            Ok(())
+        }
         Command::Unlock { operator } => {
             let socket = unlock::socket_path(&config.data_dir);
             let label = unlock::unlock_with(&socket, operator.as_deref(), |prompt| {
@@ -143,6 +136,24 @@ async fn run(cli: Cli, report: HardeningReport) -> Result<(), String> {
             Ok(())
         }
         Command::Status => {
+            if !config.data_dir.join(daemon::VAULT_FILE).exists() {
+                if config.admin.enabled && setup::is_listening(&config) {
+                    println!(
+                        "no vault yet: this server waits for its first client to create it; run `cerberusd setup-code` for the setup code"
+                    );
+                } else if config.admin.enabled {
+                    println!(
+                        "no vault yet, and no cerberusd waits at {}: start the daemon, then run `cerberusd setup-code`",
+                        status::probe_addr(&config)
+                    );
+                } else {
+                    println!(
+                        "no vault yet, and the admin API is off, so no client can create it: remove `enabled = false` from [admin] in cerberusd.toml (or set it to true) and restart cerberusd"
+                    );
+                }
+                println!("{}", status::admin_summary(&config));
+                return Ok(());
+            }
             let health = status::check(&config)
                 .await
                 .map_err(|error| error.to_string())?;
@@ -169,59 +180,6 @@ async fn run(cli: Cli, report: HardeningReport) -> Result<(), String> {
         }
         Command::Admin { command } => run_admin(&config, command).await,
     }
-}
-
-/// `cerberusd init`: the checks that need no passphrase run first, then the library makes the vault and this prints
-/// what the person needs next.
-async fn run_init(
-    config: &Config,
-    owner: String,
-    recovery_out: Option<PathBuf>,
-) -> Result<(), String> {
-    // Before anything is asked or made: a key with no safe place stops the command here.
-    let recovery = RecoveryTarget::choose(recovery_out, io::stdout().is_terminal())
-        .map_err(|error| error.to_string())?;
-    let request = InitRequest {
-        owner_label: owner.clone(),
-        recovery,
-        kdf: None,
-    };
-    let report = init::init_with(config, request, |prompt| rpassword::prompt_password(prompt))
-        .await
-        .map_err(|error| error.to_string())?;
-    println!(
-        "vault created at {} (owner {owner:?}, sealed)",
-        report.vault_path.display()
-    );
-    println!("CA pin: {}", report.ca_pin);
-    match report.recovery {
-        RecoveryOutput::Written(path) => {
-            println!("recovery key written to {} (mode 0600)", path.display());
-            println!(
-                "Move it to offline storage (a password manager or paper), then delete the file."
-            );
-        }
-        RecoveryOutput::Show(key) => {
-            println!();
-            println!("RECOVERY KEY (shown one time; it cannot be shown again):");
-            println!();
-            println!("    {}", key.expose_secret());
-            println!();
-            println!(
-                "Store it offline now (paper or a password manager). Anyone with this key can open the vault; \
-                 without it and the passphrase the data cannot be restored."
-            );
-        }
-    }
-    if report.interrupted {
-        eprintln!(
-            "an interrupt came in while the vault was made; the command finished first so the recovery key is not lost"
-        );
-    }
-    println!(
-        "Next: start the daemon (`cerberusd serve`, or `systemctl start cerberusd`), then run `cerberusd unlock`."
-    );
-    Ok(())
 }
 
 async fn run_admin(config: &Config, command: AdminCommand) -> Result<(), String> {

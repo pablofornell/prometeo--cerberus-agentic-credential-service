@@ -116,7 +116,7 @@ export function NameStep({ name, onName, hosts, onHosts, onNext }: NameStepProps
   );
 }
 
-interface PhraseStepProps {
+interface PhraseFieldsProps {
   phrase: string;
   confirm: string;
   onPhrase: (value: string) => void;
@@ -126,13 +126,19 @@ interface PhraseStepProps {
   generating: boolean;
   generateFailed: boolean;
   onGenerate: () => void;
-  onBack: () => void;
-  onNext: () => void;
+  /** Focus the phrase field when it mounts. Off where another field comes first. */
+  autoFocus?: boolean;
 }
 
 const WORD_COUNT = 7;
 
-export function PhraseStep(props: PhraseStepProps) {
+/** True when the phrase meets the policy and both entries match. The create wizard and the server setup share it. */
+export function phraseReady(phrase: string, confirm: string, strength: StrengthState): boolean {
+  return phrase.length >= MIN_PHRASE_LENGTH && strength.status === "ready" && strength.view.acceptable && phrase !== "" && phrase === confirm;
+}
+
+/** The phrase, its strength meter and policy, the generator and the second entry. The caller owns the state and the buttons. */
+export function PhraseFields({ autoFocus = true, ...props }: PhraseFieldsProps) {
   const { phrase, confirm, strength, generated } = props;
   const t = useScreenT(messages);
   const [show, setShow] = useState(false);
@@ -140,7 +146,6 @@ export function PhraseStep(props: PhraseStepProps) {
   const score = strength.status === "ready" ? strength.view.score : null;
   const strongEnough = strength.status === "ready" && strength.view.acceptable;
   const matches = phrase !== "" && phrase === confirm;
-  const ready = longEnough && strongEnough && matches;
   const type = show ? "text" : "password";
 
   let line: string;
@@ -157,17 +162,8 @@ export function PhraseStep(props: PhraseStepProps) {
     lineTone = strength.view.acceptable ? "ok" : "danger";
   }
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (ready) props.onNext();
-  };
-
   return (
-    <form className="pane" noValidate onSubmit={submit}>
-      <h1 id="create-h" tabIndex={-1}>
-        {t("phrase.title")}
-      </h1>
-      <p className="lede">{t("phrase.lede")}</p>
+    <>
       <Field label={t("phrase.label")}>
         {(control) => (
           <div className="input-row">
@@ -175,7 +171,7 @@ export function PhraseStep(props: PhraseStepProps) {
               {...control}
               large
               mono
-              autoFocus
+              autoFocus={autoFocus}
               type={type}
               autoComplete="new-password"
               spellCheck={false}
@@ -233,8 +229,33 @@ export function PhraseStep(props: PhraseStepProps) {
           />
         )}
       </Field>
+    </>
+  );
+}
+
+interface PhraseStepProps extends Omit<PhraseFieldsProps, "autoFocus"> {
+  onBack: () => void;
+  onNext: () => void;
+}
+
+export function PhraseStep({ onBack, onNext, ...fields }: PhraseStepProps) {
+  const t = useScreenT(messages);
+  const ready = phraseReady(fields.phrase, fields.confirm, fields.strength);
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (ready) onNext();
+  };
+
+  return (
+    <form className="pane" noValidate onSubmit={submit}>
+      <h1 id="create-h" tabIndex={-1}>
+        {t("phrase.title")}
+      </h1>
+      <p className="lede">{t("phrase.lede")}</p>
+      <PhraseFields {...fields} />
       <Nav>
-        <Button variant="ghost" size="lg" onClick={props.onBack}>
+        <Button variant="ghost" size="lg" onClick={onBack}>
           {t("back")}
         </Button>
         <Button variant="primary" size="lg" type="submit" disabled={!ready} aria-disabled={!ready}>

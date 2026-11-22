@@ -21,6 +21,9 @@ TimeoutStopSec=20s
 UMask=0077
 
 # State: /var/lib/cerberus, owned by the service user, mode 0700. It holds the vault file and the TLS files.
+# systemd makes it empty on the first start. The daemon then does not fail: it is ready at once and waits for its first
+# client to create the vault (needs `[admin] enabled = true`; `cerberusd setup-code` shows the one-time code).
+# See docs/guides/cerberusd.md, section 2.
 StateDirectory=cerberus
 StateDirectoryMode=0700
 ReadWritePaths=/var/lib/cerberus

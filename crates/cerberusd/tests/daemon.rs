@@ -193,14 +193,11 @@ fn write_config(path: &Path, data_dir: &Path, extra: &str, mode: u32) {
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).expect("chmod");
 }
 
+/// The running daemon task: it gives the service when it stops, or `None` when no vault was made.
+type Run = JoinHandle<Result<Option<VaultService>, DaemonError>>;
+
 /// Starts the daemon in a task. The stop signal is a oneshot, the same kind of future the signal handler gives.
-fn start_daemon(
-    config: Config,
-) -> (
-    oneshot::Sender<()>,
-    JoinHandle<Result<VaultService, DaemonError>>,
-    oneshot::Receiver<Ready>,
-) {
+fn start_daemon(config: Config) -> (oneshot::Sender<()>, Run, oneshot::Receiver<Ready>) {
     let (stop_tx, stop_rx) = oneshot::channel::<()>();
     let (ready_tx, ready_rx) = oneshot::channel::<Ready>();
     let run = tokio::spawn(async move {
@@ -235,10 +232,12 @@ async fn daemon_unlocks_serves_ask_grants_as_403_and_stops_locked() {
     write_config(
         &path,
         &data,
-        &format!("bind = [\"127.0.0.1\"]\nport = {port}\n"),
+        &format!("bind = [\"127.0.0.1\"]\nport = {port}\n[admin]\nenabled = false\n"),
         0o600,
     );
     let config = config::load(Some(&path), &no_env).expect("config");
+    // The admin API is on by default (DEC-SRV-3); approvals are off only with an explicit `enabled = false`.
+    assert!(!config.admin.enabled);
     let (stop, run, ready_rx) = start_daemon(config.clone());
     let ready = ready_rx.await.expect("ready");
     let addr = ready.addrs[0];
@@ -315,7 +314,11 @@ async fn daemon_unlocks_serves_ask_grants_as_403_and_stops_locked() {
 
     // Stop through the same channel a signal uses. The vault must be locked and the listener closed.
     stop.send(()).expect("stop");
-    let core = run.await.expect("join").expect("serve");
+    let core = run
+        .await
+        .expect("join")
+        .expect("serve")
+        .expect("a vault was served");
     assert_eq!(core.state(), VaultStateKind::Sealed);
     assert!(!ready.socket.exists(), "unlock socket removed");
     assert!(
@@ -367,23 +370,45 @@ async fn no_tls_leaf_yet_means_https_starts_at_the_first_unlock() {
     assert!(tls.leaf_cert_der.is_file(), "leaf made at unlock");
 
     stop.send(()).expect("stop");
-    let core = run.await.expect("join").expect("serve");
+    let core = run
+        .await
+        .expect("join")
+        .expect("serve")
+        .expect("a vault was served");
     assert_eq!(core.state(), VaultStateKind::Sealed);
 }
 
+/// DEC-SRV-3: a data directory with no vault is not an error. The daemon starts, tells that it is ready, and waits for
+/// the first client (the setup itself is tested in `tests/setup.rs`).
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn serve_refuses_a_data_dir_without_a_vault() {
+async fn serve_starts_without_a_vault_and_waits_for_the_first_client() {
     let dir = tempfile::tempdir().expect("tempdir");
     let data = dir.path().join("empty");
     std::fs::create_dir(&data).expect("mkdir");
+    std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o700)).expect("chmod");
     let path = dir.path().join("cerberusd.toml");
-    write_config(&path, &data, "bind = [\"127.0.0.1\"]\nport = 7373\n", 0o600);
+    let port = free_port();
+    write_config(
+        &path,
+        &data,
+        &format!("bind = [\"127.0.0.1\"]\nport = {port}\n[admin]\nenabled = true\n"),
+        0o600,
+    );
     let config = config::load(Some(&path), &no_env).expect("config");
-    let result = daemon::serve(&config, std::future::ready(()), |_| {}).await;
-    match result {
-        Err(DaemonError::NoVault { path }) => assert_eq!(path, data.join("vault.cerberus")),
-        other => panic!("expected NoVault, got {other:?}"),
-    }
+    let (stop, run, ready_rx) = start_daemon(config.clone());
+    let ready = ready_rx
+        .await
+        .expect("ready: the daemon starts with no vault");
+    assert_eq!(ready.addrs.len(), 1);
+    let code = cerberusd::setup::read_setup_code(&config).expect("setup code");
+    let code = cerberus_client::setup::SetupCode::parse(code.as_str()).expect("a setup code");
+    let health = cerberus_client::setup::health(&code).await.expect("health");
+    assert_eq!(health.vault, "no_vault");
+    assert_eq!(health.setup.as_deref(), Some("pending"));
+    assert!(!data.join(daemon::VAULT_FILE).exists());
+    stop.send(()).expect("stop");
+    let stopped = run.await.expect("join").expect("serve");
+    assert!(stopped.is_none(), "no vault, so no service");
 }
 
 #[test]
@@ -742,7 +767,11 @@ async fn admin_api_enrolment_approvals_and_revoke() {
     assert_eq!(status_reply.status, 200);
 
     stop.send(()).expect("stop");
-    let core = run.await.expect("join").expect("serve");
+    let core = run
+        .await
+        .expect("join")
+        .expect("serve")
+        .expect("a vault was served");
     assert_eq!(core.state(), VaultStateKind::Sealed);
 
     // Offline revoke: no daemon answers, so the file is edited.
@@ -787,4 +816,88 @@ async fn admin_registry_with_a_wide_mode_stops_the_start() {
     off.admin.enabled = false;
     let result = daemon::serve(&off, std::future::ready(()), |_| {}).await;
     assert!(result.is_ok(), "{result:?}");
+}
+
+/// Pre-existing defect: when the HTTPS listener cannot start (a port collision) after the unlock socket was bound, the
+/// socket task stayed alive in the process, and a second start in the same process (a retry) failed with "already
+/// running for this data directory".
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_failed_https_start_leaves_no_unlock_socket_behind() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let data = dir.path().join("data");
+    make_vault(&data).await;
+    let path = dir.path().join("cerberusd.toml");
+    let port = free_port();
+    write_config(
+        &path,
+        &data,
+        &format!("bind = [\"127.0.0.1\"]\nport = {port}\n"),
+        0o600,
+    );
+    let config = config::load(Some(&path), &no_env).expect("config");
+    let taken = std::net::TcpListener::bind(("127.0.0.1", port)).expect("take the port");
+    let first = daemon::serve(&config, std::future::pending::<()>(), |_| {}).await;
+    assert!(
+        matches!(first, Err(DaemonError::Server(_))),
+        "the port is taken: {first:?}"
+    );
+    drop(taken);
+    let (stop, run, ready) = start_daemon(config);
+    let ready = ready
+        .await
+        .expect("the second start is not refused as already running");
+    assert!(!ready.addrs.is_empty());
+    stop.send(()).expect("stop");
+    run.await.expect("join").expect("serve");
+}
+
+/// A leaf of another CA in the data folder (left by a setup that was killed, then a backup copied in) is not served: the
+/// listener starts at the first unlock with a leaf of the vault CA, so `status` (which trusts that CA) works.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_leaf_of_a_dead_ca_is_not_served() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let data = dir.path().join("data");
+    make_vault(&data).await;
+    let tls = TlsPaths::in_data_dir(&data);
+    let now = SystemClock.now();
+    let dead = cerberus_api::tls::LocalCa::create(&cerberus_types::VaultId::generate(), now)
+        .expect("dead ca");
+    let stale = dead
+        .issue_leaf(&cerberus_api::tls::leaf_names(&[]), now)
+        .expect("leaf");
+    cerberus_api::tls::write_leaf(&tls, &stale).expect("write the stale leaf");
+    let port = free_port();
+    let path = dir.path().join("cerberusd.toml");
+    write_config(
+        &path,
+        &data,
+        &format!("bind = [\"127.0.0.1\"]\nport = {port}\n"),
+        0o600,
+    );
+    let config = config::load(Some(&path), &no_env).expect("config");
+    let (stop, run, ready_rx) = start_daemon(config.clone());
+    let ready = ready_rx.await.expect("ready");
+    assert!(
+        ready.addrs.is_empty(),
+        "the leaf of a dead CA is not served while sealed"
+    );
+    unlock::unlock_with(&ready.socket, None, |_| Ok(PHRASE.to_owned()))
+        .await
+        .expect("unlock");
+    let mut health = None;
+    for _ in 0..100 {
+        if let Ok(found) = status::check(&config).await {
+            health = Some(found);
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(health.expect("listener after unlock").vault, "unlocked");
+    assert_ne!(
+        std::fs::read(&tls.leaf_cert_der).expect("leaf"),
+        stale.cert_der,
+        "the leaf was renewed"
+    );
+    stop.send(()).expect("stop");
+    run.await.expect("join").expect("serve");
 }

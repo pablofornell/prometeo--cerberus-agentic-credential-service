@@ -1,11 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { errorText } from "../../ui";
 import { ipc, isIpcFailure, type UiError } from "../../ipc/client";
 import { useScreenT } from "../../i18n";
 import { Button, GateMark, Icon } from "../../ui";
 import { createFlowStore } from "../../shell/createFlow";
-import { useBenchmark, useStrength } from "./hooks";
+import { useBenchmark, usePhraseGenerator, useStrength } from "./hooks";
 import { messages } from "./messages";
 import { RecoveryStep } from "./RecoveryStep";
 import { CostStep, NameStep, PhraseStep } from "./Steps";
@@ -50,9 +50,6 @@ export function Wizard() {
   const [hosts, setHosts] = useState<string[]>([]);
   const [phrase, setPhrase] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [generated, setGenerated] = useState<string[] | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [generateFailed, setGenerateFailed] = useState(false);
   const [recoveryKey, setRecoveryKey] = useState("");
   const [failure, setFailure] = useState<UiError | null>(null);
   const [opening, setOpening] = useState(false);
@@ -66,6 +63,10 @@ export function Wizard() {
     };
   }, []);
 
+  const generator = usePhraseGenerator(PHRASE_WORDS, (text) => {
+    setPhrase(text);
+    setConfirm(text);
+  });
   const strength = useStrength(step === 2 ? phrase : "", [name]);
   const bench = useBenchmark(step === 3 && phase === "form");
 
@@ -81,22 +82,6 @@ export function Wizard() {
 
   const go = (next: Step) => setStep(next);
 
-  const generate = useCallback(async () => {
-    setGenerating(true);
-    setGenerateFailed(false);
-    try {
-      const text = await ipc.passphraseGenerate(PHRASE_WORDS);
-      if (!mounted.current) return;
-      setPhrase(text);
-      setConfirm(text);
-      setGenerated(text.split(/\s+/).filter(Boolean));
-    } catch {
-      if (mounted.current) setGenerateFailed(true);
-    } finally {
-      if (mounted.current) setGenerating(false);
-    }
-  }, []);
-
   const create = async () => {
     if (bench.state.status !== "ready") return;
     setPhase("creating");
@@ -107,7 +92,7 @@ export function Wizard() {
       if (!mounted.current) return;
       setPhrase("");
       setConfirm("");
-      setGenerated(null);
+      generator.forget();
       setRecoveryKey(created.recovery_key);
       setStep(4);
       setPhase("recovery");
@@ -184,14 +169,14 @@ export function Wizard() {
         confirm={confirm}
         onPhrase={(v) => {
           setPhrase(v);
-          setGenerated(null);
+          generator.forget();
         }}
         onConfirm={setConfirm}
         strength={strength}
-        generated={generated}
-        generating={generating}
-        generateFailed={generateFailed}
-        onGenerate={() => void generate()}
+        generated={generator.words}
+        generating={generator.generating}
+        generateFailed={generator.failed}
+        onGenerate={generator.generate}
         onBack={() => go(1)}
         onNext={() => go(3)}
       />

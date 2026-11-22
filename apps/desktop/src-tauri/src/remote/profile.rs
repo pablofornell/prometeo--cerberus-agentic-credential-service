@@ -80,24 +80,62 @@ pub fn pending_dir(paths: &AppPaths, id: &str) -> IpcResult<PathBuf> {
 pub fn stage(paths: &AppPaths, path: &Path, now: Timestamp) -> IpcResult<RemoteProfile> {
     let bundle = AdminBundle::read(path, now)
         .map_err(|error| IpcError::new("invalid_bundle", &error.to_string()))?;
+    stage_bundle(paths, &bundle)
+}
+
+/// Stages a bundle that is already checked, as [`stage`] does for a file. An earlier staged import is dropped.
+///
+/// # Errors
+/// `invalid_bundle` when the CA certificate does not parse, `internal` when the files cannot be
+/// written.
+pub fn stage_bundle(paths: &AppPaths, bundle: &AdminBundle) -> IpcResult<RemoteProfile> {
+    let profile = profile_of(bundle)?;
+    discard(paths)?;
+    let dir = pending_dir(paths, &profile.id)?;
+    private_dir(&paths.remote_root())?;
+    private_dir(&pending_root(paths))?;
+    write_files(&dir, bundle)?;
+    tracing::info!(profile = %profile.id, url = %bundle.url, "remote bundle staged");
+    Ok(profile)
+}
+
+/// Stores a bundle that is already checked straight as a profile, for the first-time setup of a
+/// server: the bundle comes from memory, so there is nothing to compare, and a staged import of
+/// the person is not touched. The files are written next to the profile and moved in, so a
+/// failure leaves no half profile. A profile of the same enrolment (a retry) is replaced.
+///
+/// # Errors
+/// `invalid_bundle` when the CA certificate does not parse, `internal` when the files cannot be
+/// written or moved.
+pub fn store_bundle(paths: &AppPaths, bundle: &AdminBundle) -> IpcResult<RemoteProfile> {
+    let profile = profile_of(bundle)?;
+    let dir = profile_dir(paths, &profile.id)?;
+    let building = paths.remote_root().join(format!("setup-{}", profile.id));
+    private_dir(&paths.remote_root())?;
+    if building.exists() {
+        std::fs::remove_dir_all(&building)?;
+    }
+    private_dir(&building)?;
+    let moved = write_files(&building, bundle).and_then(|()| {
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir)?;
+        }
+        std::fs::rename(&building, &dir).map_err(IpcError::from)
+    });
+    if let Err(error) = moved {
+        drop(std::fs::remove_dir_all(&building));
+        return Err(error);
+    }
+    tracing::info!(profile = %profile.id, url = %bundle.url, "remote profile stored from a setup");
+    Ok(profile)
+}
+
+fn profile_of(bundle: &AdminBundle) -> IpcResult<RemoteProfile> {
     let ca_sha256 = bundle
         .ca_sha256_hex()
         .map_err(|error| IpcError::new("invalid_bundle", &error.to_string()))?;
-    let id = bundle.id.to_string();
-    discard(paths)?;
-    let dir = pending_dir(paths, &id)?;
-    private_dir(&paths.remote_root())?;
-    private_dir(&pending_root(paths))?;
-    private_dir(&dir)?;
-    write_private(&dir.join(CERT_FILE), bundle.client_cert_pem.as_bytes())?;
-    write_private(
-        &dir.join(KEY_FILE),
-        bundle.client_key_pem.expose().as_bytes(),
-    )?;
-    write_private(&dir.join(CA_FILE), bundle.ca_cert_pem.as_bytes())?;
-    tracing::info!(profile = %id, url = %bundle.url, "remote bundle staged");
     Ok(RemoteProfile {
-        id,
+        id: bundle.id.to_string(),
         label: bundle.label.clone(),
         url: bundle.url.clone(),
         ca_pin: bundle.ca_pin.clone(),
@@ -105,6 +143,18 @@ pub fn stage(paths: &AppPaths, path: &Path, now: Timestamp) -> IpcResult<RemoteP
         operator_id: bundle.operator_id.to_string(),
         not_after: bundle.not_after,
     })
+}
+
+/// Writes the three files of a profile into the private folder `dir`.
+fn write_files(dir: &Path, bundle: &AdminBundle) -> IpcResult<()> {
+    private_dir(dir)?;
+    write_private(&dir.join(CERT_FILE), bundle.client_cert_pem.as_bytes())?;
+    write_private(
+        &dir.join(KEY_FILE),
+        bundle.client_key_pem.expose().as_bytes(),
+    )?;
+    write_private(&dir.join(CA_FILE), bundle.ca_cert_pem.as_bytes())?;
+    Ok(())
 }
 
 /// Makes the staged import of `id` the stored profile, in place of an older one of the same

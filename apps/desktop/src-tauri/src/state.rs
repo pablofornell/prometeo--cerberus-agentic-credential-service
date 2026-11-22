@@ -79,6 +79,16 @@ struct Held {
     one_time: HashMap<&'static str, (HeldTag, Zeroizing<String>)>,
 }
 
+/// What a first-time setup of a server gave and the desktop must not lose: the recovery key, which
+/// the server shows only once, and the admin bundle (JSON), until it is stored as a profile. It
+/// has its own lifetime: no lock, idle lock or event lag clears it (`clear_held` does not touch
+/// it), because it belongs to the server and not to a local unlock. It ends when the person
+/// finishes the recovery step (`remote_setup_finish`), at a panic wipe, or at a restart.
+pub(crate) struct SetupHold {
+    pub(crate) recovery_key: Zeroizing<String>,
+    pub(crate) bundle: Zeroizing<Vec<u8>>,
+}
+
 /// Who may use a held value: the operator of the unlock that was current when it was stored, and
 /// the unlock time (the unlock epoch). A new unlock, even by the same operator, makes it stale.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -137,6 +147,8 @@ pub(crate) struct Inner {
     /// A bundle import that waits for the person to compare the pin and connect (DEC-RM-26). Its
     /// files are staged; nothing of a stored profile changes until `remote_activate`.
     pending_import: Mutex<Option<crate::prefs::RemoteProfile>>,
+    /// The result of a first-time server setup, until the person finishes the recovery step.
+    setup_hold: Mutex<Option<SetupHold>>,
     /// Test only: the next `open_service` fails, as if the file could not be opened.
     #[cfg(test)]
     pub(crate) fail_next_open: std::sync::atomic::AtomicBool,
@@ -248,6 +260,7 @@ impl DesktopState {
                 remote,
                 remote_os_hook_ok: AtomicBool::new(false),
                 pending_import: Mutex::new(None),
+                setup_hold: Mutex::new(None),
                 #[cfg(test)]
                 fail_next_open: AtomicBool::new(false),
                 #[cfg(test)]
@@ -412,6 +425,9 @@ impl DesktopState {
         if let Ok(mut held) = self.inner.held.try_lock() {
             held.drafts.clear();
             held.one_time.clear();
+        }
+        if let Ok(mut hold) = self.inner.setup_hold.try_lock() {
+            *hold = None;
         }
         if let Ok(mut picked) = self.inner.picked.try_lock() {
             picked.clear();
@@ -709,6 +725,25 @@ impl DesktopState {
         locked(&self.inner.held)
             .one_time
             .insert(one_time_key(kind), (tag, Zeroizing::new(text.to_owned())));
+    }
+
+    /// Keeps the result of a first-time server setup (see [`SetupHold`]).
+    pub(crate) fn set_setup_hold(&self, hold: Option<SetupHold>) {
+        *locked(&self.inner.setup_hold) = hold;
+    }
+
+    /// A copy of the held admin bundle (JSON) of the last setup, if it is still held.
+    pub(crate) fn setup_bundle(&self) -> Option<Zeroizing<Vec<u8>>> {
+        locked(&self.inner.setup_hold)
+            .as_ref()
+            .map(|hold| hold.bundle.clone())
+    }
+
+    /// A copy of the held recovery key of the last setup, if it is still held.
+    pub(crate) fn setup_recovery_key(&self) -> Option<Zeroizing<String>> {
+        locked(&self.inner.setup_hold)
+            .as_ref()
+            .map(|hold| hold.recovery_key.clone())
     }
 
     /// A copy of the last one-time value of a kind, if it belongs to the current unlock.

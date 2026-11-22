@@ -178,6 +178,8 @@ These are open in the audit report (see [security model](security-model.md#9-sta
   `cerberus run`. An item a person wrote keeps any name, except the code-loading hooks, which are skipped unless a
   person maps them with `--var`. See the [agent integration guide](agent-integration.md#cerberus-run).
 - **No backdoor.** Lost phrase and lost recovery key mean the data cannot be restored. This is by design (AR-13).
-- **Daemon.** `cerberusd` has no admin surface by default. Make the vault on the server with `cerberusd init`, or
-  create items, agents and grants in the desktop app and copy the vault to the server. The [daemon guide](cerberusd.md)
-  explains how.
+- **Daemon.** `cerberusd` has the admin API on by default, but every admin route needs the certificate of a desktop you
+  enrolled; `[admin] enabled = false` removes it. On a first start with no vault it waits, and the first
+  client creates the vault over the network with a one-time setup code (`cerberusd setup-code`); nobody types the
+  passphrase on the server. Or create items, agents and grants in the desktop app and copy the vault to the server. The
+  [daemon guide](cerberusd.md) explains how.

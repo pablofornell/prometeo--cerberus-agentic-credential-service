@@ -4,6 +4,7 @@
 //! - [`transport::PinnedHttps`]: the low-level pinned HTTPS layer (TLS 1.3 only, CA pin). The MCP
 //!   stdio shim uses it directly.
 //! - [`run`]: `cerberus run` (env injection into a child process, output masking).
+//! - [`setup`]: first-time setup of a `cerberusd` with no vault (the first client creates it, DEC-SRV-3).
 //!
 //! This crate depends on `cerberus-types` only. It never links vault, store, crypto or server code.
 //! Secrets are [`WireSecret`] values: zeroized on drop, `Debug` prints `[REDACTED]`.
@@ -12,6 +13,7 @@ pub mod client;
 pub mod config;
 pub mod error;
 pub mod run;
+pub mod setup;
 pub mod sse;
 pub mod transport;
 

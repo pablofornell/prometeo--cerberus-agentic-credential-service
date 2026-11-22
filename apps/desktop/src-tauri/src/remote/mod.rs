@@ -6,6 +6,7 @@
 //! - [`RemoteBackend`]: the transport, the admin session (its token lives only here, zeroized on
 //!   drop and never logged) and what the desktop last saw of the server ([`Link`]).
 //! - [`profile`]: bundle import, the profile files and the trust settings.
+//! - [`setup`]: the first-time setup of a server that has no vault: the setup code and its errors.
 //! - [`pump`]: the live events of the server, turned into the same Tauri events as the local pump.
 //!
 //! A session that ends on the server (expiry, lock, revoke) is noticed at the next call or by the
@@ -14,6 +15,7 @@
 
 pub mod profile;
 pub mod pump;
+pub mod setup;
 
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};

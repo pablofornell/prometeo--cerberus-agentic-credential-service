@@ -9,6 +9,7 @@ import { useVaultStatus } from "../../ipc/queries";
 import { ConnectRemoteDialog } from "../../remote/ConnectRemoteDialog";
 import { messages as remoteMessages } from "../../remote/messages";
 import { ProfileFacts } from "../../remote/ProfileFacts";
+import { openSetupDialog } from "../../shell/setupFlow";
 import { Button, Notice, errorText, useToast } from "../../ui";
 import { RestoreDialog } from "../settings/RestoreDialog";
 import { Brand } from "./Brand";
@@ -154,9 +155,14 @@ function OtherBackend({ remote }: { remote: RemoteStatusView | null }) {
           {r("local.use")}
         </Button>
       ) : (
-        <Button size="sm" variant="ghost" icon="server" onClick={() => setConnecting(true)}>
-          {r("connect.open")}
-        </Button>
+        <>
+          <Button size="sm" variant="ghost" icon="server" onClick={() => setConnecting(true)}>
+            {r("connect.open")}
+          </Button>
+          <Button size="sm" variant="ghost" icon="plus" onClick={() => openSetupDialog(false)}>
+            {r("setup.open")}
+          </Button>
+        </>
       )}
       <ConnectRemoteDialog open={connecting} onOpenChange={setConnecting} />
     </div>

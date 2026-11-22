@@ -85,7 +85,7 @@ The desktop trusts only the CA pin from the bundle and speaks TLS 1.3 only. The 
 with `cerberusd status` before the first connect. The passphrase crosses the network only inside that channel, once per
 session. The recovery key never does. A disconnect, a lost connection or the desktop quitting does not lock the server
 vault; only a lock does. Every admin action runs the same core function as the local command and is audited as the
-operator. The admin API is off by default: then no `/admin` route exists. See the threat model, boundary TB-10.
+operator. The admin API is on by default on `cerberusd` (DEC-SRV-3) but exposes nothing until a desktop is enrolled; `[admin] enabled = false` removes it, and then no `/admin` route exists. See the threat model, boundary TB-10. A server with no vault also runs a temporary setup listener for the first client (threat model, E-17): it is reachable on the network, takes no client certificate, and is protected only by the one-time setup code, the pin of its certificate and the limits there; it closes when the vault exists.
 
 What remote mode does not protect against: a stolen bundle together with the known phrase is that operator's full
 power until the enrolment is revoked (AR-18, AR-20); a compromised server process sees the phrase, as it sees the

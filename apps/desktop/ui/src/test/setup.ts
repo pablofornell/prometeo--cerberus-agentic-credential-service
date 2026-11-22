@@ -4,6 +4,7 @@ import { clearMocks } from "@tauri-apps/api/mocks";
 import { afterEach, expect } from "vitest";
 import * as axeMatchers from "vitest-axe/matchers";
 import { createFlowStore } from "../shell/createFlow";
+import { SETUP_FLOW_IDLE, setupFlowStore } from "../shell/setupFlow";
 import { overlayStore } from "../shell/uiStore";
 import { agentFeedStore, alertsStore, autolockStore, vaultStateStore } from "../state/live";
 
@@ -21,6 +22,7 @@ afterEach(() => {
   vaultStateStore.set("unknown");
   overlayStore.set("none");
   createFlowStore.set(false);
+  setupFlowStore.set(SETUP_FLOW_IDLE);
   autolockStore.set(null);
   agentFeedStore.set([]);
   alertsStore.set({ massRead: [], integrity: [], headerMismatch: false });

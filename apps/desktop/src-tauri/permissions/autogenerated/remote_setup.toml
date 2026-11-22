@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remote-setup"
+description = "Enables the remote_setup command without any pre-configured scope."
+commands.allow = ["remote_setup"]
+
+[[permission]]
+identifier = "deny-remote-setup"
+description = "Denies the remote_setup command without any pre-configured scope."
+commands.deny = ["remote_setup"]

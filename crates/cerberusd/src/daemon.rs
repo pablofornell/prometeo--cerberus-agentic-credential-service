@@ -4,6 +4,9 @@
 //! The daemon starts sealed. If the vault has no TLS leaf yet (a backup copied from the desktop has none, ADR-0031
 //! point 2), the listener starts after the first unlock, because the CA key is sealed until then.
 //!
+//! With no vault file the daemon still starts: it waits for the first client to create the vault over the network
+//! (`crate::setup`, DEC-SRV-3), then goes on as below with that vault, which is unlocked, and no restart.
+//!
 //! With `[admin] enabled = true` (ADR-0034) the listener also serves `/admin/v1` for enrolled desktops, it asks every
 //! client for a certificate, and approvals (`ask_once`, `ask_always`) are on.
 
@@ -15,18 +18,20 @@ use std::sync::Arc;
 
 use cerberus_admin::clients::{AdminClients, ClientsError};
 use cerberus_api::tls::{
-    CaExport, LocalCa, LocalCaIssuer, TlsPaths, leaf_names, renew_leaf_if_needed,
+    CaExport, LocalCa, LocalCaIssuer, TlsPaths, leaf_issued_by, leaf_names, renew_leaf_if_needed,
 };
 use cerberus_api::{
     AdminConfig, AdminState, ApiConfig, AppState, RunningServer, ServerError, start,
 };
 use cerberus_core::vault::KeyCustody;
 use cerberus_core::{AdminAudit, AdminEventKind, CoreConfig, CoreError, VaultService};
+use cerberus_crypto::KdfParams;
 use cerberus_store::{OpenOptions, Store, StoreError};
 use cerberus_types::{Clock, LockReason, SystemClock, VaultStateKind};
 use tokio::task::JoinHandle;
 
 use crate::config::Config;
+use crate::setup::{self, Waited};
 use crate::unlock::{self, SocketContext, registry_path};
 
 /// The vault file in the data directory.
@@ -46,14 +51,6 @@ pub struct Ready {
 /// Why the daemon cannot run.
 #[derive(Debug, thiserror::Error)]
 pub enum DaemonError {
-    /// The vault file is not in the data directory.
-    #[error(
-        "no vault file at {path}. Create one here with `cerberusd init`, or make a backup in the desktop app and copy it to this path as {VAULT_FILE} with mode 0600, then start again."
-    )]
-    NoVault {
-        /// The expected path.
-        path: PathBuf,
-    },
     /// The vault file cannot be opened.
     #[error("cannot open the vault file: {0}")]
     Store(#[from] StoreError),
@@ -130,8 +127,8 @@ async fn bind_socket(
     Ok(listener)
 }
 
-/// The core settings of this daemon. `serve` and `cerberusd init` build them here, so a vault made by `init` is the
-/// vault that `serve` expects (lock defaults, approvals, the TLS CA issuer).
+/// The core settings of this daemon. `serve` and the first-time setup build them here, so a vault made by the setup is
+/// the vault that `serve` expects (lock defaults, approvals, the TLS CA issuer).
 pub(crate) fn core_config(config: &Config, tls: &TlsPaths) -> CoreConfig {
     CoreConfig {
         // With the admin API an enrolled desktop can decide requests (ADR-0034 point 2.3,
@@ -164,10 +161,25 @@ struct Http {
     renewal: JoinHandle<()>,
 }
 
+/// Settings of [`serve_with`] that the command line never sets.
+#[derive(Clone, Debug, Default)]
+pub struct ServeOptions {
+    /// A fixed key-derivation cost for the vault that a first-time setup makes, in place of the cost test of this
+    /// machine (ADR-0013). Tests give a small value so they do not run the 700 ms cost test.
+    pub setup_kdf: Option<KdfParams>,
+    /// A pause inside the first-time setup, after the vault file is made and before the client is enrolled. Tests use it
+    /// to end a connection or stop the daemon while a setup is half done.
+    pub setup_pause: Option<std::time::Duration>,
+}
+
 /// Runs the daemon until `stop` completes. Then it locks the vault and stops the listener.
 ///
-/// `on_ready` runs once the unlock socket is up. The caller uses it to tell systemd the daemon is ready.
-/// The returned service is locked: a test or a caller can check it.
+/// `on_ready` runs once the daemon can take requests: the unlock socket is up, or, with no vault yet, the setup
+/// listener is up (`Ready::addrs` then holds its addresses, and the unlock socket does not exist until the first client
+/// has made the vault). The caller uses it to tell systemd the daemon is ready.
+/// The returned service is locked: a test or a caller can check it. It is `None` when the daemon was stopped while it
+/// waited for its first client, so it never served a vault. A setup that was running when the stop came finishes first
+/// (its client gets the answer): its vault is then on disk, locked, but the service is not returned.
 ///
 /// # Errors
 /// [`DaemonError`] when the vault cannot be opened or the listener cannot start.
@@ -175,16 +187,40 @@ pub async fn serve<S>(
     config: &Config,
     stop: S,
     on_ready: impl FnOnce(&Ready),
-) -> Result<VaultService, DaemonError>
+) -> Result<Option<VaultService>, DaemonError>
+where
+    S: Future<Output = ()> + Send,
+{
+    serve_with(config, &ServeOptions::default(), stop, on_ready).await
+}
+
+/// As [`serve`], with [`ServeOptions`].
+///
+/// # Errors
+/// As [`serve`].
+pub async fn serve_with<S>(
+    config: &Config,
+    options: &ServeOptions,
+    stop: S,
+    on_ready: impl FnOnce(&Ready),
+) -> Result<Option<VaultService>, DaemonError>
 where
     S: Future<Output = ()> + Send,
 {
     let vault_path = config.data_dir.join(VAULT_FILE);
-    if !vault_path.is_file() {
-        return Err(DaemonError::NoVault { path: vault_path });
+    let socket = unlock::socket_path(&config.data_dir);
+    let has_vault = vault_path.is_file();
+    if !has_vault {
+        // The service manager makes the data directory; a manual run on a fresh path makes it here.
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&config.data_dir)?;
     }
     check_private(&config.data_dir, "0700")?;
-    check_private(&vault_path, "0600")?;
+    if has_vault {
+        check_private(&vault_path, "0600")?;
+    }
     let admin = if config.admin.enabled {
         Some(Arc::new(load_admin(&config.data_dir, config)?))
     } else {
@@ -192,21 +228,48 @@ where
     };
     let clock: Arc<dyn Clock> = Arc::new(SystemClock);
     let tls = TlsPaths::in_data_dir(&config.data_dir);
-    let store = Store::open(
-        OpenOptions {
-            path: vault_path,
-            create: false,
-        },
-        Arc::clone(&clock),
-    )
-    .await?;
-    let core = VaultService::open(store, clock, core_config(config, &tls)).await?;
+    tokio::pin!(stop);
+    let mut on_ready = Some(on_ready);
+    let core = if has_vault {
+        let store = Store::open(
+            OpenOptions {
+                path: vault_path,
+                create: false,
+            },
+            Arc::clone(&clock),
+        )
+        .await?;
+        VaultService::open(store, clock, core_config(config, &tls)).await?
+    } else {
+        let waited =
+            setup::wait_for_setup(config, admin.clone(), options, stop.as_mut(), |addrs| {
+                if let Some(on_ready) = on_ready.take() {
+                    on_ready(&Ready {
+                        addrs,
+                        socket: socket.clone(),
+                    });
+                }
+            })
+            .await?;
+        match waited {
+            Waited::Created(core) => core,
+            Waited::Stopped => return Ok(None),
+        }
+    };
     write_ca_pem(&core, &config.data_dir).await?;
     if let Some(admin) = &admin {
         announce_admin(&core, admin).await;
     }
     let tasks = core.spawn_background();
-    let listener = bind_socket(&config.data_dir, &core, admin.as_deref()).await?;
+    let listener = match bind_socket(&config.data_dir, &core, admin.as_deref()).await {
+        Ok(listener) => listener,
+        Err(error) => {
+            for task in tasks {
+                task.abort();
+            }
+            return Err(error);
+        }
+    };
     let socket_task = tokio::spawn(unlock::accept_loop(
         listener,
         SocketContext {
@@ -215,38 +278,44 @@ where
             data_dir: config.data_dir.clone(),
         },
     ));
-    let socket = unlock::socket_path(&config.data_dir);
 
-    let mut http = if leaf_present(&tls) {
-        Some(start_http(&core, config, &tls, admin.as_ref()).await?)
-    } else {
-        None
-    };
-    let addrs = http
-        .as_ref()
-        .map(|h| h.server.local_addrs().to_vec())
-        .unwrap_or_default();
-    on_ready(&Ready {
-        addrs,
-        socket: socket.clone(),
-    });
-    tracing::info!(socket = %socket.display(), sealed = http.is_none(), "cerberusd ready");
+    // From here a failure must still stop what runs (the unlock socket, the background tasks, the lock): a caller that
+    // starts the daemon again in the same process (a test, a retry after a port collision) must find nothing of it.
+    let mut http: Option<Http> = None;
+    let started = async {
+        if leaf_usable(&core, &tls).await {
+            http = Some(start_http(&core, config, &tls, admin.as_ref()).await?);
+        }
+        let addrs = http
+            .as_ref()
+            .map(|h| h.server.local_addrs().to_vec())
+            .unwrap_or_default();
+        if let Some(on_ready) = on_ready.take() {
+            on_ready(&Ready {
+                addrs,
+                socket: socket.clone(),
+            });
+        }
+        tracing::info!(socket = %socket.display(), sealed = http.is_none(), "cerberusd ready");
 
-    tokio::pin!(stop);
-    if http.is_none() {
-        tokio::select! {
-            () = &mut stop => {}
-            () = wait_unlocked(&core) => {
-                renew_leaf_now(&core, config, &tls).await?;
-                http = Some(start_http(&core, config, &tls, admin.as_ref()).await?);
+        if http.is_none() {
+            tokio::select! {
+                () = &mut stop => {}
+                () = wait_unlocked(&core) => {
+                    renew_leaf_now(&core, config, &tls).await?;
+                    http = Some(start_http(&core, config, &tls, admin.as_ref()).await?);
+                }
             }
         }
+        if http.is_some() {
+            stop.as_mut().await;
+        }
+        Ok::<(), DaemonError>(())
     }
-    if http.is_some() {
-        stop.await;
-    }
+    .await;
     shutdown(&core, http, tasks, socket_task, &socket).await;
-    Ok(core)
+    started?;
+    Ok(Some(core))
 }
 
 /// Stop the unlock socket, lock, then stop the server. A request during the stop gets `423`, and the keys are
@@ -259,6 +328,8 @@ async fn shutdown(
     socket: &Path,
 ) {
     socket_task.abort();
+    // The socket is closed when the task is gone, and a new daemon in this process binds it again at once.
+    drop(socket_task.await);
     if let Err(error) = core.lock(LockReason::Quit).await {
         tracing::error!(%error, "lock on stop failed");
     }
@@ -293,6 +364,26 @@ async fn announce_admin(core: &VaultService, admin: &AdminState) {
 
 fn leaf_present(tls: &TlsPaths) -> bool {
     tls.leaf_cert_der.is_file() && tls.leaf_key_der.is_file()
+}
+
+/// True when there is a leaf and it was issued by the CA of this vault. A leaf of another CA (left behind by a setup that
+/// was killed, or by an older vault in the folder) is not served: the listener starts at the first unlock, which renews it
+/// (`renew_leaf_if_needed` checks the issuer too).
+async fn leaf_usable(core: &VaultService, tls: &TlsPaths) -> bool {
+    if !leaf_present(tls) {
+        return false;
+    }
+    match core.tls_ca_cert().await {
+        Ok(ca) if leaf_issued_by(tls, &ca) => true,
+        Ok(_) => {
+            tracing::warn!(
+                "the TLS leaf in the data folder is not from the CA of this vault; it is renewed at the first unlock"
+            );
+            false
+        }
+        // The CA certificate is public and readable while sealed; if it is not, the vault cannot be used anyway.
+        Err(_) => true,
+    }
 }
 
 /// Returns when the vault is unlocked. It subscribes before it checks, so no change is missed.

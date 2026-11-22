@@ -232,7 +232,7 @@ pub struct Daemon {
     pub ca_der: Vec<u8>,
     pub port: u16,
     stop: Option<oneshot::Sender<()>>,
-    run: Option<JoinHandle<Result<VaultService, DaemonError>>>,
+    run: Option<JoinHandle<Result<Option<VaultService>, DaemonError>>>,
 }
 
 impl Daemon {
@@ -429,6 +429,7 @@ impl Daemon {
             .await
             .expect("join")
             .expect("serve")
+            .expect("a vault was served")
     }
 }
 

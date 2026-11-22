@@ -1797,7 +1797,7 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   then holds off, and the file value does not apply to this vault. There is no call that deletes the row. Test:
   `a_change_saves_only_the_changed_keys_so_the_daemon_default_still_applies`. Replaces the last sentence of DEC-T13-5.
 
-- **DEC-SRV-2** — Server — `cerberusd init` makes a new vault, so a headless deploy needs no desktop app. Before, `serve`
+- **DEC-SRV-2** — Server — *Superseded by DEC-SRV-3: `cerberusd init` is removed.* `cerberusd init` makes a new vault, so a headless deploy needs no desktop app. Before, `serve`
   refused to start without `vault.cerberus` and the error told the operator to copy a desktop backup. `serve` still
   never creates a vault (`create: false`, `DaemonError::NoVault`); the new `init` subcommand (`crates/cerberusd/src/init.rs`,
   library fn `init_with`, like `unlock_with`) is the only creator. It reads the owner passphrase twice with `rpassword`
@@ -1825,3 +1825,116 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   that only tests set (`KdfParams::new(19_456, 1, 1)`, the floor of the production range). Residual: SIGKILL or a power
   loss in the file section can leave a partial vault that makes the next `init` refuse (documented). Replaces the sentence "cerberusd
   never creates a vault" of DEC-T27-G-1 and amends ADR-0002 point 3. Tests: `crates/cerberusd/tests/init.rs`.
+
+- **DEC-SRV-3** — Server — The first client makes the vault; nobody types a passphrase on the server. Supersedes DEC-SRV-2
+  (`cerberusd init`, `crates/cerberusd/src/init.rs` and `tests/init.rs` are removed). Reason: the daemon is the custodian
+  and distributor of vaults to its clients, so a server must start on an empty data directory and wait for the first
+  client (the owner's design correction). `daemon::serve` no longer returns `DaemonError::NoVault` (variant removed). With
+  no `vault.cerberus` it creates the data directory when it is missing (0700), sends READY and calls
+  `setup::wait_for_setup` (`crates/cerberusd/src/setup.rs`): a setup listener on `config.listen_addrs()`, TLS 1.3 with a
+  throwaway self-signed non-CA certificate made at each start in `cerberus_api::tls::bootstrap_tls` (rcgen, never stored in
+  a vault), serving `GET /v1/health` (`vault: "no_vault"`, `setup: "pending" | "locked_out"`) and `POST /v1/setup`; every
+  other route is `503 unavailable`. The listener runs only with the admin API on (`[admin] enabled`; it **now defaults to true**, see the end of this entry; decision: the client must leave
+  with an admin bundle and the admin API is the only way to manage the vault from a desktop; with it off the daemon
+  starts, warns with the reason, serves nothing and writes no code). The
+  setup code is `cerberus-setup:1:<base64url(json {url, token, pin})>`: a random 32-byte token (`getrandom`), the URL (first
+  `host_names` entry, else `localhost`, with the port) and the SPKI pin of the setup certificate. It is written to
+  `<data_dir>/setup-code` (0600, atomic replace at each start, removed on success and on stop) and printed by
+  `cerberusd setup-code` (which refuses when a vault file exists, when no code file exists, or when nothing listens on the
+  address, so a file left by a killed daemon is not shown as live). The log has the path and the pin, never the token
+  (a test runs the real binary and scans its log for the token, the passphrase, the recovery key and the bundle key).
+  Token: `ct_eq`; wrong tokens are counted per peer address (see the review fixes at the end of this entry); a restart
+  makes a new token and a new certificate. One setup at a time (`try_lock`, `409 conflict`), and a `done` state after a success. KDF:
+  the **server measures** (`tune_kdf`, 700 ms target, as the desktop and DEC-SRV-2); the request has no `kdf` field, so a
+  client cannot weaken it. `serve_with(ServeOptions { setup_kdf })` lets tests fix the cost; the command line never sets it.
+  The passphrase policy (`meets_phrase_policy`, 1..64 chars label) is checked before any file is made. The bundle URL
+  (request `url`, default the code's URL) passes `cerberus_admin::bundle::check_url` (now `pub`) and its host must be one of
+  `leaf_names(host_names)`, before the vault exists, so a bad URL cannot fail after it. Creation: exclusive create of the
+  vault file (0600), `Store::open(create)`, `VaultService::open` with `daemon::core_config` and `create_vault` (audits
+  `vault.create`), then `unlock::enrol_client` (the part of `admin enroll` that signs the client certificate, saves
+  `admin-clients.json` and audits `admin.client_enroll`, now shared) with the context of the new owner. A failure after the
+  vault exists locks it, closes the store and removes what this attempt made (the vault files and the TLS files that did
+  not exist before; the `Made` bookkeeping of DEC-SRV-2 without the recovery file and the data directory). The answer
+  `{recovery_key, ca_pin, owner_id, bundle}` is written into a zeroizing buffer. The core then goes to the normal serve
+  path with no restart (`setup::Waited::Created(core)`): CA file, admin announcement, background tasks, unlock socket,
+  HTTPS with the vault leaf. The vault stays unlocked (as `create_vault` leaves it); the leaf of the vault already exists.
+  `daemon::serve` returns `Result<Option<VaultService>, _>`: `None` when stopped while it waited. A stop during a running
+  setup waits for it to finish (it either completes or removes its files). Client side:
+  `cerberus_client::setup` (`SetupCode::parse`, `health`, `setup`, `SetupOutcome`, `SetupBundle`) over
+  `PinnedHttps::for_setup`, which pins the key of the server certificate itself (`Mode::PinnedLeaf` in the client TLS
+  code), TLS 1.3 only, no system roots, no token, no client certificate. The client crate stays free of vault and server
+  crates. Residual: the setup listener on a non-loopback `bind` cannot ask for client certificates (the CA does not exist
+  yet) and is protected by the token and the pin; SIGKILL while the files are made can leave a partial vault (documented
+  in the troubleshooting table); a `cerberus setup` command line command was not added (the `cerberus` binary has no
+  passphrase prompt; the desktop app is the client). Amends ADR-0002 point 3 and ADR-0034 (new point 9); replaces the
+  `init` text of the daemon guide. Tests: `crates/cerberusd/tests/setup.rs` (full flow over real TLS with the real client,
+  wrong token, attempt limit, simultaneous setups, a late failure that rolls back, a vault that appears while waiting, admin
+  off, `setup-code` and `status` through the binary, the real cost test and the log scan), `tests/daemon.rs`
+  `serve_starts_without_a_vault_and_waits_for_the_first_client` (replaces `serve_refuses_a_data_dir_without_a_vault`), client unit tests of
+  the code parser.
+  **Default of `[admin] enabled` is now `true`** (follow-up decision, same DEC): a fresh default install must start and
+  wait for the first client. `AdminSettings::default().enabled` is `true`; an explicit `enabled = false` (file or
+  `CERBERUSD_ADMIN_ENABLED=false`) is respected, and with no vault the daemon then starts, logs why and writes no code.
+  What `enabled` switches on: the `/admin/v1` routes (each needs the client certificate of an enrolled desktop, so with
+  none enrolled nothing is reachable), the client CA and certificate request on the listener (`require_mtls` still
+  decides whether one is required, so agents without a certificate keep working on a loopback bind), the load of
+  `admin-clients.json` (a registry wider than 0600 stops the start), the `admin.api_start` audit event and the warn line at
+  each start, and `CoreConfig.approvals_available`. Consequence to know: with approvals on and no desktop enrolled, an
+  `ask_once` or `ask_always` grant makes an access request that expires after its timeout (120 s) instead of the
+  immediate `403 approval_unavailable`. **This is a behaviour change for an existing `cerberusd.toml` without the
+  `enabled` key**; `[admin] enabled = false` keeps the old behaviour. Amends DEC-RM-7's "off by default" and ADR-0034 point 2.
+  Tests: `the_admin_api_is_on_by_default_and_an_explicit_false_turns_it_off` (config),
+  `a_config_without_the_admin_table_waits_for_the_first_client`; `daemon_unlocks_serves_ask_grants_as_403_and_stops_locked`
+  now sets `enabled = false`.
+
+  **Review fixes of the setup flow** (same DEC, 2026-11-22). (1) The setup no longer runs inside the hyper handler: the
+  handler checks the body (10 s limit) and the token, takes the phase lock (`Arc<Mutex<Phase>>`, `try_lock_owned`) and
+  starts `run_setup` with `tokio::spawn`; the task owns the lock and answers through a oneshot. A connection that ends or
+  times out drops only the receiver: if the answer cannot be handed over the task discards the vault (revokes the
+  enrolment, locks, closes, removes the files), so the recovery key is never lost with a vault that exists, and the setup can
+  be repeated. `Made` removes its files in `Drop` unless disarmed. The vault is built under `vault.cerberus.setup-<id>`;
+  after the enrolment the store is closed, the file gets its name with `hard_link` (never replaces a vault that appeared),
+  and it is opened again and unlocked with the passphrase (the first service is closed; this costs one more key
+  derivation). A stray `vault.cerberus.setup-*` (with `-wal`/`-shm`) is removed at the start with no vault and never counts as
+  the vault. (2) `Phase::{Waiting, Done, Closing}`: the stop branch takes the lock (waits for a running setup), sets
+  `Closing` (later setups on open connections get `503 unavailable`), and, if a setup worked, waits (at most 15 s) until the
+  connection that carries the answer has ended (`Delivery` guard; the answer has `Connection: close`) before it locks and
+  returns; `wait_for_setup` waits the same way before it gives the core to `serve_with`, so a later error of the start does
+  not discard the answer. Residual: a connection that breaks after the server handed the answer to it cannot be detected; the
+  vault then exists without a client that has the recovery key (round 2 corrected this: a remote session cannot rotate it, `recovery_rotate` is local only; the real options are to keep the vault without a recovery key, or to remove the vault files and set up again, see the daemon guide). (3) The permanent lockout
+  after 10 wrong tokens is gone: after 5 free wrong tokens an address waits 2, 4, 8 ... s up to 300 s (`429 too_many_failures`,
+  `retryable: true`, `details.retry_after_seconds`, `Retry-After`); the state is per peer address (at most 1024 remembered),
+  so one address cannot block another, and the owner needs no restart. Health `setup` keeps the values `pending` and
+  `locked_out`; `locked_out` now means "the address of this caller has to wait" (temporary). At most 4 connections per
+  address; the request body must arrive within 10 s. `MAX_FAILED_TOKENS` is replaced by `FREE_ATTEMPTS`. (4) The code file is
+  written after the sockets are bound; `cerberusd status` says that the daemon waits only when something listens
+  (`setup::is_listening`). (5) `daemon::serve_with`: a failure after the unlock socket is bound (HTTPS start, renewal) now
+  runs `shutdown` (socket task stopped and awaited, lock, background tasks stopped, socket file removed), and `shutdown`
+  awaits the socket task, so a second start in the same process is not refused as already running. `ServeOptions` has a
+  second test-only field, `setup_pause`. Tests: `tests/setup.rs` `a_client_that_leaves_during_the_setup_...`,
+  `temporary_files_of_a_killed_setup_...`, `a_stop_during_a_setup_still_delivers_the_recovery_key`,
+  `a_connection_that_stays_open_cannot_start_a_setup_after_the_stop`, `a_body_that_does_not_arrive_...`,
+  `wrong_tokens_make_the_address_wait_...`, `a_bind_that_fails_leaves_no_code_file`; unit tests in `setup.rs`; `tests/daemon.rs`
+  `a_failed_https_start_leaves_no_unlock_socket_behind`.
+
+  **Round 2 of the review fixes** (same DEC). (a) The setup listener serves one request per connection (`keep_alive(false)`);
+  a connection that has not started a setup lives at most 40 s (`SHORT_CONNECTION`), one that runs a setup 120 s. Peers are
+  keyed by `peer_key`: IPv4 as is, IPv4-mapped as IPv4, other IPv6 by /64, for the connection cap and the wrong-token
+  table. (b) The wrong-token table always tracks a new address: when it is full the entry with the oldest wrong token goes
+  (no `retain` that would reset a waiting address to 5 free tries, no skipping); the wrong-token log is limited to one line a
+  second. (c) The vault is reopened **sealed** after it got its name, and `run_setup` unlocks it (one more key derivation) only
+  after the answer was handed to the connection; this shortens the window between `vault.cerberus` and the answer to
+  milliseconds. It is not closed: a SIGKILL in it leaves an empty vault and no key, with the same two ways out as a lost
+  answer (documented in the daemon guide; the recovery key cannot be rotated remotely). (d) With no vault, `clean_strays` also
+  removes the TLS leaf and CA files that `create_vault` wrote (`tls_files` names only; the folder if empty). The daemon does
+  not serve a leaf that is not from the CA of the vault: `cerberus_api::tls::leaf_issued_by` (issuer name = CA subject name)
+  is checked in `serve_with` (`leaf_usable`: such a leaf means no listener until the first unlock) and in
+  `renew_leaf_if_needed` (a leaf of another CA is renewed at once). (e) Nits: side files without a vault file get a message
+  that says to remove them; `create` checks again that the client is still there after the cost test; the new name is given
+  with `hard_link`, and on a file system without hard links with Linux `renameat2` `RENAME_NOREPLACE` through `rustix` (feature
+  `fs` added to the existing dependency of `cerberusd`; elsewhere a clear error); the `serve` doc says what `None` means when a
+  setup was running at the stop. Tests: `tests/setup.rs` `a_request_that_is_half_sent_at_the_stop_cannot_start_a_setup`,
+  `a_connection_closes_after_its_answer`, `the_tls_files_of_a_killed_setup_are_removed_at_the_next_start`,
+  `side_files_without_a_vault_file_get_their_own_message`; unit tests `peers_are_keyed_by_ipv4_address_or_ipv6_64`,
+  `a_full_failure_table_still_tracks_new_addresses`; `tests/daemon.rs` `a_leaf_of_a_dead_ca_is_not_served`;
+  `cerberus-api/tests/tls.rs` `a_leaf_of_another_ca_is_not_issued_by_this_ca_and_is_renewed`.

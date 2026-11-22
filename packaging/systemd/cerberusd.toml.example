@@ -26,8 +26,13 @@ port = 7373
 # max_unlocked_seconds = 0
 
 # The admin API for an enrolled desktop app (ADR-0034, docs/guides/cerberusd.md "Remote admin from the
-# desktop"). Off by default: then no /admin route exists. On also turns on approvals for ask grants.
+# desktop"). On by default (DEC-SRV-3). On mounts /admin/v1 (every route needs the client certificate of an enrolled
+# desktop, so with none enrolled nothing is reachable), asks for client certificates, reads admin-clients.json and turns
+# on approvals for ask grants. Set enabled = false for a server with no admin surface and no approvals.
+# It is also needed for the first-time setup: with no vault in data_dir the daemon waits for its first client to create
+# the vault, and the client comes out of it with an admin bundle (docs/guides/cerberusd.md, section 2). With
+# enabled = false and no vault the daemon starts, logs why, and waits with no setup code.
 # [admin]
-# enabled = false
+# enabled = true
 # session_idle_seconds = 900    # 60 to 3600
 # session_max_seconds = 43200   # 900 to 86400

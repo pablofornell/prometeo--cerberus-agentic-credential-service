@@ -17,6 +17,7 @@ import {
   MOCK_OPERATORS,
   MOCK_PROFILE,
   MOCK_REMOTE_COMMANDS,
+  MOCK_SETUP_RECOVERY_KEY,
   remoteStatusOf,
 } from "./fixtures";
 
@@ -49,6 +50,8 @@ export interface MockController {
   activated: string | null | undefined;
   /** A staged bundle import (`remote_import_bundle`), stored only by `remote_activate` of its ID. */
   staged: RemoteProfileView | null;
+  /** The arguments of every command the mock answered, by command name, in order. For tests. */
+  calls: Record<string, unknown[]>;
   /** Changes the vault state and sends `vault-state-changed`, like the real backend. */
   setState: (state: VaultState) => Promise<void>;
   /** Sends one backend event by its name. */
@@ -72,6 +75,22 @@ export interface MockOptions {
 /** Wrong tries in a row before the backend makes the person wait (`FREE_UNLOCK_FAILURES`). */
 export const FREE_UNLOCK_FAILURES = 5;
 
+const SETUP_PREFIX = "cerberus-setup:1:";
+const SETUP_URL = "https://vault.example.test:7373";
+
+/** What the mock server of a setup code is: the end of the code names the scenario (see `MOCK_SETUP_CODE`). */
+function setupServer(code: string, url: string | null): { url: string; scenario: string } {
+  const text = code.trim();
+  if (!text.startsWith(SETUP_PREFIX) || text.length === SETUP_PREFIX.length) {
+    throw mockError("validation_failed", "validation failed", { fields: [{ field: "code", problem: "is not a Cerberus setup code" }] });
+  }
+  const chosen = url?.trim();
+  if (chosen && !/^https:\/\/[^/\s]+$/.test(chosen)) {
+    throw mockError("validation_failed", "validation failed", { fields: [{ field: "url", problem: "must look like https://host:port" }] });
+  }
+  return { url: chosen || SETUP_URL, scenario: text.slice(SETUP_PREFIX.length) };
+}
+
 export function installMock(options: MockOptions = {}): MockController {
   const ctl: MockController = {
     state: options.state ?? "unlocked",
@@ -85,6 +104,7 @@ export function installMock(options: MockOptions = {}): MockController {
     profiles: options.profiles ?? (options.remote ? [{ ...MOCK_PROFILE, active: true }] : []),
     activated: undefined,
     staged: null,
+    calls: {},
     setState: async (state) => {
       ctl.state = state;
       await emit("vault-state-changed", { state });
@@ -119,6 +139,9 @@ export function installMock(options: MockOptions = {}): MockController {
     if (ctl.state !== "unlocked") throw mockError("vault_locked", "the vault is locked");
   };
 
+  /** The result of the last `remote_setup` that `remote_setup_finish` did not drop. */
+  let held: { profile: RemoteProfileView; stored: boolean } | null = null;
+
   // The base answers every command a screen reads, from the shared fixtures. Screen mocks replace the ones they own.
   const base: MockHandlers = {
     vault_status: () => status(),
@@ -138,6 +161,57 @@ export function installMock(options: MockOptions = {}): MockController {
       // Staged only: a stored profile of the same enrolment changes at `remote_activate`.
       c.staged = { ...MOCK_PROFILE, active: false };
       return c.staged;
+    },
+    remote_setup_check: async (args) => {
+      const { code, url } = (args as { code?: string; url?: string | null } | undefined) ?? {};
+      await new Promise((r) => setTimeout(r, 250));
+      const server = setupServer(String(code ?? ""), url ?? null);
+      if (server.scenario === "down") throw mockError("remote_unreachable", "cannot reach the server");
+      if (server.scenario === "wrong") throw mockError("setup_wrong_server", "this is not the server of the setup code");
+      if (server.scenario === "exists") throw mockError("conflict", "this server already has a vault");
+      return { url: server.url, state: server.scenario === "locked" ? "locked_out" : "pending", version: "0.4.0" };
+    },
+    remote_setup: async (args, c) => {
+      const a = (args as { code?: string; ownerLabel?: string; passphrase?: string; deviceLabel?: string | null; url?: string | null } | undefined) ?? {};
+      const server = setupServer(String(a.code ?? ""), a.url ?? null);
+      await new Promise((r) => setTimeout(r, 400));
+      // The scenario `toomany` asks for a wait of two seconds on the first try, as a server that counted five wrong codes.
+      if (server.scenario === "toomany" && (c.calls.remote_setup?.length ?? 0) === 1) {
+        throw mockError("too_many_failures", "wait before the next try", { retry_after_seconds: 2 });
+      }
+      if (server.scenario === "badtoken") throw mockError("unauthenticated", "the setup token is not valid");
+      if (server.scenario === "busy") throw mockError("conflict", "a setup is running");
+      if (server.scenario === "lost") throw mockError("setup_unconfirmed", "the answer of the server did not arrive; the vault may exist");
+      if ((a.passphrase ?? "").length < 12) {
+        throw mockError("validation_failed", "validation failed", { fields: [{ field: "passphrase", problem: "must have at least 12 characters" }] });
+      }
+      if ((a.ownerLabel ?? "").toLowerCase() === "fail") throw mockError("internal", "internal error");
+      const profile = { ...MOCK_PROFILE, id: "0196d7a0-1c2e-7c3a-9f00-00000000b001", label: a.deviceLabel || "desktop", url: server.url, active: false };
+      // Like the backend: the key and the profile are held from here on, and a profile that cannot be stored still answers.
+      held = { profile, stored: false };
+      if (server.scenario === "nostore") {
+        return { profile: null, store_error: mockError("internal", "internal error"), recovery_key: MOCK_SETUP_RECOVERY_KEY };
+      }
+      held.stored = true;
+      c.profiles = [...c.profiles.filter((p) => p.id !== profile.id), profile];
+      return { profile, store_error: null, recovery_key: MOCK_SETUP_RECOVERY_KEY };
+    },
+    remote_setup_save: (_args, c) => {
+      if (!held) throw mockError("not_found", "there is no server setup to save");
+      // The scenario `nostore` fails the first save, as a disk that is still full.
+      if (!held.stored && (c.calls.remote_setup_save?.length ?? 0) === 1) throw mockError("internal", "internal error");
+      held.stored = true;
+      const profile = held.profile;
+      c.profiles = [...c.profiles.filter((p) => p.id !== profile.id), profile];
+      return profile;
+    },
+    remote_setup_copy_key: () => {
+      if (!held) throw mockError("not_found", "there is no such value to copy");
+      return null;
+    },
+    remote_setup_finish: () => {
+      held = null;
+      return null;
     },
     remote_discard_import: (_args, c) => {
       c.staged = null;
@@ -234,6 +308,7 @@ export function installMock(options: MockOptions = {}): MockController {
       // Remote mode: the desktop refuses every command off the allowlist before the network (DEC-RM-11).
       if (ctl.remote && !cmd.startsWith("plugin:") && !remoteOnly.has(cmd)) throw mockError("remote_unsupported", "not available for a remote server");
       if (ctl.remote && MOCK_REMOTE_COMMANDS.includes(cmd as (typeof MOCK_REMOTE_COMMANDS)[number]) && cmd !== "vault_status") reach();
+      (ctl.calls[cmd] ??= []).push(payload);
       const handler = handlers[cmd];
       if (!handler) throw mockError("unavailable", `the dev mock has no handler for ${cmd}`);
       return handler(payload as MockArgs, ctl);

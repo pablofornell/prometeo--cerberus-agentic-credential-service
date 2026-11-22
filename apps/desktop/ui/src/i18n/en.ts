@@ -111,6 +111,9 @@ export const en = {
   "error.code.admin_session_required": "The server session ended. Unlock again.",
   "error.code.admin_cert_required": "The server no longer accepts this desktop: its enrolment was revoked or expired.",
   "error.code.invalid_bundle": "That file is not a valid Cerberus admin bundle.",
+  "error.code.unauthenticated": "The server did not accept the setup code. Ask for a new one.",
+  "error.code.setup_wrong_server": "The server at this address is not the one of the setup code.",
+  "error.code.setup_unconfirmed": "The answer of the server did not arrive. The vault may exist: check with cerberusd status.",
   "error.code.fallback": "The action failed.",
 
   "state.empty.firstSteps": "First steps",

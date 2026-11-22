@@ -21,7 +21,7 @@ use cerberus_admin::clients::{
 use cerberus_api::AdminState;
 use cerberus_api::tls::{CaExport, LocalCa};
 use cerberus_core::vault::KeyCustody;
-use cerberus_core::{AdminAudit, AdminEventKind, CoreError, VaultService};
+use cerberus_core::{AdminAudit, AdminEventKind, CoreError, OperatorContext, VaultService};
 use cerberus_crypto::SecretString;
 use cerberus_types::wire::WireSecret;
 use cerberus_types::{ErrorCode, GrantMode, OperatorId, OperatorRole, VaultStateKind};
@@ -441,42 +441,54 @@ async fn admin_enroll(
             None => return invalid("no operator has this label"),
         },
     };
+    match enrol_client(core, admin, &ctx, label, url, operator).await {
+        Ok(bundle) => Reply {
+            operator: Some(owner_label),
+            bundle: Some(Box::new(bundle)),
+            ..Reply::empty()
+        },
+        Err(reply) => reply,
+    }
+}
+
+/// Signs a client certificate, saves the enrolment in the registry, audits it and gives the bundle. The caller has
+/// checked who may enrol: `cerberusd admin enroll` checks an owner passphrase, the first-time setup has just made the
+/// vault (ctx is its owner).
+pub(crate) async fn enrol_client(
+    core: &VaultService,
+    admin: &AdminState,
+    ctx: &OperatorContext,
+    label: String,
+    url: String,
+    operator: OperatorId,
+) -> Result<AdminBundle, Reply> {
     let now = core.clock().now();
-    let (bundle, cert_der) = match issue_bundle(core, label.clone(), url, operator, now).await {
-        Ok(issued) => issued,
-        Err(reply) => return reply,
-    };
-    let entry = match AdminClient::enrolled(
+    let (bundle, cert_der) = issue_bundle(core, label.clone(), url, operator, now).await?;
+    let entry = AdminClient::enrolled(
         bundle.id,
         label.clone(),
         operator,
         &cert_der,
         bundle.not_after,
         now,
-    ) {
-        Ok(entry) => entry,
-        Err(error) => return invalid(&error.to_string()),
-    };
+    )
+    .map_err(|error| invalid(&error.to_string()))?;
     if let Err(error) = admin.enroll(entry) {
         tracing::error!(%error, "admin client registry not saved");
-        return Reply::failure(
+        return Err(Reply::failure(
             ErrorCode::Internal.as_str(),
             &format!("the admin client registry could not be saved: {error}"),
-        );
+        ));
     }
     let mut event = AdminAudit::new(AdminEventKind::ClientEnroll);
     event.enrolment = Some(bundle.id.to_string());
     event.label = Some(label);
     event.operator = Some(operator);
-    if let Err(error) = core.record_admin_event(Some(&ctx), event).await {
+    if let Err(error) = core.record_admin_event(Some(ctx), event).await {
         tracing::warn!(%error, "admin.client_enroll was not audited");
     }
     tracing::warn!(enrolment = %bundle.id, "admin client enrolled");
-    Reply {
-        operator: Some(owner_label),
-        bundle: Some(Box::new(bundle)),
-        ..Reply::empty()
-    }
+    Ok(bundle)
 }
 
 /// Signs a client certificate with the vault CA and builds the bundle; also gives the certificate

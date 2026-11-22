@@ -14,8 +14,37 @@
 .remote-connect .note { font-size: var(--t-caption-size); line-height: var(--t-caption-line); color: var(--c-text-muted); }
 .remote-connect .choose { justify-self: start; }
 
+/* Set up a new server: a dialog with three steps. The step bodies reuse the create wizard, whose rules are scoped to
+   `.create-screen` (the meter, the policy list, the words, the progress list, the recovery grid), so the content sits in
+   that class. The pane keeps a minimum height so a result that appears under the code does not move the buttons. */
+.setup-server { display: grid; gap: var(--s-4); }
+.setup-steps { list-style: none; margin: 0; padding: 0 0 var(--s-3); display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-5); border-bottom: 1px solid var(--hair); font-size: var(--t-body-sm-size); color: var(--c-text-muted); }
+.setup-steps li { display: flex; align-items: center; gap: var(--s-2); }
+.setup-steps li + li::before { content: ""; width: var(--s-5); height: 1px; margin-right: var(--s-1); background: var(--hair); }
+.setup-steps li.done::before, .setup-steps li.now::before { background: var(--c-text-secondary); }
+.setup-steps li.now { color: var(--c-text-primary); font-weight: 500; }
+.setup-steps li.done { color: var(--c-text-secondary); }
+.setup-steps .n { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--hair-ctl); display: grid; place-items: center; font-size: var(--t-caption-size); font-weight: 600; flex: none; font-variant-numeric: tabular-nums; }
+.setup-steps li.now .n { border-color: var(--c-text-primary); color: var(--c-text-primary); }
+.setup-steps li.done .n { background: var(--c-accent-solid); border-color: var(--c-accent-solid); color: var(--c-accent-on-solid); }
+.setup-pane { display: grid; gap: var(--s-4); align-content: start; min-height: 21rem; }
+.setup-pane h3 { font-size: var(--t-title-sm-size); line-height: var(--t-title-sm-line); font-weight: 600; letter-spacing: var(--t-title-sm-track); }
+.setup-pane h3:focus { outline: none; }
+.setup-lede { color: var(--c-text-secondary); max-width: 66ch; }
+.setup-code { overflow-wrap: anywhere; font-size: var(--t-caption-size); line-height: var(--t-caption-line); }
+.setup-more { margin-top: var(--s-3); }
+.setup-target { overflow-wrap: anywhere; margin: 0; }
+.setup-result { display: grid; gap: var(--s-3); min-height: 2.5rem; }
+.setup-result .remote-facts { padding: var(--s-3) var(--s-3_5); background: var(--c-bg-sunken); border: 1px solid var(--hair); border-radius: var(--r-sm); }
+/* The count of a wait keeps its digits the same width, so the line does not move as it ticks. */
+.setup-wait { font-variant-numeric: tabular-nums; font-weight: 500; min-height: 1.5em; }
+.setup-checking { display: flex; align-items: center; gap: var(--s-2); margin: 0; color: var(--c-text-secondary); font-size: var(--t-body-sm-size); }
+.setup-working { justify-items: center; text-align: center; padding-top: var(--s-6); }
+.setup-working .progress-list { justify-self: stretch; max-width: 46rem; margin: 0 auto; width: 100%; }
+.setup-working p { max-width: 52ch; }
+
 /* The quiet way to the other backend, under the unlock card on the canvas. Last in the tab order. */
-.unlock-alt { display: flex; justify-content: center; margin-top: var(--s-4); }
+.unlock-alt { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-1) var(--s-3); margin-top: var(--s-4); }
 .unlock-alt .btn { color: var(--c-text-muted); }
 .unlock-alt .btn:hover { color: var(--c-text-primary); }
 @media (max-height: 680px) {

@@ -6,6 +6,9 @@
 //! - a pin (`Trust::Pin`): the server must send the CA certificate after the leaf. The certificate
 //!   whose public key (SPKI) hashes to the pin becomes the only trust anchor for that handshake.
 //!
+//! A third mode, [`leaf_pin_config`], is for the first-time setup of a `cerberusd` that has no vault yet: the server
+//! has only a throwaway self-signed certificate, so the pin is the SPKI hash of that certificate itself (DEC-SRV-3).
+//!
 //! No system roots are loaded. TLS 1.2 is not offered.
 
 use std::fmt;
@@ -112,6 +115,9 @@ enum Mode {
     Roots(Arc<WebPkiServerVerifier>),
     /// The CA must be in the presented chain and match the pin.
     Pinned([u8; 32]),
+    /// The server certificate itself must have the pinned key (a self-signed setup certificate). The handshake
+    /// signature still proves that the server holds the key.
+    PinnedLeaf([u8; 32]),
 }
 
 #[derive(Debug)]
@@ -143,6 +149,15 @@ impl ServerCertVerifier for PinVerifier {
                 ocsp_response,
                 now,
             ),
+            Mode::PinnedLeaf(pin) => {
+                if spki_sha256(end_entity).is_some_and(|hash| hash == *pin) {
+                    Ok(ServerCertVerified::assertion())
+                } else {
+                    Err(Error::InvalidCertificate(CertificateError::Other(
+                        OtherError(Arc::new(PinMismatch)),
+                    )))
+                }
+            }
             Mode::Pinned(pin) => {
                 let ca = intermediates
                     .iter()
@@ -218,11 +233,25 @@ pub(crate) fn client_config(
             Mode::Roots(roots_verifier(&pinned, &provider)?)
         }
     };
+    finish_config(mode, &provider, client_cert)
+}
+
+/// The rustls client config for the first-time setup: the server certificate must have the key of `pin`
+/// (`sha256/<base64>`), and no client certificate is sent.
+pub(crate) fn leaf_pin_config(pin: &str) -> Result<ClientConfig, ClientError> {
+    finish_config(Mode::PinnedLeaf(parse_pin(pin)?), &ring_provider(), None)
+}
+
+fn finish_config(
+    mode: Mode,
+    provider: &Arc<CryptoProvider>,
+    client_cert: Option<&(std::path::PathBuf, std::path::PathBuf)>,
+) -> Result<ClientConfig, ClientError> {
     let verifier = Arc::new(PinVerifier {
         mode,
         provider: provider.clone(),
     });
-    let builder = ClientConfig::builder_with_provider(provider)
+    let builder = ClientConfig::builder_with_provider(provider.clone())
         .with_protocol_versions(&[&rustls::version::TLS13])
         .map_err(|e| ClientError::Config(e.to_string()))?
         .dangerous()

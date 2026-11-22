@@ -247,7 +247,15 @@ export const MOCK_REMOTE_COMMANDS = [
 ] as const;
 
 /** Commands that run on the desktop in both modes. */
-export const MOCK_DESKTOP_COMMANDS = ["remote_status", "remote_import_bundle", "remote_discard_import", "remote_activate", "remote_disconnect", "remote_forget", "file_pick_open"] as const;
+export const MOCK_DESKTOP_COMMANDS = ["remote_status", "remote_import_bundle", "remote_setup_check", "remote_setup", "remote_setup_save", "remote_setup_copy_key", "remote_setup_finish", "remote_discard_import", "remote_activate", "remote_disconnect", "remote_forget", "file_pick_open"] as const;
+
+/** The setup code of a sample server that waits for its first client. The mock reads the end of a code as a scenario:
+ *  `locked`, `down`, `wrong` and `exists` fail the check; `badtoken`, `busy` and `lost` fail the setup, `toomany` fails it once with a wait of two seconds, and `nostore` makes it answer with the key but without a stored profile. Any other text
+ *  that starts with the prefix is a server that waits. */
+export const MOCK_SETUP_CODE = "cerberus-setup:1:ZGVtbw";
+
+/** The recovery key that the mock server shows after a setup. Fake: it opens nothing. */
+export const MOCK_SETUP_RECOVERY_KEY = "CRK1-SRVA-1111-2222-3333-4444-5555-6666-7777-8888-9999-AAAA-BBBB-CCCC-DDDD";
 
 /** A fake enrolment bundle: the pin and fingerprint are sample text, not of a real CA. */
 export const MOCK_PROFILE: RemoteProfileView = {

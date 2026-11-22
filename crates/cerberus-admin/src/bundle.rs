@@ -241,7 +241,12 @@ impl AdminBundle {
     }
 }
 
-fn check_url(text: &str) -> Result<(), BundleError> {
+/// Checks the URL of a bundle: `https://host[:port]/` with no user, query or fragment. `cerberusd` checks it before a
+/// first-time setup makes a vault, so a bad URL cannot fail after the vault exists.
+///
+/// # Errors
+/// [`BundleError::Url`].
+pub fn check_url(text: &str) -> Result<(), BundleError> {
     let url = url::Url::parse(text).map_err(|_| BundleError::Url)?;
     let plain = url.scheme() == "https"
         && url.host_str().is_some_and(|host| !host.is_empty())

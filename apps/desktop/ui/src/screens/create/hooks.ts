@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { KdfTuningView, StrengthView } from "../../bindings";
 import { ipc, isIpcFailure, type UiError } from "../../ipc/client";
 
@@ -71,4 +71,47 @@ export function useBenchmark(active: boolean): { state: BenchState; run: () => v
   }, [active, runs]);
   const run = useCallback(() => setRuns((n) => n + 1), []);
   return { state: answer?.run === runs ? answer.state : { status: "running" }, run };
+}
+
+export interface PhraseGenerator {
+  /** The words of the last generated phrase, until `forget`. */
+  words: string[] | null;
+  generating: boolean;
+  failed: boolean;
+  generate: () => void;
+  /** Drops the words (the person typed over them, or the phrase was used). */
+  forget: () => void;
+}
+
+/** Asks the backend for a word phrase (`passphrase_generate`) and hands it to `onPhrase`. A late answer after unmount is dropped. */
+export function usePhraseGenerator(wordCount: number, onPhrase: (text: string) => void): PhraseGenerator {
+  const [words, setWords] = useState<string[] | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const mounted = useRef(true);
+  const sink = useRef(onPhrase);
+  useEffect(() => {
+    sink.current = onPhrase;
+  });
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const generate = useCallback(() => {
+    setGenerating(true);
+    setFailed(false);
+    ipc
+      .passphraseGenerate(wordCount)
+      .then((text) => {
+        if (!mounted.current) return;
+        sink.current(text);
+        setWords(text.split(/\s+/).filter(Boolean));
+      })
+      .catch(() => mounted.current && setFailed(true))
+      .finally(() => mounted.current && setGenerating(false));
+  }, [wordCount]);
+  const forget = useCallback(() => setWords(null), []);
+  return { words, generating, failed, generate, forget };
 }
