@@ -26,7 +26,7 @@ cerberus-mcp.workspace = true
 cerberus-store.workspace = true
 cerberus-types.workspace = true
 # A13 runs the real daemon in this process (dev edges are free, DEC-T10-10).
-cerberusd = { path = "../../crates/cerberusd", version = "0.4.0" }
+cerberusd = { path = "../../crates/cerberusd", version = "0.5.0" }
 jiff.workspace = true
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "http2"] }
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest", "reqwest-tls-no-provider"] }
