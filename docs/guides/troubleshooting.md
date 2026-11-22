@@ -79,7 +79,7 @@ the end of this page.
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | The phrase is refused, with a countdown | Too many failed unlocks. After five failures in a row, each failure doubles the wait, up to 15 minutes | Wait for the countdown. Check the caps lock key. Use the recovery key if you have lost the phrase |
-| The vault locks more often than you expect | Idle lock (default 30 min), or the hard limit (12 h after unlock) | Change them in Settings, as the owner or operator |
+| The vault locks more often than you expect | Idle lock (default 30 min), or the hard limit (12 h after unlock on the desktop, off by default on `cerberusd`) | Change them in Settings, as the owner or operator |
 | The vault does not lock when the machine sleeps or the screen locks (macOS, Windows) | No OS lock hook on those systems | This is an accepted gap. Lock the vault yourself, or set a short idle lock |
 | A busy agent keeps the vault open | "Agent calls count as activity" is on | Turn it off in Settings if you want the idle lock to run during agent work |
 

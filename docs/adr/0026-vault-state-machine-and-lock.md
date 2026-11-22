@@ -35,7 +35,7 @@ inside the `Unlocked` variant. Leaving `Unlocked` drops the variant, and drop ze
 |---|---|---|
 | Manual lock (button, tray, Ctrl/Cmd+L) | on | — |
 | Idle: no activity for `idle_lock_seconds` | 1800 s | 60..86400, or off |
-| Hard limit: `max_unlocked_seconds` after unlock | 43200 s (12 h) | 900..604800, or off |
+| Hard limit: `max_unlocked_seconds` after unlock | 43200 s (12 h) on the desktop; off on `cerberusd` (DEC-SRV-1) | 900..604800, or off |
 | OS sleep or screen lock | on | `lock_on_os_lock` |
 | App quit, SIGTERM | on | — |
 | Panic (Rust panic) | on | — |

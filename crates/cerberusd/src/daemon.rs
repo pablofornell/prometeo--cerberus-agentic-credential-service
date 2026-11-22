@@ -194,6 +194,7 @@ where
             // DEC-RM-7); without it ask grants answer `403 approval_unavailable`.
             approvals_available: config.admin.enabled,
             idle_lock_default: config.idle_lock(),
+            max_unlocked_default: config.max_unlocked(),
             data_dir: config.data_dir.clone(),
             ca_issuer: Arc::new(LocalCaIssuer::new(tls.clone(), config.host_names.clone())),
         },
@@ -411,6 +412,7 @@ mod tests {
             CoreConfig {
                 approvals_available: true,
                 idle_lock_default: None,
+                max_unlocked_default: None,
                 data_dir: data.to_path_buf(),
                 ca_issuer: Arc::new(LocalCaIssuer::new(TlsPaths::in_data_dir(data), Vec::new())),
             },

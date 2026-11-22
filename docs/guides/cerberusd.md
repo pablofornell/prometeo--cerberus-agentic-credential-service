@@ -151,6 +151,22 @@ only in memory: a restart ends them all.
 minutes, an enrolment is refused for 15 minutes before any passphrase check; every wrong passphrase also counts in the
 vault's unlock back-off. The recovery key is never accepted over the network.
 
+## 7. Back up
+
+Do not copy `/var/lib/cerberus` while the daemon runs: the vault is in WAL mode, so a file-by-file copy can be torn.
+Run `cerberusd backup --out /var/lib/cerberus/backups --keep 14` instead. It makes a consistent copy while the daemon
+serves, needs no passphrase, and keeps the file encrypted. The packaging has a systemd timer for it
+(`cerberusd-backup.timer`, `cerberusd-backup.service`). Install and enable it:
+
+```
+install -m 0644 packaging/systemd/cerberusd-backup.service packaging/systemd/cerberusd-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now cerberusd-backup.timer
+```
+
+Deploy pipelines must call `cerberusd backup`, or copy only the finished files in `backups/`, and never the
+`vault.cerberus*` files. Details: [Back up the headless daemon](backup-and-restore.md#back-up-the-headless-daemon).
+
 ## Config reference
 
 File: `/etc/cerberus/cerberusd.toml`. Environment variables win over the file.
@@ -163,14 +179,24 @@ File: `/etc/cerberus/cerberusd.toml`. Environment variables win over the file.
 | `host_names` | `CERBERUSD_HOST_NAMES` | none | Extra names for the TLS certificate and the allowed `Host` header |
 | `require_mtls` | `CERBERUSD_REQUIRE_MTLS` | `false` | Client certificates on every connection. Must be `true` for a non-loopback bind |
 | `idle_lock_seconds` | `CERBERUSD_IDLE_LOCK_SECONDS` | `0` (off) | Lock after idle seconds: `0` or `60` to `86400` |
+| `max_unlocked_seconds` | `CERBERUSD_MAX_UNLOCKED_SECONDS` | `0` (off) | Hard limit: lock this many seconds after an unlock: `0` or `900` to `604800` |
 | `[admin] enabled` | `CERBERUSD_ADMIN_ENABLED` | `false` | The admin API for enrolled desktops, and approvals (section 6) |
 | `[admin] session_idle_seconds` | `CERBERUSD_ADMIN_SESSION_IDLE_SECONDS` | `900` | Admin session idle limit: `60` to `3600`, at most the max |
 | `[admin] session_max_seconds` | `CERBERUSD_ADMIN_SESSION_MAX_SECONDS` | `43200` | Admin session absolute limit: `900` to `86400` |
 
 Unknown keys stop the start, and the error names the key. The file must be mode `0600`, or the daemon refuses to start.
 
-The vault has a hard limit: it locks 12 hours after an unlock. The daemon cannot change it. Change it on the desktop
-app, then make a new backup.
+The daemon has no hard limit by default: the vault stays unlocked until a manual lock, an idle lock (if you set one), or a restart.
+The desktop app has a default of 12 hours. To lock the server vault a fixed time after each unlock, set
+`max_unlocked_seconds`. This value is only the default for a vault that has no setting saved. An owner or operator can
+change the hard limit at run time in the vault settings (the saved setting then wins over the file). A hard limit
+makes agents lose access when it ends, until a person unlocks the vault again.
+
+A vault has a saved `max_unlocked_seconds` only when somebody set it to a value that was not the default at that time.
+Changing another lock setting (for example the idle lock) does not save it. A vault that you made on the desktop and then
+restored on the server can still carry it from an older build: the desktop default is `43200` (12 hours), and that
+saved value wins over the file. To remove it, an owner or operator sets the hard limit to off in the vault settings
+(`settings_set` with `max_unlocked_seconds` = `null`). The vault then has an explicit "off" and ignores the file value.
 
 ## Security notes
 

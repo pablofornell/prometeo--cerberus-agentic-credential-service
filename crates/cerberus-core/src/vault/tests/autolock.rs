@@ -8,7 +8,9 @@ use cerberus_types::{AgentId, AgentKeyId, LockReason, OperatorRole, RequestId, V
 use super::fixture::*;
 use crate::context::{AgentContext, Surface};
 use crate::error::CoreError;
-use crate::vault::{CoreEvent, KeyCustody, LockSettings, OsEvent, OsEventSink, OsLockEvents};
+use crate::vault::{
+    CoreConfig, CoreEvent, KeyCustody, LockSettings, OsEvent, OsEventSink, OsLockEvents,
+};
 
 fn agent_ctx() -> AgentContext {
     AgentContext {
@@ -84,6 +86,28 @@ async fn hard_lock_fires_after_12_hours_even_with_activity() {
     assert_eq!(service.state(), VaultStateKind::Sealed);
 }
 
+#[test]
+fn the_hard_limit_default_comes_from_the_config() {
+    // The desktop keeps the hard limit of 12 hours.
+    let desktop = LockSettings::defaults(&config());
+    assert_eq!(desktop.max_unlocked_seconds, Some(43_200));
+    // The daemon turns it off: no default limit.
+    let daemon = CoreConfig {
+        idle_lock_default: None,
+        max_unlocked_default: None,
+        ..config()
+    };
+    let defaults = LockSettings::defaults(&daemon);
+    assert_eq!(defaults.max_unlocked_seconds, None);
+    assert_eq!(defaults.idle_lock_seconds, None);
+    // An admin can still set it, and the value is checked.
+    let set = LockSettings {
+        max_unlocked_seconds: Some(86_400),
+        ..defaults
+    };
+    assert!(set.validate().is_ok());
+}
+
 #[tokio::test]
 async fn settings_persist_and_are_checked() {
     let (fixture, created, ctx) = Fixture::created().await;
@@ -118,6 +142,81 @@ async fn settings_persist_and_are_checked() {
     );
     assert!(!restarted.handle_os_event(OsEvent::Sleep).await);
     assert_eq!(restarted.state(), VaultStateKind::Unlocked);
+}
+
+/// A change of one lock setting saves only that key. A desktop vault where the user changed the idle lock must not
+/// carry `max_unlocked_seconds` to a server, so the default of the daemon (off, DEC-SRV-1) still applies there.
+#[tokio::test]
+async fn a_change_saves_only_the_changed_keys_so_the_daemon_default_still_applies() {
+    let (fixture, created, ctx) = Fixture::created().await;
+    let service = &fixture.service;
+    let idle_only = LockSettings {
+        idle_lock_seconds: Some(600),
+        ..service.lock_settings(&ctx).await.unwrap()
+    };
+    service.set_lock_settings(&ctx, idle_only).await.unwrap();
+    // The same values again: nothing is saved.
+    service.set_lock_settings(&ctx, idle_only).await.unwrap();
+    let store = cerberus_store::Store::open(
+        cerberus_store::OpenOptions {
+            path: fixture.path.clone(),
+            create: false,
+        },
+        std::sync::Arc::new(fixture.clock.clone()),
+    )
+    .await
+    .unwrap();
+    let rows = |store: &cerberus_store::Store| {
+        let store = store.clone();
+        async move {
+            store
+                .settings()
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|row| row.key)
+                .filter(|key| key.ends_with("_seconds") || key.starts_with("lock_on"))
+                .collect::<Vec<_>>()
+        }
+    };
+    assert_eq!(rows(&store).await, ["idle_lock_seconds"]);
+    service.lock(LockReason::Manual).await.unwrap();
+
+    // The vault moves to a daemon: no hard limit by default.
+    let daemon = CoreConfig {
+        idle_lock_default: None,
+        max_unlocked_default: None,
+        ..config()
+    };
+    let moved = crate::vault::VaultService::open(
+        store.clone(),
+        std::sync::Arc::new(fixture.clock.clone()),
+        daemon,
+    )
+    .await
+    .unwrap();
+    let ctx = moved
+        .unlock_with_phrase(created.owner_id, phrase(OWNER_PHRASE))
+        .await
+        .unwrap();
+    let seen = moved.lock_settings(&ctx).await.unwrap();
+    assert_eq!(seen.idle_lock_seconds, Some(600), "the saved row wins");
+    assert_eq!(
+        seen.max_unlocked_seconds, None,
+        "the daemon default applies"
+    );
+    assert!(moved.status().await.hard_lock_at.is_none());
+
+    // Setting the hard limit does save its key, and only that one.
+    let set = LockSettings {
+        max_unlocked_seconds: Some(3_600),
+        ..seen
+    };
+    moved.set_lock_settings(&ctx, set).await.unwrap();
+    assert_eq!(
+        rows(&store).await,
+        ["idle_lock_seconds", "max_unlocked_seconds"]
+    );
 }
 
 #[tokio::test]

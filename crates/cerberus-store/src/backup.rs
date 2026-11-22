@@ -1,11 +1,12 @@
 //! Backup and restore (ADR-0031).
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use cerberus_types::Clock;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
-use crate::fsutil::{create_private_file, with_suffix};
+use crate::fsutil::{create_private_file, wal_is_plausible, with_suffix};
 use crate::rows::{BackupInfo, HeaderRow, KeySlotRow};
 use crate::store::{APPLICATION_ID, not_a_database};
 use crate::{Store, StoreError};
@@ -17,21 +18,56 @@ impl Store {
     /// # Errors
     /// [`StoreError::Io`] when `dest` exists or cannot be made, or an engine error. A failed backup leaves no file.
     pub async fn backup_to(&self, dest: &Path) -> Result<(), StoreError> {
-        let text = dest
-            .to_str()
-            .ok_or_else(|| StoreError::Io(std::io::ErrorKind::InvalidInput.into()))?;
-        // `VACUUM INTO` accepts an empty existing file. Making it first gives it mode 0600 from the start.
-        create_private_file(dest)?;
-        let result = sqlx::query("VACUUM INTO ?1")
-            .bind(text)
-            .execute(&self.pool)
-            .await;
-        if let Err(error) = result {
-            // The file is ours and holds no complete backup, so removing it is safe.
-            drop(std::fs::remove_file(dest));
-            return Err(error.into());
+        vacuum_into(&self.pool, dest).await
+    }
+
+    /// [`Self::backup_to`] for a vault file that another process may have open, for example a running daemon
+    /// (ADR-0031 point 1, `cerberusd backup`). It opens its own read-only connection and needs no key. The vault
+    /// runs in WAL mode (`connect_options`, no exclusive locking), so this read does not block the writer and the
+    /// writer does not block this read: the copy is one read transaction, a snapshot of one moment. The schema is
+    /// not migrated. The file gets mode 0600 and must not exist.
+    ///
+    /// The connection is read-only, so it never writes a page of the vault and never folds the `-wal` file into it
+    /// when it closes. Before it opens, it runs the same `-wal` check as [`Store::open`] (AUD-10). A `-wal` file
+    /// that fails the check is refused, because SQLite would ignore it and the copy would miss the commits in it.
+    ///
+    /// # Errors
+    /// [`StoreError::Io`] when `vault_path` is missing or `dest` exists or cannot be made,
+    /// [`StoreError::Corrupt`] when the `-wal` file fails the check,
+    /// [`StoreError::NotAVault`] when the file is not a Cerberus vault, or an engine error (for example a
+    /// busy database after 30 s). A failed backup leaves no file.
+    pub async fn backup_vault_file(vault_path: &Path, dest: &Path) -> Result<(), StoreError> {
+        if !vault_path.is_file() {
+            return Err(StoreError::Io(std::io::ErrorKind::NotFound.into()));
         }
-        Ok(())
+        if !wal_is_plausible(vault_path)? {
+            return Err(StoreError::Corrupt);
+        }
+        // Read-only, and not `immutable`: a running daemon may write. No `create_if_missing`, no journal mode and no
+        // other pragma.
+        let options = SqliteConnectOptions::new()
+            .filename(vault_path)
+            .read_only(true)
+            .create_if_missing(false)
+            .busy_timeout(BACKUP_BUSY_TIMEOUT);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .map_err(not_a_database)?;
+        let result = async {
+            let application_id: i64 = sqlx::query_scalar("PRAGMA application_id")
+                .fetch_one(&pool)
+                .await
+                .map_err(not_a_database)?;
+            if application_id != APPLICATION_ID {
+                return Err(StoreError::NotAVault);
+            }
+            vacuum_into(&pool, dest).await
+        }
+        .await;
+        pool.close().await;
+        result
     }
 
     /// Reads what a backup file says about itself, without any key (ADR-0031 step 1): application ID, schema
@@ -47,6 +83,25 @@ impl Store {
         }
         read_backup_file(path).await
     }
+}
+
+/// How long [`Store::backup_vault_file`] waits for a lock. A long write (a migration) can hold the database.
+const BACKUP_BUSY_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// `VACUUM INTO dest` on `pool`. The new file gets mode 0600 and a failure removes it.
+async fn vacuum_into(pool: &sqlx::SqlitePool, dest: &Path) -> Result<(), StoreError> {
+    let text = dest
+        .to_str()
+        .ok_or_else(|| StoreError::Io(std::io::ErrorKind::InvalidInput.into()))?;
+    // `VACUUM INTO` accepts an empty existing file. Making it first gives it mode 0600 from the start.
+    create_private_file(dest)?;
+    let result = sqlx::query("VACUUM INTO ?1").bind(text).execute(pool).await;
+    if let Err(error) = result {
+        // The file is ours and holds no complete backup, so removing it is safe.
+        drop(std::fs::remove_file(dest));
+        return Err(error.into());
+    }
+    Ok(())
 }
 
 /// [`Store::inspect_backup`] without the sibling check: one `immutable` read-only connection.

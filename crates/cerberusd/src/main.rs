@@ -1,4 +1,4 @@
-//! Command line of `cerberusd`: `serve`, `unlock`, `status` (ADR-0002) and `admin` (ADR-0034). See
+//! Command line of `cerberusd`: `serve`, `unlock`, `status` (ADR-0002), `backup` (ADR-0031) and `admin` (ADR-0034). See
 //! `docs/guides/cerberusd.md`.
 
 use std::io;
@@ -8,7 +8,7 @@ use std::process::ExitCode;
 use cerberus_crypto::memlock::{self, HardeningReport};
 use cerberusd::admin::{self, EnrollRequest, Source};
 use cerberusd::config::{self, Config};
-use cerberusd::{daemon, status, unlock};
+use cerberusd::{backup, daemon, status, unlock};
 use clap::{Parser, Subcommand};
 use tokio::signal::unix::{SignalKind, signal};
 
@@ -40,6 +40,17 @@ enum Command {
     },
     /// Check a running daemon over HTTPS. Also shows the CA pin and whether the admin API is on.
     Status,
+    /// Make a consistent backup of the vault. Safe while the daemon runs. Needs no passphrase.
+    Backup {
+        /// A folder, or a file name that ends in `.cerberus-backup`. A folder gets the file
+        /// `cerberus-<vault short id>-<UTC time>.cerberus-backup`.
+        #[arg(long, value_name = "FOLDER|FILE")]
+        out: PathBuf,
+        /// Keep this many newest backups of this vault in the folder and remove the older ones that this command
+        /// made. Other files are never removed.
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(1..))]
+        keep: Option<u32>,
+    },
     /// Enrol, list and revoke desktops for the admin API (`[admin] enabled = true`).
     Admin {
         #[command(subcommand)]
@@ -128,6 +139,16 @@ async fn run(cli: Cli, report: HardeningReport) -> Result<(), String> {
                 println!("CA SHA-256: {}", ca.cert_sha256_hex);
             }
             println!("{}", status::admin_summary(&config));
+            Ok(())
+        }
+        Command::Backup { out, keep } => {
+            let report = backup::run(&config, &out, keep, &cerberus_types::SystemClock)
+                .await
+                .map_err(|error| error.to_string())?;
+            println!("{}", report.path.display());
+            if !report.pruned.is_empty() {
+                eprintln!("removed {} old backup(s)", report.pruned.len());
+            }
             Ok(())
         }
         Command::Admin { command } => run_admin(&config, command).await,

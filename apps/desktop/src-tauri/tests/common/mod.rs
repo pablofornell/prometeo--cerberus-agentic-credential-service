@@ -126,6 +126,7 @@ async fn make_vault(data_dir: &Path) -> Seed {
         CoreConfig {
             approvals_available: false,
             idle_lock_default: None,
+            max_unlocked_default: None,
             data_dir: data_dir.to_path_buf(),
             ca_issuer: Arc::new(LocalCaIssuer::new(
                 TlsPaths::in_data_dir(data_dir),

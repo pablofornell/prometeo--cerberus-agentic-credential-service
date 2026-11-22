@@ -177,6 +177,7 @@ impl Fixture {
             CoreConfig {
                 approvals_available: true,
                 idle_lock_default: None,
+                max_unlocked_default: None,
                 data_dir: data_dir.clone(),
                 ca_issuer: issuer,
             },

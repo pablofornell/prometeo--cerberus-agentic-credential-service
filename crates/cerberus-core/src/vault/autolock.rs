@@ -20,7 +20,7 @@ use cerberus_types::FieldProblem;
 
 /// Default idle lock time (30 minutes).
 pub const DEFAULT_IDLE_SECONDS: u64 = 1_800;
-/// Default hard limit after unlock (12 hours).
+/// Default hard limit after unlock on the desktop (12 hours). The daemon default is off.
 pub const DEFAULT_MAX_UNLOCKED_SECONDS: u32 = 43_200;
 /// Allowed idle lock times.
 pub const IDLE_LOCK_RANGE: RangeInclusive<u32> = 60..=86_400;
@@ -64,7 +64,9 @@ impl LockSettings {
             idle_lock_seconds: config
                 .idle_lock_default
                 .map(|d| u32::try_from(d.as_secs()).unwrap_or(u32::MAX)),
-            max_unlocked_seconds: Some(DEFAULT_MAX_UNLOCKED_SECONDS),
+            max_unlocked_seconds: config
+                .max_unlocked_default
+                .map(|d| u32::try_from(d.as_secs()).unwrap_or(u32::MAX)),
             lock_on_os_lock: true,
             agent_activity_keeps_unlocked: true,
         }
@@ -232,6 +234,10 @@ impl VaultService {
 
     /// Saves the lock trigger settings. Role operator or owner.
     ///
+    /// It saves only the keys whose value differs from the settings in use. A key that the request does not change
+    /// gets no row, so a setting that nobody changed keeps following the default of the config (for the hard limit:
+    /// off on the daemon, DEC-SRV-1). A key that already has a row keeps it. When nothing differs, nothing is saved.
+    ///
     /// # Errors
     /// [`CoreError::Validation`] for out-of-range values, [`CoreError::Locked`], the role check,
     /// or a storage error.
@@ -242,20 +248,38 @@ impl VaultService {
     ) -> Result<(), CoreError> {
         let guard = self.authorize(ctx, OperatorRole::Operator).await?;
         value.validate()?;
-        let now = self.inner.clock.now();
-        let blobs = guard.blobs();
-        let entries: [(&str, serde_json::Value); 4] = [
-            (keys::IDLE_LOCK_SECONDS, value.idle_lock_seconds.into()),
+        let current = self.inner.lock_settings.get();
+        let entries: Vec<(&str, serde_json::Value)> = [
+            (
+                keys::IDLE_LOCK_SECONDS,
+                value.idle_lock_seconds != current.idle_lock_seconds,
+                serde_json::Value::from(value.idle_lock_seconds),
+            ),
             (
                 keys::MAX_UNLOCKED_SECONDS,
-                value.max_unlocked_seconds.into(),
+                value.max_unlocked_seconds != current.max_unlocked_seconds,
+                serde_json::Value::from(value.max_unlocked_seconds),
             ),
-            (keys::LOCK_ON_OS_LOCK, value.lock_on_os_lock.into()),
+            (
+                keys::LOCK_ON_OS_LOCK,
+                value.lock_on_os_lock != current.lock_on_os_lock,
+                serde_json::Value::from(value.lock_on_os_lock),
+            ),
             (
                 keys::AGENT_ACTIVITY_KEEPS_UNLOCKED,
-                value.agent_activity_keeps_unlocked.into(),
+                value.agent_activity_keeps_unlocked != current.agent_activity_keeps_unlocked,
+                serde_json::Value::from(value.agent_activity_keeps_unlocked),
             ),
-        ];
+        ]
+        .into_iter()
+        .filter_map(|(key, changed, json)| changed.then_some((key, json)))
+        .collect();
+        if entries.is_empty() {
+            return Ok(());
+        }
+        let now = self.inner.clock.now();
+        let blobs = guard.blobs();
+        let changed_keys: Vec<&str> = entries.iter().map(|(key, _)| *key).collect();
         let mut tx = self.inner.store.begin().await?;
         for (key, json) in entries {
             let plain = serde_json::to_vec(&json).map_err(|_| CoreError::Corrupt)?;
@@ -269,15 +293,7 @@ impl VaultService {
         tx.commit().await?;
         self.inner.lock_settings.set(value);
         let event = super::integration::by_operator(crate::audit::EventType::SettingsChange, ctx)
-            .detail(
-                "keys",
-                serde_json::json!([
-                    keys::IDLE_LOCK_SECONDS,
-                    keys::MAX_UNLOCKED_SECONDS,
-                    keys::LOCK_ON_OS_LOCK,
-                    keys::AGENT_ACTIVITY_KEEPS_UNLOCKED
-                ]),
-            );
+            .detail("keys", serde_json::json!(changed_keys));
         self.audit(&guard, event).await;
         Ok(())
     }

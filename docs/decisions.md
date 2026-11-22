@@ -708,7 +708,7 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   as the client CA. Gap: the rule "every active key has mTLS" is not checked. The core has no accessor for key settings while
   sealed, and the daemon has no admin surface (ADR-0002). TLS still rejects every client without a CA-signed certificate.
 - **DEC-T13-5** — T13 — Idle lock is off by default on the daemon (ADR-0002 point 7). The vault's hard limit of 12 h
-  (`max_unlocked_seconds`, ADR-0026) still applies: the daemon cannot change it, because the daemon has no admin surface.
+  (`max_unlocked_seconds`, ADR-0026) still applies: the daemon cannot change it, because the daemon has no admin surface. Replaced by DEC-SRV-1.
   To change it, set it on the desktop app and make a new backup.
 - **DEC-T13-6** — T13 — At each start the daemon writes the CA certificate (public, PEM, mode `0644`) to
   `<data_dir>/tls/ca-cert.pem`, atomically, and logs its pin and fingerprint. Agents need this file to trust the server
@@ -1783,3 +1783,16 @@ and the "T14" tag tells them apart. T03 was adding entries at the same time, so 
   `the_key_goes_with_a_named_server_and_an_ipv6_server_stays_out`, `a_server_that_could_read_as_an_option_is_refused_at_save`,
   and the connect test now expects `<id>@rd.example.test`; UI helpers (link forms) and vault card (link with
   server, relay note, `+` note, IPv6 notice). This replaces the Connect arguments of DEC-RD-3 and the link of DEC-RD-4.
+
+- **DEC-SRV-1** — Server — The hard limit (`max_unlocked_seconds`, ADR-0026) is off by default on `cerberusd`. A server
+  vault must stay unlocked without a person; a fixed lock stopped every agent until a person unlocked it again. New field
+  `CoreConfig.max_unlocked_default` (desktop: 12 h, no change; daemon: `None`). The daemon reads `max_unlocked_seconds` /
+  `CERBERUSD_MAX_UNLOCKED_SECONDS` (0 = off, or 900 to 604800). A row in the `settings` table still wins over this
+  default. `set_lock_settings` writes a row only for a key whose value the request changes (before, one change of any lock
+  setting wrote all four rows, so a desktop vault carried `max_unlocked_seconds = 43200` to the server). So a row for
+  `max_unlocked_seconds` exists only when an admin or a desktop user set that key to a value that differed from the
+  default in use at that time. A vault that was saved by an older build, and a vault from a desktop where the user
+  changed any lock setting before this change, can have the row with `43200` or the value that they set; it keeps the row.
+  To clear it, an owner or operator sets `max_unlocked_seconds` to `null` in the vault settings (`settings_set`): the row
+  then holds off, and the file value does not apply to this vault. There is no call that deletes the row. Test:
+  `a_change_saves_only_the_changed_keys_so_the_daemon_default_still_applies`. Replaces the last sentence of DEC-T13-5.

@@ -105,6 +105,8 @@ pub struct CoreConfig {
     pub approvals_available: bool,
     /// Idle lock time when the vault has no `idle_lock_seconds` setting. `None` = off.
     pub idle_lock_default: Option<Duration>,
+    /// Hard limit after unlock when the vault has no `max_unlocked_seconds` setting. `None` = off.
+    pub max_unlocked_default: Option<Duration>,
     /// The application data directory.
     pub data_dir: std::path::PathBuf,
     /// Makes the local CA when a vault is created (ADR-0023). The API layer implements it.
@@ -112,12 +114,16 @@ pub struct CoreConfig {
 }
 
 impl CoreConfig {
-    /// Desktop defaults: approvals on, idle lock after 30 minutes (ADR-0026).
+    /// Desktop defaults: approvals on, idle lock after 30 minutes, hard limit after 12 hours
+    /// (ADR-0026).
     #[must_use]
     pub fn desktop(data_dir: std::path::PathBuf, ca_issuer: Arc<dyn CaIssuer>) -> Self {
         Self {
             approvals_available: true,
             idle_lock_default: Some(Duration::from_secs(super::autolock::DEFAULT_IDLE_SECONDS)),
+            max_unlocked_default: Some(Duration::from_secs(u64::from(
+                super::autolock::DEFAULT_MAX_UNLOCKED_SECONDS,
+            ))),
             data_dir,
             ca_issuer,
         }

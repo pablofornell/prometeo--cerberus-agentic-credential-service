@@ -13,6 +13,9 @@ Status: version 0.3.0. Linux installers (deb, rpm, AppImage) and binary tarballs
 and `just package-binaries`; see [packaging and release](docs/guides/packaging-and-release.md). macOS and Windows
 builds are set up in CI but not yet tested. Final acceptance: [docs/acceptance-report.md](docs/acceptance-report.md).
 
+CI/CD: a push to the `deploy` branch starts the CI/CD pipeline that deploys the server (it runs on the deployment host, not in `.github/workflows/`). `main` runs the CI
+checks only, and a `vX.Y.Z` tag builds a release. See [branches](docs/guides/packaging-and-release.md#branches-and-what-each-one-starts).
+
 ## What is in this repository
 
 | Part | What it is | Where |

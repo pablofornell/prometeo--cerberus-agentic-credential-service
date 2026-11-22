@@ -10,7 +10,7 @@ How Cerberus is built, checked and released. For a person who cuts a release or 
 | `Cerberus_<version>_amd64.deb`, `Cerberus-<version>-1.x86_64.rpm`, `Cerberus_<version>_amd64.AppImage` | Desktop app (vault, UI, HTTPS API, tray) | Linux |
 | `Cerberus_<version>_aarch64.dmg` | Desktop app, Apple silicon | macOS |
 | `Cerberus_<version>_x64-setup.exe` | Desktop app, NSIS installer | Windows |
-| `cerberus-<version>-<target>.tar.gz` | `cerberus` (CLI), `cerberus-mcp` (stdio shim), `LICENSE`, `README.md`. The Linux one also has `cerberusd` and `systemd/` (unit and config example) | each OS |
+| `cerberus-<version>-<target>.tar.gz` | `cerberus` (CLI), `cerberus-mcp` (stdio shim), `LICENSE`, `README.md`. The Linux one also has `cerberusd` and `systemd/` (daemon unit, backup unit and timer, config example) | each OS |
 | `*_bin.cdx.json` | CycloneDX 1.5 SBOM of `cerberusd`, `cerberus`, `cerberus-mcp`, `cerberus-desktop` (Rust dependencies, Linux build) | Linux |
 | `SHA256SUMS` | SHA-256 of every file above | Linux (publish job) |
 
@@ -37,6 +37,18 @@ The first `just package` compiles the whole desktop app in release mode and take
 (the `jobs = 6` cap in `.cargo/config.toml` keeps it down). Release builds use `panic = "abort"` (a panic wipes the keys and
 ends the process, see the threat model). `--locked` is used where the recipe calls `cargo build`: `Cargo.lock` decides the
 versions.
+
+## Branches and what each one starts
+
+| Branch or ref | What a push starts |
+|---------------|--------------------|
+| `deploy` | **The CI/CD pipeline.** A push to `deploy` starts the deployment pipeline of the server that runs Cerberus. That pipeline is not in `.github/workflows/`: the deployment host watches the branch. Push to `deploy` only when you want a deployment. |
+| `main` | The CI checks below (`ci.yml`). It does not deploy. |
+| tag `vX.Y.Z` | The release build below (`release.yml`): installers, tarballs and a GitHub release. |
+
+The normal flow: merge the work to `main`, wait for green CI, then move `deploy` to that commit
+(`git push origin main:deploy`). Make a [backup of the daemon](backup-and-restore.md) before the deployment; the deployment
+must not copy the data folder of a running daemon.
 
 ## CI (`.github/workflows/ci.yml`)
 
@@ -115,7 +127,8 @@ start; verify the checksum first.
 - CLI and shim: unpack the tarball and copy `cerberus` and `cerberus-mcp` to a folder in `PATH`.
 - Daemon: follow `docs/guides/cerberusd.md`. The tarball holds `cerberusd` and `systemd/cerberusd.service` (hardened:
   syscall filter, loopback-only IP allow list, no capabilities, no core dumps; `systemd-analyze security` scores it 0.9
-  SAFE) and `systemd/cerberusd.toml.example`.
+  SAFE) `systemd/cerberusd-backup.service` with `cerberusd-backup.timer` (a daily consistent backup, see
+  [backup and restore](backup-and-restore.md)) and `systemd/cerberusd.toml.example`.
 
 ## Not covered here
 

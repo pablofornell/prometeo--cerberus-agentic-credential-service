@@ -145,6 +145,7 @@ impl Fx {
             CoreConfig {
                 approvals_available: true,
                 idle_lock_default: None,
+                max_unlocked_default: None,
                 data_dir: dir.path().to_path_buf(),
                 ca_issuer: Arc::new(FakeCa),
             },

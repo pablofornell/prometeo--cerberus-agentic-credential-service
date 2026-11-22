@@ -733,6 +733,7 @@ pub enum OsEvent { Sleep, ScreenLocked }
 pub struct CoreConfig {
     pub approvals_available: bool,           // false on cerberusd (ADR-0002)
     pub idle_lock_default: Option<std::time::Duration>,
+    pub max_unlocked_default: Option<std::time::Duration>, // 12 h on the desktop, None on cerberusd (DEC-SRV-1)
     pub data_dir: std::path::PathBuf,
 }
 

@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use cerberus_api::{AdminLimits, DEFAULT_PORT};
-use cerberus_core::vault::IDLE_LOCK_RANGE;
+use cerberus_core::vault::{IDLE_LOCK_RANGE, MAX_UNLOCKED_RANGE};
 use serde::Deserialize;
 
 /// Name of the config file in the XDG config directory (`$XDG_CONFIG_HOME/cerberusd/`).
@@ -73,6 +73,9 @@ pub struct Config {
     pub require_mtls: bool,
     /// Idle lock in seconds. `0` is off, the daemon default (ADR-0002 point 7).
     pub idle_lock_seconds: u32,
+    /// Hard limit after unlock in seconds. `0` is off, the daemon default. An admin can change it
+    /// at run time with the vault settings.
+    pub max_unlocked_seconds: u32,
     /// The admin API (ADR-0034). Off by default.
     pub admin: AdminSettings,
 }
@@ -91,6 +94,13 @@ impl Config {
     #[must_use]
     pub fn idle_lock(&self) -> Option<Duration> {
         (self.idle_lock_seconds > 0).then(|| Duration::from_secs(u64::from(self.idle_lock_seconds)))
+    }
+
+    /// The hard limit after unlock as a duration, or `None` when it is off.
+    #[must_use]
+    pub fn max_unlocked(&self) -> Option<Duration> {
+        (self.max_unlocked_seconds > 0)
+            .then(|| Duration::from_secs(u64::from(self.max_unlocked_seconds)))
     }
 }
 
@@ -144,6 +154,7 @@ struct FileConfig {
     host_names: Option<Vec<String>>,
     require_mtls: Option<bool>,
     idle_lock_seconds: Option<i64>,
+    max_unlocked_seconds: Option<i64>,
     admin: Option<FileAdmin>,
 }
 
@@ -268,6 +279,14 @@ fn resolve(file: FileConfig, env: EnvFn<'_>) -> Result<Config, ConfigError> {
         key: "idle_lock_seconds",
         reason: format!("{idle} is not a number of seconds"),
     })?;
+    let max_unlocked = match env("CERBERUSD_MAX_UNLOCKED_SECONDS") {
+        Some(value) => int_from_env(&value, "CERBERUSD_MAX_UNLOCKED_SECONDS")?,
+        None => file.max_unlocked_seconds.unwrap_or(0),
+    };
+    let max_unlocked_seconds = u32::try_from(max_unlocked).map_err(|_| ConfigError::Invalid {
+        key: "max_unlocked_seconds",
+        reason: format!("{max_unlocked} is not a number of seconds"),
+    })?;
     let admin = resolve_admin(file.admin.unwrap_or_default(), env)?;
     let config = Config {
         data_dir,
@@ -276,6 +295,7 @@ fn resolve(file: FileConfig, env: EnvFn<'_>) -> Result<Config, ConfigError> {
         host_names,
         require_mtls,
         idle_lock_seconds,
+        max_unlocked_seconds,
         admin,
     };
     validate(&config)?;
@@ -367,6 +387,14 @@ fn validate(config: &Config) -> Result<(), ConfigError> {
             reason: "must be 0 (off) or 60 to 86400".into(),
         });
     }
+    if config.max_unlocked_seconds != 0
+        && !MAX_UNLOCKED_RANGE.contains(&config.max_unlocked_seconds)
+    {
+        return Err(ConfigError::Invalid {
+            key: "max_unlocked_seconds",
+            reason: "must be 0 (off) or 900 to 604800".into(),
+        });
+    }
     for name in &config.host_names {
         if !valid_host_name(name) {
             return Err(ConfigError::Invalid {
@@ -452,6 +480,7 @@ mod tests {
         assert_eq!(config.bind.len(), 2);
         assert!(config.bind.iter().all(IpAddr::is_loopback));
         assert_eq!(config.idle_lock(), None);
+        assert_eq!(config.max_unlocked(), None);
         assert!(!config.require_mtls);
     }
 
@@ -494,6 +523,42 @@ mod tests {
             error.to_string().starts_with("idle_lock_seconds:"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn max_unlocked_is_off_by_default_and_set_by_file_or_env() {
+        let file = FileConfig {
+            data_dir: Some("/srv/cerberus".into()),
+            max_unlocked_seconds: Some(86_400),
+            ..FileConfig::default()
+        };
+        let config = resolve(file, &no_env).expect("config");
+        assert_eq!(config.max_unlocked(), Some(Duration::from_secs(86_400)));
+
+        let file = FileConfig {
+            data_dir: Some("/srv/cerberus".into()),
+            max_unlocked_seconds: Some(86_400),
+            ..FileConfig::default()
+        };
+        let env = |key: &str| (key == "CERBERUSD_MAX_UNLOCKED_SECONDS").then(|| "0".to_owned());
+        let config = resolve(file, &env).expect("env turns it off");
+        assert_eq!(config.max_unlocked(), None);
+    }
+
+    #[test]
+    fn max_unlocked_range_is_checked() {
+        for bad in [-1, 5, 899, 604_801] {
+            let file = FileConfig {
+                data_dir: Some("/srv/cerberus".into()),
+                max_unlocked_seconds: Some(bad),
+                ..FileConfig::default()
+            };
+            let error = resolve(file, &no_env).expect_err("refused");
+            assert!(
+                error.to_string().starts_with("max_unlocked_seconds:"),
+                "{bad}: {error}"
+            );
+        }
     }
 
     #[test]

@@ -92,6 +92,7 @@ impl Real {
             CoreConfig {
                 approvals_available: true,
                 idle_lock_default: None,
+                max_unlocked_default: None,
                 data_dir: data_dir.clone(),
                 ca_issuer: Arc::new(LocalCaIssuer::new(tls.clone(), vec![])),
             },

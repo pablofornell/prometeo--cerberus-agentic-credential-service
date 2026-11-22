@@ -99,6 +99,7 @@ async fn make_vault_with(data_dir: &Path, mode: GrantMode) -> Seed {
         CoreConfig {
             approvals_available: false,
             idle_lock_default: None,
+            max_unlocked_default: None,
             data_dir: data_dir.to_path_buf(),
             ca_issuer: Arc::new(LocalCaIssuer::new(tls, Vec::new())),
         },

@@ -60,12 +60,12 @@ Rules that always apply:
 | Setting | Default | Range or values | Who can change it |
 |---|---|---|---|
 | Idle lock | 30 minutes | off, or 60 to 86400 s | Owner or operator |
-| Hard limit after unlock | 12 hours | 900 to 604800 s | Owner or operator |
+| Hard limit after unlock | 12 hours on the desktop, off on `cerberusd` | off, or 900 to 604800 s | Owner or operator |
 | Lock on OS sleep and screen lock | on | on or off | Owner or operator |
 | Agent calls count as activity | on | on or off | Owner or operator |
 
 With "agent calls count as activity" on, a busy agent keeps the vault unlocked. The idle lock does not fire then. The
-hard limit still does.
+hard limit still does, when it is on.
 
 The vault also locks at once on a manual lock, a panic, and when a restore starts.
 

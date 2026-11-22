@@ -826,6 +826,7 @@ mod tests {
             CoreConfig {
                 approvals_available: true,
                 idle_lock_default: None,
+                max_unlocked_default: None,
                 data_dir: dir.to_path_buf(),
                 ca_issuer: Arc::new(LocalCaIssuer::new(TlsPaths::in_data_dir(dir), Vec::new())),
             },

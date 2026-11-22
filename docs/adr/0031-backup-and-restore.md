@@ -34,3 +34,17 @@ A backup must be safe to store anywhere and must open with a phrase or the recov
 
 - **Export as JSON with re-encryption.** Rejected. A second crypto format to maintain. CSV export (T23) exists for
   migration, and it warns that the file holds plain secrets.
+
+## Addendum: backup of a running daemon
+
+A server backup made by copying `vault.cerberus` while `cerberusd` runs is not consistent: the vault is in WAL mode
+(ADR-0013), so the newest commits are in `vault.cerberus-wal`. `cerberusd backup --out <folder|file> [--keep N]` makes
+the backup with the same `VACUUM INTO` as point 1, through its own read-only connection (`Store::backup_vault_file`).
+The read does not block the daemon, and the copy is one snapshot. The connection never writes the vault and never folds
+the `-wal` file into it. Before it opens, it runs the `-wal` check of `Store::open` (AUD-10) and refuses a `-wal` that
+fails it, because SQLite would ignore that file and the copy would miss its commits. It needs no key and does not
+migrate the schema. The file
+is written under a temporary name, synced, checked with `Store::inspect_backup`, and then linked to its final name, so
+it never replaces a file. `--keep N` removes only older files of the name scheme of the same vault. No `backup.create`
+event is written: the audit chain is sealed with the vault key, and the command has none. The systemd units
+`cerberusd-backup.service` and `cerberusd-backup.timer` run it daily. See `docs/guides/backup-and-restore.md`.

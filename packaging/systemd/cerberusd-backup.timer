@@ -1,0 +1,15 @@
+# Runs cerberusd-backup.service every day. Install steps: docs/guides/backup-and-restore.md.
+# Enable with: systemctl enable --now cerberusd-backup.timer
+
+[Unit]
+Description=Daily Cerberus vault backup
+
+[Timer]
+OnCalendar=daily
+# A run that was missed (the machine was off) runs at the next start.
+Persistent=true
+# A random delay of up to 1 hour, so many machines do not all copy at the same moment.
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

@@ -25,7 +25,7 @@ Keep the phrase and the recovery key safe and apart. If you lose both, nobody ca
 - **Failed tries.** The first five failures in a row have no wait. After that the wait doubles for each failure, up
   to 15 minutes. The screen shows a countdown.
 - **Lock.** Press `Ctrl/Cmd + L`, or use the Lock button in the sidebar.
-- **Automatic lock.** The default idle lock is 30 minutes. The hard limit is 12 hours after each unlock. Both can be
+- **Automatic lock.** The default idle lock is 30 minutes. The hard limit is 12 hours after each unlock (on the headless daemon it is off by default). Both can be
   changed in Settings. Agent calls count as activity by default, so the idle lock does not fire while agents work.
 - **Lock on sleep or screen lock.** On by default. On Linux the vault locks when the machine sleeps or the session
   locks. On macOS and Windows this does not happen yet (see the [operator guide](operator-guide.md#platform-gaps)).

@@ -21,6 +21,10 @@ port = 7373
 # Lock after this many idle seconds: 0 is off (the default), or 60 to 86400.
 # idle_lock_seconds = 0
 
+# Hard limit: lock this many seconds after each unlock. 0 is off (the default), or 900 to 604800.
+# An admin can change it later in the vault settings; a saved setting wins over this value.
+# max_unlocked_seconds = 0
+
 # The admin API for an enrolled desktop app (ADR-0034, docs/guides/cerberusd.md "Remote admin from the
 # desktop"). Off by default: then no /admin route exists. On also turns on approvals for ask grants.
 # [admin]
