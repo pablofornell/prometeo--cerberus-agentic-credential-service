@@ -140,9 +140,15 @@ describe("create vault", () => {
 
     const open = screen.getByRole("button", { name: "Open the vault" });
     await user.click(open);
-    expect(await screen.findByText("Group 3 does not match.")).toBeInTheDocument();
-    await user.type(screen.getByLabelText("Type group 3"), "aaaa");
-    await user.type(screen.getByLabelText("Type group 11"), "jjjj");
+    // The groups to type back are drawn at random: read them from the labels.
+    const inputs = screen.getAllByLabelText(/^Type group \d+$/);
+    expect(inputs).toHaveLength(2);
+    const parts = MOCK_RECOVERY_KEY.split("-");
+    const numbers = inputs.map((input) => Number(/\d+/.exec((input as HTMLInputElement).labels?.[0]?.textContent ?? "")?.[0]));
+    expect(numbers[0]).toBeLessThan(numbers[1]);
+    expect(numbers[0]).toBeGreaterThan(1);
+    expect(await screen.findByText(`Group ${numbers[0]} does not match.`)).toBeInTheDocument();
+    for (const [i, input] of inputs.entries()) await user.type(input, parts[numbers[i] - 1].toLowerCase());
     await user.click(screen.getByLabelText("I stored the recovery key away from this computer."));
     await user.click(open);
     await waitFor(() => expect(screen.queryByRole("heading", { name: "Save your recovery key" })).toBeNull());

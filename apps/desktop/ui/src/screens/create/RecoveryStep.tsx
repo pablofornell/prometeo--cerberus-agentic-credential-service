@@ -3,10 +3,8 @@ import { ipc } from "../../ipc/client";
 import { useScreenT } from "../../i18n";
 import { Button, Checkbox, Field, Input, Notice, useToast } from "../../ui";
 import { CLIPBOARD_CLEAR_SECONDS } from "../../ui";
-import { RecoveryKeyGrid, recoveryGroups, sameGroup } from "./RecoveryKeyGrid";
+import { RecoveryKeyGrid, pickCheckGroups, recoveryGroups, sameGroup } from "./RecoveryKeyGrid";
 import { messages } from "./messages";
-
-const CHECK_GROUPS = [3, 11] as const;
 
 interface Props {
   recoveryKey: string;
@@ -19,8 +17,8 @@ export function RecoveryStep({ recoveryKey, opening, onOpen }: Props) {
   const t = useScreenT(messages);
   const toast = useToast();
   const groups = recoveryGroups(recoveryKey);
-  // Short keys have fewer groups: check the groups that exist.
-  const checks = CHECK_GROUPS.filter((n) => n <= groups.length);
+  // Two random groups, drawn once when the step mounts, so the check is not always the same places.
+  const [checks] = useState(() => pickCheckGroups(groups));
   const [typed, setTyped] = useState<Record<number, string>>({});
   const [touched, setTouched] = useState(false);
   const [stored, setStored] = useState(false);
